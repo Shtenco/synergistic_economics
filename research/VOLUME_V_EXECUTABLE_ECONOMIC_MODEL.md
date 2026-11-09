@@ -1109,7 +1109,7 @@ The next implementation sequence should be:
 
 - [**Volume VI — Benchmark Economies and Experimental Protocols**](VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md): baseline models, initial conditions, scenario matrix, preregistration templates and comparison rules.
 - **Technical Specification V5.1 — Canonical Entity and Event Schemas:** machine-readable schemas for agents, cells, assets, accounts, contracts, events and policy versions.
-- **Prototype 0 — Double-entry Accounting Kernel:** executable code with tests and deterministic replay.
+- [**Prototype — SYNERGY Kernel](../prototype/README.md): dependency-free Python implementation of balanced journals, event sequencing, constrained production, inventory and budget-balanced allocation, with invariant tests.
 - **Prototype 1 — Seven-cell Production Economy:** a small synthetic economy to exercise production, exchange, credit, shared assets and distribution.
 
 These are separate deliverables. The existence of this document does not imply that any of those artifacts have already been implemented.
