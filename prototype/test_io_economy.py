@@ -109,6 +109,16 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertTrue(all(f.cash >= 0 for f in model.firms.values()))
         self.assertTrue(all(h.cash >= 0 for h in model.households.values()))
 
+    def test_household_spending_stays_within_opening_period_budget(self):
+        model = InputOutputEconomy()
+        opening_budgets = {
+            household_id: state.cash * state.config.consumption_propensity
+            for household_id, state in model.households.items()
+        }
+        model.step(1)
+        for household_id, state in model.households.items():
+            self.assertLessEqual(state.expenditure, opening_budgets[household_id])
+
     def test_household_expenditure_is_period_flow_not_cumulative_stock(self):
         model = InputOutputEconomy()
         model.run(3)
