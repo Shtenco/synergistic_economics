@@ -82,7 +82,12 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
             "contributorEntityId": entity_types,
             "projectId": {"project"},
         },
-        "economic_event": {"actorEntityId": entity_types},
+        "economic_event": {
+            "actorEntityId": entity_types,
+            "subjectEntityIds": entity_types,
+            "causationEventId": {"economic_event"},
+            "reversalOfEventId": {"economic_event"},
+        },
     }
 
     def check_ref(source_id: str, field: str, target_id: Any, allowed: set[str]) -> None:
@@ -120,13 +125,7 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
 
         if kind == "economic_event":
             for index, target_id in enumerate(record.get("subjectEntityIds", [])):
-                if not isinstance(target_id, str):
-                    issues.append(f"{source_id}.subjectEntityIds[{index}]: reference must be a string")
-                elif target_id not in by_id:
-                    issues.append(
-                        f"{source_id}.subjectEntityIds[{index}]: "
-                        f"unresolved reference {target_id!r}"
-                    )
+                check_ref(source_id, f"subjectEntityIds[{index}]", target_id, entity_types)
 
     seen_idempotency: dict[str, str] = {}
     for record in records:
