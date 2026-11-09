@@ -5,7 +5,7 @@
 **Status:** Foundational conceptual framework / research program  
 **Version:** 0.2 — 9 November 2026  
 **Русская версия:** [README.md](README.md)  
-**Repository:** https://github.com/Shtenco/synergy_economic
+**Repository:** https://github.com/Shtenco/synergistic_economics
 
 > **Core proposition:** Build an economy in which individual initiative, competitive discovery, cooperation, productive ownership, technological progress and broad-based prosperity reinforce one another — without concentrating all economic coordination in either a central authority or a handful of private platforms.
 
@@ -21,7 +21,8 @@ The conceptual overview is expanded into standalone research volumes. The first 
 - **[Volume III — Contribution, Ownership and Distribution](research/VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md)** — separates contribution evidence, causal attribution, ownership, contractual claims and human worth; compares distributive mechanisms; specifies SCI, UEP, UOF, collective dividends, safeguards and falsifiable experiments.
 - **[Volume IV — Formal Simulation and Accounting Kernel](research/VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md)** — specifies event-sourced state transitions, double-entry accounting, production and market modules, rights registries, distribution engine, UEP/UOF, AI authority boundaries, experiments and mandatory invariant tests.
 - **[Volume V — Executable Economic Model](research/VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md)** — defines the multi-agent mathematical model, household and firm behaviour, production, markets, money and credit, consortium-cells, SCI/UEP/UOF, ecological dynamics, AI boundaries and comparative experiments.
-- **[Volume VI — Benchmark Economies and Experimental Protocols](research/VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md)** — specifies fair institutional baselines, treatment decomposition, common initial conditions, shock scenarios, outcome metrics, preregistration, robustness, rejection criteria and reproducible reporting.
+- **[Volume VI — Benchmark Economies and Experimental Protocols](research/VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md)** — specifies fair institutional baselines, common initial conditions, shock scenarios, outcome metrics, preregistration, robustness, rejection criteria and reproducible reporting.
+- **[Volume VIII — Mathematical Model of Synergistic Economics](research/VOLUME_VIII_MATHEMATICAL_MODEL_OF_SYNERGETIC_ECONOMY.md)** — formalizes the economic state space, physical and financial balances, production networks, rights graph, net synergy, viability, dynamic equilibrium and falsifiable hypotheses.
 - **[Prototype — SYNERGY Kernel](prototype/README.md)** — first dependency-free Python research prototype: double-entry journal checks, event log, bounded production, inventory and budget-balanced allocation, with invariant tests.
 
 - **[Prototype 1 — Seven-Cell Economy](prototype/SEVEN_CELL_ECONOMY.md)** — executable 7-cell simulation with household cash budgets, shared energy, paid material inputs, investment, reserves, bilateral trade credit, insolvency triggers, ecological stocks, five deterministic scenarios and cash-conservation tests. [Scenario results](prototype/results/seven_cell_scenario_comparison.json) · [Python model](prototype/seven_cell_economy.py) · [Tests](prototype/test_seven_cell_economy.py)
