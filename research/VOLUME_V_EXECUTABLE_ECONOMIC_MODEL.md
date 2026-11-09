@@ -4,7 +4,7 @@
 **Research program:** SYNERGISTIC ECONOMICS  
 **Document ID:** SYNERGY-ECON-V5-001  
 **Version:** 0.1 — 9 November 2026  
-**Status:** Formal research model and implementation blueprint; not yet calibrated, executed or empirically validated  
+**Status:** Formal research model and implementation blueprint. The complete model is not yet calibrated or executed as an integrated system and has not been empirically validated; smaller repository prototypes exercise selected components.  
 **Preceding volumes:** [Volume 0](VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md); [Volume 0A](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md); [Volume I](VOLUME_I_FOUNDATIONS.md); [Volume II](VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md); [Volume III](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md); [Volume IV](VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md)  
 **Institutional architecture:** [SYNERGY Cellular Consortium Economy](SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)
 
@@ -1022,19 +1022,21 @@ Avoid hidden global state. Randomness must be injected through an explicit seede
 
 ## 55. Minimal prototype stages
 
-**Prototype 0 — Accounting kernel:** accounts, journal, balanced entries, consolidation and replay.
+The following are **target implementation stages**, not the numbered artifact names of the repository prototypes:
 
-**Prototype 1 — Production network:** households, firms, input-output production, inventories, labour, capital and market orders.
+**Stage 0 — Accounting kernel:** accounts, journal, balanced entries, consolidation and replay. The repository's Prototype 0 implements a minimal subset.
 
-**Prototype 2 — Cells:** membership, shared assets, treasury, governance, contracts and inter-cell obligations.
+**Stage 1 — Production network:** households, firms, input-output production, inventories, labour, capital and market orders. The repository's Prototype 1 (Seven-Cell Economy) and Prototype 2 (General Input-Output Economy) exercise only selected parts of this stage.
 
-**Prototype 3 — Distribution:** ownership registry, shadow SCI, multiple allocation mechanisms, dividends and appeals.
+**Stage 2 — Cells:** membership, shared assets, treasury, governance, contracts and inter-cell obligations.
 
-**Prototype 4 — UEP/UOF:** access pathways, fund instruments, additionality and portfolio risk.
+**Stage 3 — Distribution:** ownership registry, shadow SCI, multiple allocation mechanisms, dividends and appeals.
 
-**Prototype 5 — AI shadow mode:** forecasts and matching recommendations, with no direct financial authority.
+**Stage 4 — UEP/UOF:** access pathways, fund instruments, additionality and portfolio risk.
 
-**Prototype 6 — Comparative experiments:** identical initial conditions, multiple baselines, shocks and reproducible reports.
+**Stage 5 — AI shadow mode:** forecasts and matching recommendations, with no direct financial authority.
+
+**Stage 6 — Comparative experiments:** identical initial conditions, multiple baselines, shocks and reproducible reports.
 
 ## 56. Acceptance criteria
 

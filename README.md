@@ -1,817 +1,822 @@
-# SYNERGISTIC ECONOMICS
-## A research program for a cooperative, market-based, AI-coordinated and broadly participatory economy
+# СИНЕРГЕТИЧЕСКАЯ ЭКОНОМИКА (SYNERGISTIC ECONOMICS)
 
-**Project:** SYNERGY ECONOMIC  
-**Status:** Foundational conceptual framework / research program  
-**Version:** 0.1 — 9 November 2026  
-**Repository:** https://github.com/Shtenco/synergy_economic
+## Исследовательская программа кооперативной, рыночной, координируемой ИИ и широко вовлекающей экономики
 
-> **Core proposition:** Build an economy in which individual initiative, competitive discovery, cooperation, productive ownership, technological progress and broad-based prosperity reinforce one another — without concentrating all economic coordination in either a central authority or a handful of private platforms.
+**Проект:** SYNERGY ECONOMIC  
+**Статус:** базовая концептуальная рамка и исследовательская программа  
+**Версия:** 0.2 — 9 ноября 2026 года  
+**Репозиторий:** https://github.com/Shtenco/synergy_economic  
+**English version:** [README.en.md](README.en.md)
 
-## Research documents
+> **Основное положение:** создать экономику, в которой индивидуальная инициатива, конкурентное обнаружение возможностей, сотрудничество, производительная собственность, технологический прогресс и широкое благосостояние взаимно усиливают друг друга — без концентрации всей экономической координации в руках центральной власти или нескольких частных платформ.
 
-- **[Volume 0 — Synthesis of Economic Schools](research/VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md)** — comparative reconstruction of major economic traditions, mathematical cores, limits, contradictions, conditional synthesis and falsifiable hypotheses.
-- **[Volume 0A — Axiom Reconciliation and Methodological Audit](research/VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md)** — reconciles Volume 0 and Volume I, distinguishes ontological premises, normative commitments, design principles, operational invariants and empirical hypotheses, and adds financial-integrity and bounded-AI requirements.
+## Исследовательские документы
 
-The conceptual overview is expanded into standalone research volumes. The first foundational volume is available:
+- **[Том 0 — Синтез экономических школ](research/VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md)** — сравнительная реконструкция основных экономических традиций, их математических оснований, ограничений и противоречий; условный синтез механизмов и проверяемые гипотезы.
+- **[Том 0A — Согласование аксиом и методологический аудит](research/VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md)** — согласует том 0 и том I; различает онтологические предпосылки, нормативные обязательства, принципы проектирования, операционные инварианты и эмпирические гипотезы; вводит требования финансовой целостности и ограниченных полномочий ИИ.
 
-- **[Volume I — Foundations of Synergistic Economics](research/VOLUME_I_FOUNDATIONS.md)** — ontology of the economy, universal constraints, institutional tensions, twelve axioms, derived principles, mechanism-selection framework, mathematical model, constitutional logic and research propositions.
-- **[Volume II — Multidimensional Value and the Theory of Production](research/VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md)** — distinguishes value, price, utility, output, value added, surplus, profit, income, wealth and capabilities; develops production functions, capital services, productivity, counterfactual synergy and prosperity measurement.
-- **[Volume III — Contribution, Ownership and Distribution](research/VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md)** — separates contribution evidence, causal attribution, ownership, contractual claims and human worth; compares distributive mechanisms; specifies SCI, UEP, UOF, collective dividends, safeguards and falsifiable experiments.
-- **[Volume IV — Formal Simulation and Accounting Kernel](research/VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md)** — specifies event-sourced state transitions, double-entry accounting, production and market modules, rights registries, distribution engine, UEP/UOF, AI authority boundaries, experiments and mandatory invariant tests.
-- **[Volume V — Executable Economic Model](research/VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md)** — defines the multi-agent mathematical model, household and firm behaviour, production, markets, money and credit, consortium-cells, SCI/UEP/UOF, ecological dynamics, AI boundaries and comparative experiments.
-- **[Volume VI — Benchmark Economies and Experimental Protocols](research/VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md)** — specifies fair institutional baselines, treatment decomposition, common initial conditions, shock scenarios, outcome metrics, preregistration, robustness, rejection criteria and reproducible reporting.
-- **[Prototype — SYNERGY Kernel](prototype/README.md)** — first dependency-free Python research prototype: double-entry journal checks, event log, bounded production, inventory and budget-balanced allocation, with invariant tests.
+Концептуальный обзор развивается в самостоятельные исследовательские тома:
 
-- **[Prototype 1 — Seven-Cell Economy](prototype/SEVEN_CELL_ECONOMY.md)** — executable 7-cell simulation with household cash budgets, shared energy, paid material inputs, investment, reserves, bilateral trade credit, insolvency triggers, ecological stocks, five deterministic scenarios and cash-conservation tests. [Scenario results](prototype/results/seven_cell_scenario_comparison.json) · [Python model](prototype/seven_cell_economy.py) · [Tests](prototype/test_seven_cell_economy.py)
+- **[Том I — Основы синергетической экономики](research/VOLUME_I_FOUNDATIONS.md)** — онтология экономики, универсальные ограничения, институциональные противоречия, двенадцать аксиом, производные принципы, выбор механизмов, математическая модель, конституционная логика и исследовательские положения.
+- **[Том II — Многомерная ценность и теория производства](research/VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md)** — разграничивает ценность, цену, полезность, выпуск, добавленную стоимость, излишек, прибыль, доход, богатство и возможности; развивает производственные функции, услуги капитала, производительность, контрфактическую синергию и измерение благосостояния.
+- **[Том III — Вклад, собственность и распределение](research/VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md)** — разделяет доказательства вклада, причинную атрибуцию, собственность, договорные требования и человеческое достоинство; сравнивает механизмы распределения; описывает SCI, UEP, UOF, коллективные дивиденды, защитные механизмы и проверяемые эксперименты.
+- **[Том IV — Формальная симуляция и учётное ядро](research/VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md)** — спецификация событийных переходов состояния, двойной записи, производственных и рыночных модулей, реестров прав, механизма распределения, UEP/UOF, границ полномочий ИИ, экспериментов и обязательных инвариантных тестов.
+- **[Том V — Исполняемая экономическая модель](research/VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md)** — многоагентная математическая модель, поведение домохозяйств и фирм, производство, рынки, деньги и кредит, консорциумные ячейки, SCI/UEP/UOF, экологическая динамика, ограничения ИИ и сравнительные эксперименты.
+- **[Том VI — Эталонные экономики и экспериментальные протоколы](research/VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md)** — справедливые институциональные эталоны, разложение экспериментальных воздействий, общие начальные условия, шоковые сценарии, метрики результатов, предварительная регистрация гипотез, устойчивость, критерии отклонения и воспроизводимая отчётность.
+- **[Прототип — ядро SYNERGY](prototype/README.md)** — первый исследовательский прототип на Python без внешних библиотек: проверки двойной записи, журнал событий, ограниченное производство, запасы и распределение с балансом бюджета; включает тесты инвариантов.
 
-- **[Prototype 2 — General Input-Output Economy](prototype/GENERAL_IO_ECONOMY.md)** — data-driven multi-product production network with multiple suppliers, input recipes, household baskets, product-level price adjustment, import offers, inventory accounting, physical-balance identities and exact cash conservation. [Python model](prototype/io_economy.py) · [Tests](prototype/test_io_economy.py)
+- **[Прототип 1 — Экономика семи ячеек](prototype/SEVEN_CELL_ECONOMY.md)** — исполняемая модель семи ячеек с бюджетами домохозяйств, общим энергетическим узлом, оплачиваемыми материальными ресурсами, инвестициями, резервами, двусторонним торговым кредитом, условиями несостоятельности, экологическими запасами, пятью детерминированными сценариями и проверками сохранения денежных средств. [Результаты сценариев](prototype/results/seven_cell_scenario_comparison.json) · [Модель Python](prototype/seven_cell_economy.py) · [Тесты](prototype/test_seven_cell_economy.py)
 
-- **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
+- **[Прототип 2 — Обобщённая межотраслевая экономика](prototype/GENERAL_IO_ECONOMY.md)** — модель сети производства нескольких продуктов и множества фирм с несколькими поставщиками, производственными рецептами, потребительскими корзинами домохозяйств, изменением цен на товарных рынках, импортными предложениями, учётом запасов, физическими балансами и точным сохранением денежных средств. [Модель Python](prototype/io_economy.py) · [Тесты](prototype/test_io_economy.py)
 
-The remaining volumes will be added sequentially after their concepts, models and evidence requirements are developed.
+- **[Интегрированная архитектура — консорциумная экономика ячеек SYNERGY](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — объединяет базовую теорию с консорциумными ячейками, цифровыми двойниками, клеточными автоматами, управлением DAO, ИИ, блокчейном, межъячеечным DeFi, многомерной ценностью, вкладом и распределением, UEP, SCI, UOF, коллективными дивидендами и опровержимой программой валидации.
 
-
----
-
-
-## Canonical data contracts
-
-- **[Canonical Economic Schema v1.0.0](schemas/synergy-economy.schema.json)** — JSON Schema Draft 2020-12 for persons, households, enterprises, economic cells, federations, assets, projects, accounts, contracts, ownership claims, contributions and economic events.
-- **[Illustrative canonical records](schemas/examples/canonical_records.json)** — synthetic examples separating contribution evidence, ownership claims, account records and event records.
-- **[Schema design and invariants](schemas/README.md)** — field semantics, validation boundaries, versioning rules and known limitations.
-- **[Schema validation tests](schemas/tests/README.md)** — Draft 2020-12 meta-validation and example checks, run locally and in GitHub Actions.
-- **[Cross-record validator](schemas/validate_records.py)** — checks typed references, duplicate IDs and event keys, and overlapping verified ownership shares.
-
-## 1. Executive summary
-
-SYNERGISTIC ECONOMICS is a proposed framework for designing and testing economic institutions that combine the information and incentive advantages of markets with the coordination capacity of modern digital systems, the resilience of cooperation, and wider participation in productive assets and economic opportunity.
-
-No single institutional mechanism solves every economic problem.
-
-- Markets coordinate decentralized decisions and reveal changing preferences, but do not automatically guarantee fair opportunity, broad ownership or protection of public goods.
-- Competition can encourage innovation and efficiency, but excessive concentration can weaken competition and convert economic power into infrastructural or political control.
-- Cooperation can create value that isolated actors cannot produce, but requires sound governance, accountability, capital formation and conflict resolution.
-- Public institutions can provide universal infrastructure, legal guarantees and social protection, but poorly designed central planning can suffer from information bottlenecks and excessive concentration of decision-making.
-- Digital platforms and AI can reduce coordination costs, but can also create opaque decisions, surveillance, dependency and monopoly power.
-
-SYNERGY does not assume that one mechanism should replace all others. It asks how different mechanisms can be combined, constrained and evaluated as one economic architecture.
-
-This is a **research and system-design program**, not a claim that a complete alternative economic system has already been empirically proven. Its propositions must be translated into formal models, institutional designs, software prototypes and comparative experiments.
-
-### The central research question
-
-**Can an economy be designed so that the growth of individual prosperity and the growth of shared productive capacity become mutually reinforcing rather than structurally opposed?**
+Оставшиеся тематические тома (VII–X) будут разрабатываться последовательно по мере проработки их понятий, моделей и требований к доказательствам. Том 0 и том 0A выполняют вводную и методологическую функции; тома I–VI уже представлены отдельными исследовательскими документами.
 
 ---
 
-## 2. The problem SYNERGY addresses
+## Аудит репозитория
 
-Modern economies are highly productive, yet productive capacity and economic power are not necessarily distributed in ways that preserve broad participation.
+- **[Аудит репозитория от 9 ноября 2026 года](research/REPOSITORY_AUDIT_2026-11-09_RU.md)** — охват проверки, результаты тестов, исправленные дефекты, ограничения моделей и оставшиеся технические риски.
 
-The project investigates ten connected structural problems:
+## Канонические контракты данных
 
-1. **Unequal access to productive capital.** People may contribute labour, knowledge, data, care, reputation or innovation without gaining durable participation in the assets and future income streams their activity helps create.
-2. **Separation of contribution and ownership.** Value creators, asset financiers, infrastructure controllers and residual income recipients may be different groups.
-3. **Concentration and dependency.** Network effects, platform control, intellectual property and access to infrastructure can create durable bottlenecks.
-4. **Underused resources.** Skills, equipment, facilities, knowledge, time and infrastructure may remain idle while unmet needs persist.
-5. **Externalized costs.** Production costs may be transferred to communities, ecosystems or future generations rather than reflected in private prices.
-6. **Coordination limits.** Complex supply networks require timely information, trust, standards and adaptation across many independent participants.
-7. **Short-term incentives.** Institutions may reward immediate extraction even when long-term productive capacity is being depleted.
-8. **Measurement gaps.** GDP, profit, market capitalization and token prices each describe only part of economic reality.
-9. **Digital power asymmetry.** Platforms and AI systems can coordinate activity at scale while keeping rules, data and decision rights inaccessible to participants.
-10. **Fragility.** Highly optimized systems may become vulnerable to shocks when they lack redundancy, reserves, diversity and trusted institutions.
+- **[Каноническая экономическая схема v1.0.0](schemas/synergy-economy.schema.json)** — JSON Schema Draft 2020-12 для физических лиц, домохозяйств, предприятий, экономических ячеек, федераций, активов, проектов, счетов, договоров, требований о собственности, вкладов и экономических событий.
+- **[Примеры канонических записей](schemas/examples/canonical_records.json)** — синтетические примеры, отдельно представляющие доказательства вклада, требования о собственности, учётные записи и события.
+- **[Проектирование схемы и инварианты](schemas/README.md)** — семантика полей, границы валидации, правила версионирования и известные ограничения.
+- **[Тесты проверки схемы](schemas/tests/README.md)** — проверка метасхемы Draft 2020-12 и примеров; выполняется локально и в GitHub Actions.
+- **[Валидатор межзаписных связей](schemas/validate_records.py)** — проверяет типизированные ссылки, повторяющиеся идентификаторы и ключи событий, а также пересекающиеся подтверждённые доли прав собственности.
 
-These are research problems, not assumptions that every market, company, state or cooperative necessarily exhibits all of these failures.
+## 1. Краткое резюме
 
----
+**SYNERGISTIC ECONOMICS** — предлагаемая рамка проектирования и проверки экономических институтов, объединяющих информационные и мотивационные преимущества рынков, координационные возможности современных цифровых систем, устойчивость сотрудничества и более широкое участие в производительных активах и экономических возможностях.
 
-## 3. What SYNERGY is — and is not
+Ни один институциональный механизм не решает все экономические проблемы.
 
-### 3.1 What it is
+- Рынки координируют децентрализованные решения и выявляют изменения предпочтений, но автоматически не гарантируют равенство возможностей, широкое владение активами или защиту общественных благ.
+- Конкуренция может стимулировать инновации и эффективность, однако чрезмерная концентрация ослабляет конкуренцию и превращает экономическую власть в инфраструктурный или политический контроль.
+- Сотрудничество позволяет создавать ценность, недоступную изолированным участникам, но требует качественного управления, подотчётности, формирования капитала и разрешения конфликтов.
+- Государственные институты могут обеспечивать универсальную инфраструктуру, правовые гарантии и социальную защиту, однако плохо устроенное централизованное планирование подвержено информационным узким местам и чрезмерной концентрации полномочий.
+- Цифровые платформы и ИИ могут снижать издержки координации, но способны создавать непрозрачные решения, наблюдение, зависимость и монопольную власть.
 
-SYNERGY is a proposed **polycentric economic architecture**. Different decisions are made at the level best suited to them, with explicit rights, responsibilities, feedback and appeal mechanisms.
+SYNERGY не предполагает, что один механизм должен заменить все остальные. Проект исследует, как разные механизмы можно объединять, ограничивать и оценивать в рамках единой экономической архитектуры.
 
-It combines:
+Это **исследовательская программа и программа проектирования системы**, а не утверждение, будто полноценная альтернативная экономическая система уже доказала свою эффективность эмпирически. Положения проекта должны быть переведены в формальные модели, институциональные конструкции, программные прототипы и сравнительные эксперименты.
 
-- decentralized markets for discovery, exchange and price signals;
-- competition and open entry to support innovation and discipline;
-- cooperation for shared production, infrastructure and risk pooling;
-- individual, project-level and collective ownership;
-- broad access to productive assets and economic participation;
-- public and common institutions for public goods, externalities and universal guarantees;
-- AI-assisted analysis, forecasting, matching and coordination;
-- human oversight, independent verification and constitutional constraints;
-- transparent measurement of wealth, resilience, opportunity and well-being.
+### Центральный исследовательский вопрос
 
-### 3.2 What it is not
-
-SYNERGY is not:
-
-- a command economy in which an AI or central authority dictates all production and prices;
-- an unregulated market in which every outcome is presumed socially optimal;
-- a system that abolishes private property or individual enterprise;
-- a promise that tokenization automatically creates real value or legal ownership;
-- a guaranteed-return investment scheme;
-- a claim that all economic value can be measured by one score;
-- a claim that AI is neutral, infallible or entitled to unrestricted authority.
-
-### 3.3 The design principle
-
-**Use the least centralized mechanism that can reliably solve a problem, while preserving common rules, interoperability, accountability and protection against abuse.**
-
-This is a design hypothesis to be tested. Some functions are best decentralized; others require shared infrastructure, collective action or public authority.
+**Можно ли спроектировать экономику так, чтобы рост индивидуального благосостояния и рост общей производительной способности взаимно усиливали друг друга, а не находились в структурном противоречии?**
 
 ---
 
-## 4. Intellectual foundations
+## 2. Какие проблемы исследует SYNERGY
 
-SYNERGY builds on, critiques and combines insights from multiple schools of economic thought. It does not claim that these thinkers shared one doctrine.
+Современные экономики обладают высокой производительностью, однако производственные возможности и экономическая власть не обязательно распределяются так, чтобы сохранять широкое участие.
 
-| Tradition / thinker | Important contribution | Question carried into SYNERGY |
+Проект исследует десять взаимосвязанных структурных проблем:
+
+1. **Неравный доступ к производительному капиталу.** Люди могут вносить труд, знания, данные, заботу, репутацию или инновации, не получая устойчивого участия в активах и будущих потоках доходов, созданию которых они способствовали.
+2. **Разделение вклада и собственности.** Создатели ценности, финансирующие активы, контролирующие инфраструктуру и получатели остаточного дохода могут быть разными группами.
+3. **Концентрация и зависимость.** Сетевые эффекты, контроль платформ, интеллектуальная собственность и доступ к инфраструктуре способны создавать устойчивые узкие места.
+4. **Недоиспользование ресурсов.** Навыки, оборудование, помещения, знания, время и инфраструктура могут простаивать при наличии неудовлетворённых потребностей.
+5. **Перенос издержек на третьих лиц.** Производственные затраты могут перекладываться на сообщества, экосистемы и будущие поколения вместо отражения в частных ценах.
+6. **Ограничения координации.** Сложные цепочки поставок требуют своевременной информации, доверия, стандартов и адаптации множества независимых участников.
+7. **Краткосрочные стимулы.** Институты могут вознаграждать немедленное извлечение выгоды даже тогда, когда долгосрочная производительная способность истощается.
+8. **Пробелы измерения.** ВВП, прибыль, рыночная капитализация и цены токенов описывают лишь отдельные стороны экономической реальности.
+9. **Асимметрия цифровой власти.** Платформы и ИИ могут координировать деятельность в большом масштабе, одновременно закрывая участникам доступ к правилам, данным и правам принятия решений.
+10. **Хрупкость.** Системы, оптимизированные без резервов, разнообразия и доверенных институтов, могут становиться уязвимыми к шокам.
+
+Это исследовательские проблемы, а не предположение, будто каждый рынок, бизнес, государство или кооператив обязательно демонстрирует все перечисленные недостатки.
+
+---
+
+## 3. Чем является SYNERGY — и чем не является
+
+### 3.1. Что это такое
+
+SYNERGY — предлагаемая **полицентрическая экономическая архитектура**. Разные решения принимаются на наиболее подходящем для них уровне при наличии явно определённых прав, обязанностей, обратной связи и механизмов обжалования.
+
+Архитектура объединяет:
+
+- децентрализованные рынки для обнаружения возможностей, обмена и формирования ценовых сигналов;
+- конкуренцию и открытый вход для поддержки инноваций и дисциплины;
+- сотрудничество для совместного производства, инфраструктуры и объединения рисков;
+- индивидуальную, проектную и коллективную собственность;
+- широкий доступ к производительным активам и экономическому участию;
+- государственные и общие институты для общественных благ, внешних эффектов и универсальных гарантий;
+- анализ, прогнозирование, подбор соответствий и координацию с помощью ИИ;
+- человеческий надзор, независимую проверку и конституционные ограничения;
+- прозрачное измерение богатства, устойчивости, возможностей и благополучия.
+
+### 3.2. Чем это не является
+
+SYNERGY — это не:
+
+- командная экономика, в которой ИИ или центральная власть диктуют всё производство и все цены;
+- нерегулируемый рынок, где любой результат заранее считается общественно оптимальным;
+- система отмены частной собственности или индивидуального предпринимательства;
+- обещание, что токенизация автоматически создаёт реальную ценность или юридическую собственность;
+- инвестиционная схема с гарантированной доходностью;
+- утверждение, что всю экономическую ценность можно измерить одним показателем;
+- утверждение, что ИИ нейтрален, безошибочен или вправе обладать неограниченными полномочиями.
+
+### 3.3. Принцип проектирования
+
+**Использовать наименее централизованный механизм, который способен надёжно решить задачу, сохраняя общие правила, совместимость, подотчётность и защиту от злоупотреблений.**
+
+Это проектная гипотеза, которую необходимо проверять. Некоторые функции лучше децентрализовать; другие требуют общей инфраструктуры, коллективных действий или публичных полномочий.
+
+---
+
+## 4. Интеллектуальные основания
+
+SYNERGY опирается на идеи различных экономических школ, критически их рассматривает и объединяет отдельные выводы. Проект не утверждает, что перечисленные мыслители придерживались единой доктрины.
+
+| Традиция / мыслитель | Важный вклад | Вопрос для SYNERGY |
 |---|---|---|
-| Adam Smith | Division of labour, specialization, exchange, competition | How can specialization and exchange expand productive capacity? |
-| Karl Marx | Capital accumulation, ownership relations, labour and power | Who owns productive assets and controls the surplus? |
-| Carl Menger, William Jevons, Léon Walras | Subjective value and marginal analysis | How do preferences, scarcity and marginal trade-offs shape decisions? |
-| Alfred Marshall | Supply, demand, time horizons and partial equilibrium | How do prices and costs adjust across time? |
-| John Maynard Keynes | Aggregate demand, uncertainty and macroeconomic instability | How should the system respond to coordination failures and crises? |
-| Joseph Schumpeter | Innovation, entrepreneurship and creative destruction | How can innovation be rewarded without entrenching incumbents? |
-| Friedrich Hayek | Dispersed knowledge and price signals | How can local knowledge inform system-wide coordination? |
-| Ronald Coase | Transaction costs and institutional boundaries | When should activity be organized through markets, firms or shared institutions? |
-| Elinor Ostrom | Polycentric governance and common-pool resource institutions | How can communities govern shared resources? |
-| Douglass North | Institutions, incentives and path dependence | How do rules shape long-run economic performance? |
-| Amartya Sen | Capabilities and substantive freedom | Does economic progress expand what people can actually do and become? |
-| Thomas Piketty | Wealth concentration and capital-income dynamics | How do ownership and accumulation shape inequality over time? |
+| Адам Смит | Разделение труда, специализация, обмен, конкуренция | Как специализация и обмен расширяют производительную способность? |
+| Карл Маркс | Накопление капитала, отношения собственности, труд и власть | Кто владеет производительными активами и контролирует излишек? |
+| Карл Менгер, Уильям Джевонс, Леон Вальрас | Субъективная ценность и маржинальный анализ | Как предпочтения, дефицитность и предельные компромиссы влияют на решения? |
+| Альфред Маршалл | Спрос, предложение, временные горизонты и частичное равновесие | Как цены и издержки приспосабливаются во времени? |
+| Джон Мейнард Кейнс | Совокупный спрос, неопределённость и макроэкономическая нестабильность | Как системе реагировать на сбои координации и кризисы? |
+| Йозеф Шумпетер | Инновации, предпринимательство и созидательное разрушение | Как вознаграждать инновации, не закрепляя господство действующих лидеров? |
+| Фридрих Хайек | Рассеянное знание и ценовые сигналы | Как локальное знание может участвовать в системной координации? |
+| Рональд Коуз | Трансакционные издержки и институциональные границы | Когда деятельность следует организовывать через рынки, фирмы или общие институты? |
+| Элинор Остром | Полицентрическое управление и институты общих ресурсов | Как сообщества могут управлять совместно используемыми ресурсами? |
+| Дуглас Норт | Институты, стимулы и зависимость от предшествующего пути | Как правила влияют на долгосрочную экономическую динамику? |
+| Амартия Сен | Возможности человека и реальная свобода | Расширяет ли экономический прогресс то, что люди действительно могут делать и кем могут стать? |
+| Тома Пикетти | Концентрация богатства и динамика доходности капитала | Как собственность и накопление влияют на неравенство во времени? |
 
-The task is not to average these schools into a compromise. It is to identify which mechanisms work under which conditions, what trade-offs they create and how they can be combined without contradiction.
-
----
-
-## 5. Foundational vocabulary: value, production, wealth and power
-
-A rigorous economic architecture must not use different concepts as if they were interchangeable.
-
-- **Value** is multidimensional: usefulness, scarcity, production, exchange, knowledge, network effects and social consequences.
-- **Production** is the transformation and coordination of resources into goods, services and capabilities.
-- **Income** is a flow received over a period.
-- **Wealth** is a stock of assets net of relevant liabilities, measured at a point in time.
-- **Capital** is a subset of resources and relationships that support future production or income; its precise boundary depends on the accounting framework.
-- **Ownership** is a bundle of legally and institutionally defined rights, not merely possession of a digital record.
-- **Control** is the effective ability to make decisions about an asset or system.
-- **Power** is the capacity to shape other actors' choices, access or outcomes.
-- **Prosperity** is broader than income or asset value; it includes security, capabilities, opportunity, health, resilience and environmental quality.
-
-A token price, market capitalization, accounting profit, social value and real productive capacity are different measurements. They must never be treated as interchangeable.
+Задача состоит не в том, чтобы усреднить эти школы и получить компромисс. Необходимо определить, какие механизмы работают при каких условиях, какие компромиссы они создают и как их можно объединить без логических противоречий.
 
 ---
 
-## 6. The SYNERGY principles
+## 5. Базовый словарь: ценность, производство, богатство и власть
 
-The following principles are proposed constitutional and design commitments. Their implementation details remain open to research and public scrutiny.
+Строгая экономическая архитектура не должна использовать разные понятия как взаимозаменяемые.
 
-### P1. Human dignity and basic rights
-Economic participation must not be conditional on a person's measured productivity. Basic rights, due process and access to essential protections cannot be withdrawn by an algorithmic score.
+- **Ценность** многомерна: полезность, дефицитность, производство, обмен, знания, сетевые эффекты и социальные последствия.
+- **Производство** — преобразование и координация ресурсов в товары, услуги и возможности.
+- **Доход** — поток, полученный за определённый период.
+- **Богатство** — запас активов за вычетом соответствующих обязательств, измеряемый на определённый момент времени.
+- **Капитал** — часть ресурсов и отношений, поддерживающих будущее производство или получение дохода; точные границы зависят от системы учёта.
+- **Собственность** — совокупность юридически и институционально определённых прав, а не просто владение цифровой записью.
+- **Контроль** — фактическая способность принимать решения об активе или системе.
+- **Власть** — способность влиять на выбор, доступ или результаты деятельности других участников.
+- **Благосостояние** шире дохода или стоимости активов: оно включает безопасность, возможности, доступ, здоровье, устойчивость и качество окружающей среды.
 
-### P2. Freedom of initiative
-People and organizations should be able to create, trade, experiment, invest, cooperate and build enterprises within transparent rules.
-
-### P3. Open and fair competition
-Market entry, interoperability and access to essential infrastructure should be protected against unjustified exclusion and durable bottlenecks.
-
-### P4. Voluntary cooperation
-Cooperation should create shared gains while preserving clear agreements, consent, exit rights and dispute resolution.
-
-### P5. Broad participation in productive assets
-People should have practical routes to participate in the ownership or benefits of productive capital, not only in current consumption or wages.
-
-### P6. Contribution-sensitive rewards
-Additional rewards may reflect contribution, responsibility, innovation, risk and scarcity, provided methods are transparent, contestable and do not determine basic human worth.
-
-### P7. Protection of common resources
-Shared infrastructure, public goods and ecological assets require governance that accounts for long-term costs and future generations.
-
-### P8. Subsidiarity and polycentricity
-Decisions should be made at the lowest competent level, with higher-level coordination where spillovers, shared standards or systemic risks require it.
-
-### P9. Verifiable transparency
-Rules, accounting, decision records and material conflicts of interest should be auditable, subject to legitimate privacy and security constraints.
-
-### P10. Contestability and appeal
-No automated decision with significant economic consequences should be beyond explanation, review and appeal.
-
-### P11. Long-term resilience
-The system should value redundancy, diversification, reserves, maintainability and the ability to recover from shocks.
-
-### P12. Intergenerational responsibility
-Current prosperity must not depend on silently depleting productive, human or natural assets available to future generations.
+Цена токена, рыночная капитализация, бухгалтерская прибыль, социальная ценность и реальная производительная способность — разные показатели. Их нельзя считать взаимозаменяемыми.
 
 ---
 
-## 7. The economic architecture
+## 6. Принципы SYNERGY
 
-SYNERGY is conceived as a layered system. Each layer has a defined function and auditable interfaces to the others.
+Следующие принципы предлагаются как конституционные и проектные обязательства. Детали их реализации остаются предметом исследований и общественного обсуждения.
 
-    SYNERGY ECONOMIC CONSTITUTION
-    Rights • Limits • Due process • Accountability
+### P1. Человеческое достоинство и базовые права
+Экономическое участие не должно зависеть от измеренной производительности человека. Базовые права, надлежащая процедура и доступ к необходимой защите нельзя отнимать на основании алгоритмического рейтинга.
+
+### P2. Свобода инициативы
+Люди и организации должны иметь возможность создавать, торговать, экспериментировать, инвестировать, сотрудничать и строить предприятия в рамках прозрачных правил.
+
+### P3. Открытая и справедливая конкуренция
+Вход на рынки, совместимость систем и доступ к критически важной инфраструктуре должны быть защищены от необоснованного исключения и устойчивых узких мест.
+
+### P4. Добровольное сотрудничество
+Сотрудничество должно создавать общие выгоды при сохранении ясных соглашений, согласия участников, права выхода и процедур разрешения споров.
+
+### P5. Широкое участие в производительных активах
+У людей должны быть практические пути участия в собственности на производительный капитал или в выгодах от него, а не только в текущем потреблении или заработной плате.
+
+### P6. Вознаграждение с учётом вклада
+Дополнительное вознаграждение может учитывать вклад, ответственность, инновации, принятие риска и дефицитность ресурсов, если методы прозрачны, оспоримы и не определяют человеческое достоинство.
+
+### P7. Защита общих ресурсов
+Совместная инфраструктура, общественные блага и экологические активы требуют управления, учитывающего долгосрочные издержки и интересы будущих поколений.
+
+### P8. Субсидиарность и полицентричность
+Решения должны приниматься на самом низком компетентном уровне; координация более высокого уровня необходима там, где существуют внешние эффекты, общие стандарты или системные риски.
+
+### P9. Проверяемая прозрачность
+Правила, учёт, записи решений и существенные конфликты интересов должны поддаваться аудиту с учётом законных требований приватности и безопасности.
+
+### P10. Оспоримость и обжалование
+Ни одно автоматизированное решение со значительными экономическими последствиями не должно быть лишено объяснения, проверки и возможности обжалования.
+
+### P11. Долгосрочная устойчивость
+Система должна учитывать резервирование, диверсификацию, резервы, ремонтопригодность и способность восстанавливаться после шоков.
+
+### P12. Межпоколенческая ответственность
+Текущее благосостояние не должно основываться на незаметном истощении производительных, человеческих или природных активов, доступных будущим поколениям.
+
+---
+
+## 7. Экономическая архитектура
+
+SYNERGY задумана как многоуровневая система. Каждый уровень имеет определённую функцию и проверяемые интерфейсы взаимодействия с другими уровнями.
+
+```text
+ЭКОНОМИЧЕСКАЯ КОНСТИТУЦИЯ SYNERGY
+Права • Ограничения • Надлежащая процедура • Подотчётность
                          |
-          POLYCENTRIC GOVERNANCE & VALIDATION
-         Human institutions • DAO • Independent review
+       ПОЛИЦЕНТРИЧЕСКОЕ УПРАВЛЕНИЕ И ВАЛИДАЦИЯ
+       Человеческие институты • DAO • Независимая проверка
                          |
-                AI ECONOMIC ENGINE
-      Forecasting • Matching • Simulation • Recommendations
+                ЭКОНОМИЧЕСКИЙ ДВИЖОК ИИ
+       Прогнозирование • Подбор • Симуляция • Рекомендации
                          |
     ---------------------------------------------------------
-    | VALUE & PRODUCTION | CAPITAL & OWNERSHIP | MONEY & CREDIT |
-    | Contribution       | Asset registry      | Payments       |
-    | Resource matching | Ownership rights     | Liquidity      |
-    | Externalities      | Investment           | Credit risk    |
+    | ЦЕННОСТЬ И ПРОИЗВОДСТВО | КАПИТАЛ И СОБСТВЕННОСТЬ | ДЕНЬГИ И КРЕДИТ |
+    | Учёт вклада             | Реестр активов         | Платежи         |
+    | Сопоставление ресурсов  | Права собственности   | Ликвидность     |
+    | Внешние эффекты         | Инвестиции             | Кредитный риск  |
     ---------------------------------------------------------
                          |
-           MARKETS • COOPERATIVES • ENTERPRISES
-          Individuals • Teams • Firms • Communities
+          РЫНКИ • КООПЕРАТИВЫ • ПРЕДПРИЯТИЯ
+         Люди • Команды • Фирмы • Сообщества
                          |
-              COLLECTIVE & PUBLIC INFRASTRUCTURE
-        Knowledge • Data rules • Networks • Public goods
+             КОЛЛЕКТИВНАЯ И ПУБЛИЧНАЯ ИНФРАСТРУКТУРА
+             Знания • Правила данных • Сети • Общественные блага
                          |
-              PROSPERITY & RESILIENCE OUTCOMES
-     Capabilities • Opportunity • Security • Sustainability
+               РЕЗУЛЬТАТЫ БЛАГОСОСТОЯНИЯ И УСТОЙЧИВОСТИ
+       Возможности • Доступ • Безопасность • Устойчивое развитие
+```
 
-### 7.1 Economic Constitution
-Defines rights, duties, limits, decision procedures, audit requirements and amendment rules. It is the highest-level constraint on all software and institutions.
+### 7.1. Экономическая конституция
+Определяет права, обязанности, ограничения, процедуры принятия решений, требования к аудиту и правила внесения изменений. Это высший уровень ограничений для всех программных систем и институтов.
 
-### 7.2 Value Engine
-Records production, inputs, outputs, quality, contributions, externalities and counterfactuals. It must distinguish observed facts from estimates and subjective judgments.
+### 7.2. Движок ценности
+Фиксирует производство, затраты ресурсов, выпуск, качество, вклад, внешние эффекты и контрфактические оценки. Он должен различать наблюдаемые факты, оценки и субъективные суждения.
 
-### 7.3 Economic Graph
-Represents participants, organizations, assets, projects, transactions, dependencies and knowledge relationships as a network. Graph data must include provenance, permissions and privacy controls.
+### 7.3. Экономический граф
+Представляет участников, организации, активы, проекты, транзакции, зависимости и связи знаний в виде сети. Данные графа должны содержать происхождение, разрешения на использование и средства защиты приватности.
 
-### 7.4 Capital & Ownership Engine
-Tracks real and financial assets, legal ownership, beneficial interests, control rights, income claims, liabilities, encumbrances and transfer restrictions.
+### 7.4. Движок капитала и собственности
+Отслеживает реальные и финансовые активы, юридическую собственность, бенефициарные интересы, права контроля, требования на доходы, обязательства, обременения и ограничения передачи.
 
-### 7.5 Financial OS
-Coordinates payments, settlement, liquidity, credit, reserves, risk management and financial reporting. It must distinguish money, debt, equity, utility claims and asset-backed claims.
+### 7.5. Финансовая операционная система
+Координирует платежи, расчёты, ликвидность, кредит, резервы, управление рисками и финансовую отчётность. Она должна различать деньги, долг, капитал, права доступа и требования, обеспеченные активами.
 
-### 7.6 Collective Economy
-Supports cooperatives, shared infrastructure, pooled investment, common assets and community-governed resources.
+### 7.6. Коллективная экономика
+Поддерживает кооперативы, совместную инфраструктуру, объединённые инвестиции, общие активы и ресурсы под управлением сообществ.
 
-### 7.7 AI Economic Engine / NEXUS
-Provides forecasting, matching, optimization, anomaly detection and scenario analysis. AI recommendations must be explainable to the extent appropriate, logged, challengeable and bounded by constitutional rules.
+### 7.7. Экономический ИИ / NEXUS
+Обеспечивает прогнозирование, подбор соответствий, оптимизацию, обнаружение аномалий и анализ сценариев. Рекомендации ИИ должны быть объяснимыми в необходимой степени, журналируемыми, оспоримыми и ограниченными конституционными правилами.
 
-### 7.8 Prosperity Engine
-Measures whether economic activity improves access to opportunity, productive capacity, resilience and well-being over time.
+### 7.8. Движок благосостояния
+Измеряет, улучшает ли экономическая деятельность доступ к возможностям, производительную способность, устойчивость и благополучие во времени.
 
 ---
 
-## 8. The ten research volumes
+## 8. Десять исследовательских томов
 
-The program is organized into ten connected volumes. Each volume should become a standalone research document with definitions, literature review, formal models, testable hypotheses, implementation options and open questions.
+Программа организована в десять взаимосвязанных тематических томов. Каждый том должен стать самостоятельным исследовательским документом с определениями, обзором литературы, формальными моделями, проверяемыми гипотезами, вариантами реализации и открытыми вопросами.
 
-| Volume | Working title | Core question |
+| Том | Рабочее название | Центральный вопрос |
 |---|---|---|
-| I | **Foundations of Synergistic Economics** | What principles can combine markets, cooperation and broad participation? |
-| II | **Multidimensional Theory of Value and Production** | How is value created by labour, capital, knowledge, networks and social/ecological conditions? |
-| III | **Theory of Contribution and Distribution** | How should income, ownership, opportunity and collective surplus be allocated? |
-| IV | **Theory of Capital and Ownership** | How can individual and collective accumulation reinforce one another? |
-| V | **Theory of Money, Credit and Liquidity** | How should money, credit, settlement and financial claims be designed? |
-| VI | **Institutional and Governance Theory** | Which decisions belong to markets, firms, cooperatives, communities, DAOs or public institutions? |
-| VII | **AI and Computational Economic Coordination** | How can AI improve coordination without becoming an unaccountable sovereign? |
-| VIII | **Theory of Prosperity and Social Welfare** | What outcomes should an economy maximize and protect? |
-| IX | **Economic Modeling and Experimental Validation** | How can competing institutional designs be compared fairly? |
-| X | **Economic Constitution and Protocol** | How can principles become enforceable rules, institutions and software? |
+| I | **Основы синергетической экономики** | Какие принципы позволяют объединить рынки, сотрудничество и широкое участие? |
+| II | **Многомерная теория ценности и производства** | Как ценность создаётся трудом, капиталом, знаниями, сетями и социально-экологическими условиями? |
+| III | **Теория вклада и распределения** | Как распределять доход, собственность, возможности и коллективный излишек? |
+| IV | **Теория капитала и собственности** | Как индивидуальное и коллективное накопление могут усиливать друг друга? |
+| V | **Теория денег, кредита и ликвидности** | Как следует проектировать деньги, кредит, расчёты и финансовые требования? |
+| VI | **Институциональная теория и теория управления** | Какие решения относятся к рынкам, фирмам, кооперативам, сообществам, DAO или государственным институтам? |
+| VII | **ИИ и вычислительная экономическая координация** | Как ИИ может улучшать координацию, не превращаясь в неподотчётного суверена? |
+| VIII | **Теория благосостояния и общественного благополучия** | Какие результаты экономика должна максимизировать и защищать? |
+| IX | **Экономическое моделирование и экспериментальная проверка** | Как справедливо сравнивать конкурирующие институциональные конструкции? |
+| X | **Экономическая конституция и протокол** | Как превратить принципы в исполнимые правила, институты и программные системы? |
 
-### Volume I — Foundations
-Defines the system's purpose, institutional pluralism, core principles, rights and research method.
+### Том I — Основы
+Определяет цель системы, институциональный плюрализм, базовые принципы, права и исследовательский метод.
 
-### Volume II — Value and production
-Develops the **Synergy Multidimensional Value Theory (SMVT)**. It distinguishes production value, market value, utility, network/synergy effects and social or ecological consequences. These dimensions must not simply be added: double counting and incompatible units must be addressed.
+### Том II — Ценность и производство
+Развивает **многомерную теорию ценности SYNERGY (SMVT)**. Она различает производственную ценность, рыночную ценность, полезность, сетевые и синергетические эффекты, социальные и экологические последствия. Эти измерения нельзя просто складывать: необходимо учитывать двойной счёт и несовместимость единиц измерения.
 
-A general production representation is:
+Общее представление производства:
 
-[
-Y = F(K,L,H,D,N,Q,E)
-]
+```text
+Y = F(K, L, H, D, N, Q, E)
+```
 
-where (K) is produced capital, (L) labour, (H) knowledge and skills, (D) data and digital resources, (N) network structure, (Q) quality and (E) relevant environmental conditions. This is research notation, not a universally valid production function.
+где (K) — произведённый капитал, (L) — труд, (H) — знания и навыки, (D) — данные и цифровые ресурсы, (N) — структура сети, (Q) — качество, (E) — релевантные экологические условия. Это исследовательская запись, а не универсальная производственная функция.
 
-A candidate way to estimate additional synergy is to compare observed joint output with a credible counterfactual:
+Возможный способ оценки дополнительной синергии — сравнить совместный выпуск с обоснованным контрфактическим сценарием:
 
-[
-S = Y_{	ext{joint}} - Y_{	ext{counterfactual}}
-]
+```text
+S = Y_joint - Y_counterfactual
+```
 
-The counterfactual must control for input quality, time, risk, selection effects and external conditions.
+Контрфактическая оценка должна учитывать качество ресурсов, время, риск, эффекты отбора и внешние условия.
 
-### Volume III — Contribution and distribution
-Develops a plural contribution framework: labour, capital, knowledge, innovation, entrepreneurship, risk-bearing, infrastructure, data, coordination, network effects, social contribution and governance.
+### Том III — Вклад и распределение
+Разрабатывает плюралистическую систему учёта вклада: труд, капитал, знания, инновации, предпринимательство, принятие риска, инфраструктура, данные, координация, сетевые эффекты, социальный вклад и управление.
 
-Distribution should be context-specific rather than reduced to one universal score. Basic rights and security are separate from performance-based rewards. Candidate mechanisms include wages, contracts, profit-sharing, employee ownership, project equity, collective dividends and universal access to productive opportunities.
+Распределение должно зависеть от контекста, а не сводиться к одной универсальной формуле. Базовые права и безопасность отделены от вознаграждений за результативность. Возможные механизмы: заработная плата, договорные выплаты, участие в прибыли, собственность работников, проектный капитал, коллективные дивиденды и универсальный доступ к производительным возможностям.
 
-### Volume IV — Capital and ownership
-Separates assets, capital, wealth, legal title, beneficial ownership, control and claims on cash flow. It investigates individual, project, cooperative and common capital; universal basic capital; collective investment; tokenized rights; concentration safeguards; liquidity and inheritance.
+### Том IV — Капитал и собственность
+Разделяет активы, капитал, богатство, юридический титул, бенефициарную собственность, контроль и требования на денежные потоки. Исследует индивидуальный, проектный, кооперативный и общий капитал; универсальный базовый капитал; коллективные инвестиции; токенизированные права; ограничения концентрации; ликвидность и наследование.
 
-A digital token is not, by itself, proof of legal title to an underlying asset. Rights depend on enforceable contracts, applicable law, custody, issuer obligations and the legal structure.
+Цифровой токен сам по себе не является доказательством юридического титула на базовый актив. Права зависят от исполнимых договоров, применимого права, хранения активов, обязательств эмитента и юридической структуры.
 
-### Volume V — Money and credit
-Distinguishes units of account, payment instruments, bank deposits, central-bank money, credit, debt, equity and redeemable claims. It examines monetary issuance, collateral, maturity transformation, default, liquidity, systemic risk and payment settlement.
+### Том V — Деньги и кредит
+Различает единицы счёта, платёжные инструменты, банковские депозиты, деньги центрального банка, кредит, долг, капитал и погашаемые требования. Рассматривает денежную эмиссию, обеспечение, сроки погашения, трансформацию сроков, дефолт, ликвидность, системный риск и окончательность расчётов.
 
-The system must never confuse an increase in token supply with an increase in real wealth.
+Система никогда не должна путать увеличение предложения токенов с увеличением реального богатства.
 
-### Volume VI — Institutions and governance
-Studies firm boundaries, markets, cooperatives, commons, public institutions, DAOs and hybrid governance. It defines subsidiarity, checks and balances, conflict resolution, independent audit and constitutional amendment.
+### Том VI — Институты и управление
+Исследует границы фирмы, рынки, кооперативы, общие ресурсы, государственные институты, DAO и гибридное управление. Определяет субсидиарность, систему сдержек и противовесов, разрешение конфликтов, независимый аудит и конституционные процедуры внесения изменений.
 
-### Volume VII — AI coordination
-Studies AI as a tool for forecasting, resource matching, economic simulation, risk detection and decision support. It requires human rights safeguards, auditability, model-risk management, data minimization, adversarial testing and appeal.
+### Том VII — Координация с помощью ИИ
+Исследует ИИ как инструмент прогнозирования, сопоставления ресурсов, экономического моделирования, обнаружения рисков и поддержки принятия решений. Требует гарантий прав человека, аудируемости, управления рисками моделей, минимизации данных, состязательного тестирования и процедур обжалования.
 
-### Volume VIII — Prosperity
-Moves beyond GDP and short-term income to assess material security, capabilities, health, education, access to productive assets, distribution, ecological integrity and resilience.
+### Том VIII — Благосостояние
+Выходит за пределы ВВП и краткосрочного дохода, оценивая материальную безопасность, возможности человека, здоровье, образование, доступ к производительным активам, распределение, экологическую целостность и устойчивость.
 
-### Volume IX — Modeling and experiments
-Builds agent-based, network, game-theoretic and macroeconomic models. It compares SYNERGY with alternative institutional configurations under common assumptions and transparent sensitivity analysis.
+### Том IX — Модели и эксперименты
+Создаёт агентные, сетевые, теоретико-игровые и макроэкономические модели. Сравнивает SYNERGY с альтернативными институциональными конфигурациями при общих предпосылках и прозрачном анализе чувствительности.
 
-### Volume X — Constitution and protocol
-Translates validated principles into enforceable governance rules, institutional procedures, technical standards, data schemas and software protocols.
-
----
-
-## 9. Distribution: from income to economic participation
-
-SYNERGY treats distribution as a portfolio of mechanisms, not a single transfer formula.
-
-### 9.1 Five levels of participation
-
-1. **Economic security:** access to essential protections and the ability to withstand basic shocks.
-2. **Individual contribution:** fair compensation for work, services, knowledge and responsibility.
-3. **Ownership participation:** access to individual or shared productive assets.
-4. **Network participation:** participation in value created by networks, platforms and shared infrastructure under explicit rules.
-5. **Collective prosperity:** shared benefits from common assets, public goods and long-term productive capacity.
-
-### 9.2 Contribution categories
-
-A project may recognize multiple forms of contribution:
-
-- labour and execution;
-- capital supplied and capital at risk;
-- knowledge and intellectual work;
-- innovation and entrepreneurship;
-- infrastructure and maintenance;
-- data provision under valid consent and rights;
-- coordination and integration;
-- network development;
-- social and ecological contributions;
-- governance, verification and stewardship.
-
-These categories are not automatically additive. A contribution ledger must prevent double counting, distinguish direct evidence from estimates and allow correction and appeal.
-
-### 9.3 Allocation mechanisms
-
-Potential mechanisms include contractual payment for delivered work, wages and service fees, profit-sharing, employee or member ownership, project-level equity, cooperative surplus distribution, dividends from collectively owned assets, grants and access to shared productive infrastructure.
-
-A distributable cash waterfall must start from actual cash receipts and subtract operating costs, taxes, debt service, maintenance, required reserves and other senior obligations. Accounting profit is not the same as cash available for distribution.
-
-### 9.4 Universal Economic Participation
-
-The project explores a broader concept than a cash-only basic income: people should have pathways to participate in productive assets, education, infrastructure, entrepreneurship and networks.
-
-This is a design objective, not a promise of guaranteed wealth or investment returns.
+### Том X — Конституция и протокол
+Преобразует проверенные принципы в исполнимые правила управления, институциональные процедуры, технические стандарты, схемы данных и программные протоколы.
 
 ---
 
-## 10. Capital and ownership: the core distinction
+## 9. Распределение: от дохода к экономическому участию
 
-SYNERGY must distinguish at least six things:
+SYNERGY рассматривает распределение как портфель механизмов, а не как одну формулу трансферта.
 
-1. **Underlying asset:** a machine, building, software, patent, land, infrastructure or other resource.
-2. **Economic ownership:** who is entitled to benefits and bears risks under the applicable framework.
-3. **Legal title:** who is recognized by law as the owner or holder of the relevant right.
-4. **Beneficial interest:** who ultimately benefits from the asset or arrangement.
-5. **Control rights:** who can use, manage, sell, encumber or make decisions about it.
-6. **Cash-flow claim:** who is entitled to income, repayment, dividends or other distributions.
+### 9.1. Пять уровней участия
 
-These rights may belong to different parties. A token may represent one or more of them only where the underlying legal and operational arrangements make that representation effective.
+1. **Экономическая безопасность:** доступ к необходимой защите и способность выдерживать базовые шоки.
+2. **Индивидуальный вклад:** справедливая компенсация труда, услуг, знаний и ответственности.
+3. **Участие в собственности:** доступ к индивидуальным или совместным производительным активам.
+4. **Участие в сетях:** участие в ценности, создаваемой сетями, платформами и общей инфраструктурой, на основании явных правил.
+5. **Коллективное благосостояние:** общие выгоды от совместных активов, общественных благ и долгосрочной производительной способности.
 
-### 10.1 Capital categories
+### 9.2. Категории вклада
 
-The research program will examine:
+Проект может признавать несколько форм вклада:
 
-- produced capital: equipment, buildings, tools and infrastructure;
-- financial capital: deposits, securities, loans and other financial claims;
-- human capital: skills, health, knowledge and experience embodied in people;
-- intellectual capital: inventions, software, designs, processes and documented know-how;
-- data and algorithmic resources: governed datasets, models and digital systems;
-- social and relational capital: trust, networks and institutional relationships;
-- natural capital: ecosystems, land, water, minerals and other natural assets;
-- organizational capital: routines, systems, brands and institutional capabilities.
+- труд и исполнение задач;
+- предоставленный капитал и капитал под риском;
+- знания и интеллектуальная работа;
+- инновации и предпринимательство;
+- инфраструктура и обслуживание;
+- предоставление данных при наличии действительного согласия и правовых оснований;
+- координация и интеграция;
+- развитие сети;
+- социальный и экологический вклад;
+- управление, проверка и ответственное хранение общих ресурсов.
 
-Human capital is embodied in people; it is not property owned by an employer, platform or token holder. Rights over personal data, identity and labour must be separately specified.
+Эти категории нельзя автоматически складывать. Реестр вклада должен предотвращать двойной счёт, различать прямые доказательства и оценки, а также допускать исправление и обжалование.
 
-### 10.2 Net wealth and double counting
+### 9.3. Механизмы распределения
 
-A basic balance-sheet identity is:
+Возможные механизмы: договорная оплата выполненной работы, заработная плата и сервисные платежи, участие в прибыли, собственность работников или членов, проектный капитал, распределение кооперативного излишка, дивиденды от коллективно принадлежащих активов, гранты и доступ к общей производительной инфраструктуре.
 
-[
-NW = A_{NF} + A_F - L
-]
+Водопад распределения денежных средств должен начинаться с фактически полученных денег и вычитать операционные затраты, налоги, обслуживание долга, техническое обслуживание, обязательные резервы и другие старшие обязательства. Бухгалтерская прибыль не равна денежным средствам, доступным для распределения.
 
-where (A_{NF}) is non-financial assets, (A_F) is financial assets and (L) is liabilities.
+### 9.4. Универсальное экономическое участие (UEP)
 
-A financial asset is generally another party's liability. When measuring consolidated wealth, internal claims within the same consolidated system must not be counted as if they were additional real assets.
+Проект исследует более широкую концепцию, чем базовый денежный доход: у людей должны быть пути участия в производительных активах, образовании, инфраструктуре, предпринимательстве и сетях.
 
-Market capitalization, token supply and the market value of an underlying asset cannot simply be summed. The accounting boundary and nature of each claim must be explicit.
-
-### 10.3 Universal Basic Capital (research concept)
-
-Universal Basic Capital (UBC) is a proposed mechanism to broaden access to productive assets. Possible structures include diversified public or cooperative funds, individual capital accounts, community trusts and participation in shared infrastructure.
-
-Any credible design must specify:
-
-- who contributes capital and under what rules;
-- who legally owns the assets;
-- whether the participant has an individual claim, beneficial interest or only access rights;
-- governance and fiduciary duties;
-- diversification, fees, valuation and audit;
-- liquidity, withdrawal and transfer restrictions;
-- treatment of losses and insolvency;
-- inheritance and unclaimed accounts;
-- tax and regulatory treatment;
-- safeguards against political capture and insider extraction.
-
-UBC must not be marketed as guaranteed appreciation, guaranteed income or risk-free ownership.
+Это проектная цель, а не обещание гарантированного богатства или инвестиционной доходности.
 
 ---
 
-## 11. Money, tokens and financial integrity
+## 10. Капитал и собственность: ключевые различия
 
-SYNERGY may use digital tokens and distributed ledgers where they solve real coordination, settlement, audit or access problems. Technology does not replace economic substance or legal enforceability.
+SYNERGY должна различать как минимум шесть сущностей:
 
-Every token or digital unit must have a clearly specified function:
+1. **Базовый актив:** машина, здание, программное обеспечение, патент, земля, инфраструктура или иной ресурс.
+2. **Экономическая собственность:** кто вправе получать выгоды и несёт риски в рамках применимой системы.
+3. **Юридический титул:** кто признаётся законом собственником или обладателем соответствующего права.
+4. **Бенефициарный интерес:** кто в конечном счёте получает выгоду от актива или конструкции.
+5. **Права контроля:** кто может использовать, управлять, продавать, обременять актив или принимать решения о нём.
+6. **Требование на денежный поток:** кто вправе получать доход, погашение, дивиденды или иные выплаты.
 
-- **unit of account:** a measurement unit for prices or obligations;
-- **payment instrument:** a means of transferring value;
-- **utility/access right:** a defined right to use a service;
-- **governance right:** a defined role in decision-making;
-- **equity or ownership claim:** a legally structured residual or beneficial interest;
-- **debt claim:** an enforceable obligation to repay;
-- **asset-backed claim:** a claim linked to specified assets and redemption conditions.
+Эти права могут принадлежать разным сторонам. Токен может представлять одно или несколько таких прав только тогда, когда базовые юридические и операционные механизмы делают это представление действительным.
 
-These functions are not interchangeable.
+### 10.1. Категории капитала
 
-The project must separately document issuance, redemption, collateral, reserves, liabilities, custody, transfer restrictions, governance, default handling and dispute resolution. A supply policy — including an uncapped or rule-based issuance policy — does not establish that each unit has stable purchasing power or is backed by real assets.
+Исследовательская программа рассматривает:
 
-Tokenization can improve recordkeeping and programmability, but it also creates operational, governance, liquidity and legal risks. The BIS emphasizes that sound governance and risk management remain necessary for token arrangements.
+- произведённый капитал: оборудование, здания, инструменты и инфраструктура;
+- финансовый капитал: депозиты, ценные бумаги, займы и другие финансовые требования;
+- человеческий капитал: навыки, здоровье, знания и опыт, воплощённые в людях;
+- интеллектуальный капитал: изобретения, программное обеспечение, проекты, процессы и документированное ноу-хау;
+- данные и алгоритмические ресурсы: регулируемые наборы данных, модели и цифровые системы;
+- социальный и реляционный капитал: доверие, сети и институциональные отношения;
+- природный капитал: экосистемы, земля, вода, полезные ископаемые и другие природные активы;
+- организационный капитал: процедуры, системы, бренды и институциональные возможности.
+
+Человеческий капитал воплощён в людях; он не является собственностью работодателя, платформы или владельца токена. Права на персональные данные, идентичность и труд должны определяться отдельно.
+
+### 10.2. Чистое богатство и двойной счёт
+
+Базовое балансовое тождество:
+
+```text
+NW = A_NF + A_F - L
+```
+
+где (A_{NF}) — нефинансовые активы, (A_F) — финансовые активы, (L) — обязательства.
+
+Финансовый актив, как правило, является обязательством другой стороны. При измерении консолидированного богатства внутренние требования внутри одной консолидируемой системы нельзя учитывать так, будто они представляют дополнительные реальные активы.
+
+Рыночную капитализацию, предложение токенов и рыночную стоимость базового актива нельзя просто складывать. Граница учёта и природа каждого требования должны быть определены явно.
+
+### 10.3. Универсальный базовый капитал (исследовательская концепция)
+
+Универсальный базовый капитал (UBC) — предлагаемая конструкция для расширения доступа к производительным активам. Возможные формы: диверсифицированные государственные или кооперативные фонды, индивидуальные капитальные счета, общественные трасты и участие в общей инфраструктуре.
+
+Любая заслуживающая доверия конструкция должна определить:
+
+- кто и на каких условиях вносит капитал;
+- кому юридически принадлежат активы;
+- имеет ли участник индивидуальное требование, бенефициарный интерес или только право доступа;
+- правила управления и фидуциарные обязанности;
+- диверсификацию, комиссии, оценку и аудит;
+- ликвидность, вывод средств и ограничения передачи;
+- порядок обращения с убытками и несостоятельностью;
+- наследование и невостребованные счета;
+- налоговый и регуляторный режим;
+- защиту от политического захвата и извлечения выгоды инсайдерами.
+
+UBC нельзя рекламировать как гарантию роста стоимости, гарантированный доход или владение без риска.
 
 ---
 
-## 12. AI: coordination without algorithmic sovereignty
+## 11. Деньги, токены и финансовая целостность
 
-AI can support economic coordination by forecasting demand and supply, matching idle resources with unmet needs, identifying bottlenecks, simulating policy scenarios, detecting fraud and accounting anomalies, assisting project evaluation and optimizing logistics and resource use.
+SYNERGY может использовать цифровые токены и распределённые реестры там, где они действительно решают задачи координации, расчётов, аудита или доступа. Технология не заменяет экономическую сущность или юридическую исполнимость.
 
-AI must not unilaterally redefine rights, seize assets, create unbounded liabilities or alter constitutional constraints.
+Для каждого токена или цифровой единицы должна быть чётко определена функция:
 
-### 12.1 Proposed authority model
+- **единица счёта:** единица измерения цен или обязательств;
+- **платёжный инструмент:** средство передачи стоимости;
+- **право доступа или полезности:** определённое право использовать услугу;
+- **право управления:** определённая роль в принятии решений;
+- **долевая или имущественная претензия:** юридически оформленное остаточное или бенефициарное право;
+- **долговое требование:** исполнимое обязательство погашения;
+- **требование, обеспеченное активом:** право, связанное с определёнными активами и условиями погашения.
 
-- **Constitutional layer:** defines non-negotiable rights, limits and amendment procedures.
-- **AI layer:** analyzes, recommends and may execute narrowly delegated actions within explicit bounds.
-- **Human and institutional layer:** authorizes high-impact decisions, hears appeals and accepts responsibility.
-- **Independent validation layer:** audits data, models, conflicts of interest and outcomes.
-- **Participant layer:** can inspect relevant decisions, challenge errors and exit where legally and operationally possible.
+Эти функции не взаимозаменяемы.
 
-### 12.2 AI safety and accountability requirements
+Проект должен отдельно документировать эмиссию, погашение, обеспечение, резервы, обязательства, хранение, ограничения передачи, управление, обработку дефолтов и разрешение споров. Денежная политика — в том числе неограниченная или основанная на правилах эмиссия — сама по себе не доказывает, что каждая единица обладает стабильной покупательной способностью или обеспечена реальными активами.
 
-Every high-impact automated process should have a defined purpose, permitted inputs, decision boundary, risk classification, audit log, fallback mode, responsible owner and appeal route. Models must be tested for manipulation, data poisoning, distributional harm and failure under unusual conditions.
+Токенизация может улучшить учёт и программируемость, но также создаёт операционные, управленческие, ликвидные и юридические риски. Банк международных расчётов подчёркивает, что токенизированные конструкции по-прежнему требуют надлежащего управления и риск-менеджмента.
 
 ---
 
-## 13. Measuring economic success
+## 12. ИИ: координация без алгоритмического суверенитета
 
-No single indicator can capture the performance of a complex economy. SYNERGY proposes a dashboard rather than a universal composite score.
+ИИ может поддерживать экономическую координацию, прогнозируя спрос и предложение, сопоставляя простаивающие ресурсы с неудовлетворёнными потребностями, выявляя узкие места, моделируя сценарии политики, обнаруживая мошенничество и учётные аномалии, помогая оценивать проекты, оптимизируя логистику и использование ресурсов.
 
-| Dimension | Example indicators |
+ИИ не должен единолично переопределять права, изымать активы, создавать неограниченные обязательства или менять конституционные ограничения.
+
+### 12.1. Предлагаемая модель полномочий
+
+- **Конституционный уровень:** определяет неотчуждаемые права, ограничения и процедуры внесения изменений.
+- **Уровень ИИ:** анализирует, рекомендует и может выполнять узко делегированные действия в явных пределах.
+- **Человеческий и институциональный уровень:** санкционирует решения с существенными последствиями, рассматривает апелляции и несёт ответственность.
+- **Уровень независимой проверки:** аудирует данные, модели, конфликты интересов и результаты.
+- **Уровень участников:** позволяет проверять относящиеся к ним решения, оспаривать ошибки и выходить из системы там, где это юридически и операционно возможно.
+
+### 12.2. Требования к безопасности и подотчётности ИИ
+
+Каждый автоматизированный процесс с существенными последствиями должен иметь определённую цель, разрешённые входные данные, границы решений, классификацию риска, журнал аудита, резервный режим, ответственного владельца и маршрут обжалования. Модели необходимо проверять на манипулирование, отравление данных, распределительный ущерб и сбои в необычных условиях.
+
+---
+
+## 13. Измерение экономического успеха
+
+Ни один показатель не способен охватить работу сложной экономики. SYNERGY предлагает панель показателей, а не универсальный сводный балл.
+
+| Измерение | Примеры показателей |
 |---|---|
-| Production | Real output, value added, quality-adjusted productivity |
-| Wealth | Real net wealth per capita, asset composition, liabilities |
-| Distribution | Income and wealth distribution, ownership participation |
-| Opportunity | Access to education, capital, infrastructure and markets |
-| Resilience | Recovery time, diversification, liquidity and redundancy |
-| Innovation | New products, process improvements, diffusion of knowledge |
-| Resource use | Energy, materials, water and idle-capacity utilization |
-| Social outcomes | Health, education, security and capability measures |
-| Governance | Audit coverage, appeal outcomes, concentration of control |
-| Ecological sustainability | Natural-asset condition and uncompensated externalities |
+| Производство | Реальный выпуск, добавленная стоимость, производительность с поправкой на качество |
+| Богатство | Реальное чистое богатство на душу населения, состав активов, обязательства |
+| Распределение | Распределение доходов и богатства, участие в собственности |
+| Возможности | Доступ к образованию, капиталу, инфраструктуре и рынкам |
+| Устойчивость | Время восстановления, диверсификация, ликвидность и резервирование |
+| Инновации | Новые продукты, улучшение процессов, распространение знаний |
+| Использование ресурсов | Энергия, материалы, вода и загрузка простаивающих мощностей |
+| Социальные результаты | Здоровье, образование, безопасность и показатели возможностей |
+| Управление | Охват аудитом, результаты апелляций, концентрация контроля |
+| Экологическая устойчивость | Состояние природных активов и некомпенсированные внешние эффекты |
 
-The World Bank's comprehensive wealth work is an important reference for measuring produced, human and natural capital alongside financial positions. It illustrates why GDP alone cannot describe whether the asset base supporting future prosperity is being maintained.
+Исследования Всемирного банка по комплексному учёту богатства — важный ориентир для измерения произведённого, человеческого и природного капитала наряду с финансовыми позициями. Они показывают, почему одного ВВП недостаточно для оценки сохранности активной базы будущего благосостояния.
 
-### 13.1 Candidate net contribution measure
+### 13.1. Кандидатная мера чистого вклада
 
-A project-level experimental metric may be defined as:
+Экспериментальный показатель на уровне проекта может быть определён так:
 
-[
+```text
 NEVC = GVA - CFC - E_u
-]
+```
 
-where (GVA) is gross value added, (CFC) is consumption of fixed capital and (E_u) is estimated uncompensated external costs.
+где (GVA) — валовая добавленная стоимость, (CFC) — потребление основного капитала, (E_u) — оценённые некомпенсированные внешние издержки.
 
-This is a proposed analytical measure, not an official national-accounting aggregate. Its use requires explicit valuation assumptions, uncertainty ranges and safeguards against double counting.
+Это предлагаемая аналитическая мера, а не официальный агрегат национальных счетов. Её использование требует явных предпосылок оценки, диапазонов неопределённости и защиты от двойного счёта.
 
-### 13.2 Do not optimize one score blindly
+### 13.2. Не следует слепо оптимизировать один показатель
 
-Composite indicators can hide trade-offs and create perverse incentives. The system should publish disaggregated outcomes, uncertainty intervals and distributional effects. A metric used for rewards or governance can be gamed; independent audits and qualitative review remain necessary.
-
----
-
-## 14. Formal research model
-
-A general representation of the economy is a dynamic network:
-
-[
-mathcal{E}_t = (A_t, P_t, R_t, I_t, G_t, X_t)
-]
-
-where:
-
-- (A_t) = assets and liabilities;
-- (P_t) = participants and organizations;
-- (R_t) = economic relationships and transactions;
-- (I_t) = institutions and rules;
-- (G_t) = governance and decision structures;
-- (X_t) = external conditions, including technology, ecology and shocks.
-
-The system evolves:
-
-[
-mathcal{E}_{t+1} = Phi(mathcal{E}_t, pi_t, arepsilon_t)
-]
-
-where (pi_t) represents policies and decisions, and (arepsilon_t) represents shocks and unanticipated changes.
-
-The objective is not to maximize one scalar at any cost. A candidate multi-objective formulation is:
-
-[
-max_{pi} quad
-ig(
-W_{	ext{material}},
-W_{	ext{capabilities}},
-W_{	ext{opportunity}},
-W_{	ext{resilience}},
-W_{	ext{ecological}}
-ig)
-]
-
-subject to fundamental rights and due process, resource and ecological constraints, solvency and liquidity constraints, incentive compatibility where feasible, transparent and enforceable ownership, limits on concentration and conflicts of interest, minimum service guarantees, and institutional and legal feasibility.
-
-The weights and trade-offs are political and ethical choices, not purely technical facts. They must be disclosed rather than hidden inside an optimizer.
+Сводные индикаторы могут скрывать компромиссы и создавать извращённые стимулы. Система должна публиковать раздельные результаты, интервалы неопределённости и распределительные эффекты. Показатель, используемый для вознаграждения или управления, можно манипулировать; необходимы независимые аудиты и качественная проверка.
 
 ---
 
-## 15. Research hypotheses
+## 14. Формальная исследовательская модель
 
-The following are hypotheses to test, not established laws.
+Общее представление экономики — динамическая сеть:
 
-| ID | Hypothesis | What would support it? |
+```text
+E_t = (A_t, P_t, R_t, I_t, G_t, X_t)
+```
+
+где:
+
+- (A_t) — активы и обязательства;
+- (P_t) — участники и организации;
+- (R_t) — экономические отношения и транзакции;
+- (I_t) — институты и правила;
+- (G_t) — структуры управления и принятия решений;
+- (X_t) — внешние условия, включая технологии, экологию и шоки.
+
+Система развивается:
+
+```text
+E_(t+1) = Phi(E_t, pi_t, epsilon_t)
+```
+
+где (pi_t) представляет политику и решения, а (epsilon_t) — шоки и непредвиденные изменения.
+
+Цель не состоит в максимизации одного скалярного показателя любой ценой. Кандидатная многокритериальная постановка:
+
+```text
+max_pi (
+  W_material,
+  W_capabilities,
+  W_opportunity,
+  W_resilience,
+  W_ecological
+)
+```
+
+при ограничениях по фундаментальным правам и надлежащей процедуре, ресурсам и экологии, платёжеспособности и ликвидности, совместимости стимулов там, где она достижима, прозрачной и исполнимой собственности, концентрации и конфликтам интересов, минимальным гарантиям услуг, а также институциональной и юридической реализуемости.
+
+Веса и компромиссы — политический и этический выбор, а не исключительно технические факты. Их необходимо раскрывать, а не прятать внутри оптимизатора.
+
+---
+
+## 15. Исследовательские гипотезы
+
+Ниже перечислены гипотезы для проверки, а не установленные законы.
+
+| ID | Гипотеза | Что могло бы её подтвердить |
 |---|---|---|
-| H1 | Networked cooperation can raise productivity beyond isolated production under suitable conditions. | Controlled comparison of joint and independent production with matched inputs. |
-| H2 | Better matching of idle resources and unmet needs can raise effective output without proportional growth in new capital. | Higher utilization and welfare under comparable resource constraints. |
-| H3 | Broader participation in productive ownership can improve long-term security and incentives in some institutional settings. | Robust improvements in wealth participation without unacceptable investment or governance costs. |
-| H4 | Plural contribution mechanisms can better reflect heterogeneous project inputs than a single time-based measure. | Better predictive and fairness properties under independent evaluation. |
-| H5 | AI-assisted coordination can reduce some information and matching costs. | Lower measured costs and errors versus credible non-AI baselines. |
-| H6 | Polycentric governance can improve adaptation where local knowledge matters and accountability is enforceable. | Better performance and legitimacy across varied local conditions. |
-| H7 | Transparent ownership and cash-flow registries can reduce some forms of information asymmetry. | Fewer reconciliation errors, disputes and undisclosed encumbrances. |
-| H8 | Shared productive assets can broaden opportunity if governance and access rules prevent capture. | More diverse participation and durable asset maintenance. |
-| H9 | A diversified prosperity dashboard can reveal unsustainable growth hidden by GDP or profit alone. | Earlier detection of asset depletion and negative externalities. |
-| H10 | Constitutional limits and appeal rights can reduce harms from automated economic decisions. | Lower error and abuse rates without eliminating useful automation. |
-| H11 | Competition and cooperation can be complements when entry, interoperability and anti-capture rules are credible. | More innovation and shared gains without persistent exclusion. |
-| H12 | Broad-based capital participation and individual entrepreneurship can reinforce each other under suitable financing and governance arrangements. | Higher enterprise formation and household asset resilience without excessive leverage. |
+| H1 | Сетевая кооперация при определённых условиях может повышать производительность по сравнению с изолированным производством. | Контролируемое сравнение совместного и независимого производства при сопоставимых ресурсах. |
+| H2 | Более качественное сопоставление простаивающих ресурсов и неудовлетворённых потребностей может повышать эффективный выпуск без пропорционального роста нового капитала. | Более высокая загрузка и благосостояние при сопоставимых ресурсных ограничениях. |
+| H3 | Более широкое участие в производительной собственности может улучшать долгосрочную безопасность и стимулы в некоторых институциональных условиях. | Устойчивое расширение участия в богатстве без неприемлемых инвестиционных или управленческих затрат. |
+| H4 | Плюралистические механизмы вклада могут лучше отражать неоднородные ресурсы проекта, чем единая мера времени. | Лучшие прогностические и справедливостные свойства при независимой оценке. |
+| H5 | Координация с помощью ИИ может снижать некоторые информационные и поисковые издержки. | Снижение измеренных затрат и ошибок по сравнению с достоверными не-ИИ базовыми вариантами. |
+| H6 | Полицентрическое управление может улучшать адаптацию там, где важно локальное знание и обеспечена подотчётность. | Более высокие результаты и легитимность в разных локальных условиях. |
+| H7 | Прозрачные реестры собственности и денежных потоков могут уменьшать некоторые формы информационной асимметрии. | Меньше ошибок сверки, споров и нераскрытых обременений. |
+| H8 | Совместные производительные активы могут расширять возможности, если правила управления и доступа предотвращают захват. | Более разнообразное участие и устойчивое обслуживание активов. |
+| H9 | Многомерная панель благосостояния может выявлять неустойчивый рост, скрытый за ВВП или прибылью. | Более раннее обнаружение истощения активов и отрицательных внешних эффектов. |
+| H10 | Конституционные ограничения и право обжалования могут уменьшать вред от автоматизированных экономических решений. | Снижение ошибок и злоупотреблений без устранения полезной автоматизации. |
+| H11 | Конкуренция и сотрудничество могут дополнять друг друга при надёжных правилах входа, совместимости и защиты от захвата. | Больше инноваций и общих выгод без устойчивого исключения участников. |
+| H12 | Широкое участие в капитале и индивидуальное предпринимательство могут усиливать друг друга при подходящем финансировании и управлении. | Более высокая предпринимательская активность и устойчивость активов домохозяйств без чрезмерной долговой нагрузки. |
 
-Each hypothesis requires a pre-registered test design, baseline comparison, clear outcome measures, uncertainty reporting and publication of negative results.
-
----
-
-## 16. Experimental validation program
-
-SYNERGY should be tested against alternative institutional arrangements rather than evaluated only against its own idealized assumptions.
-
-### 16.1 Baseline models
-
-At minimum, compare:
-
-1. decentralized market economy;
-2. centralized allocation model;
-3. regulated welfare-market model;
-4. cooperative and employee-ownership model;
-5. platform-dominated network economy;
-6. AI-assisted market coordination;
-7. SYNERGY hybrid architecture.
-
-These are stylized models. Real economies combine institutions and cannot be reduced to one label.
-
-### 16.2 Simulation environment
-
-A first agent-based simulation may include:
-
-- 10,000 participants;
-- 1,000 enterprises or projects;
-- 10 sectors;
-- heterogeneous skills, preferences and endowments;
-- labour, capital, knowledge and resource markets;
-- household and firm balance sheets;
-- network dependencies and shared infrastructure;
-- entry, exit, default and bankruptcy;
-- taxes, transfers, investment and credit;
-- technological and ecological shocks;
-- multiple governance and ownership structures.
-
-These are proposed experimental parameters, not completed simulation results.
-
-### 16.3 Fair comparison rules
-
-- Use comparable initial resources and clearly documented assumptions.
-- Apply the same external shocks to all model variants.
-- Report distributions, not only averages.
-- Run sensitivity analysis and multiple random seeds.
-- Separate model calibration from validation.
-- Publish code, data schemas and limitations.
-- Test failure modes, strategic manipulation and institutional capture.
-- Do not present simulated outcomes as empirical proof about real economies.
-
-### 16.4 Pilot sequence
-
-**Stage A — Formalization:** definitions, accounting boundaries, hypotheses and model specification.  
-**Stage B — Synthetic simulation:** agent-based and network models with reproducible parameters.  
-**Stage C — Historical calibration:** compare model behaviour with available real-world datasets.  
-**Stage D — Institutional case studies:** cooperatives, employee ownership, shared infrastructure and digital platforms.  
-**Stage E — Small pilots:** voluntary, legally compliant experiments with informed participants and independent evaluation.  
-**Stage F — Replication:** publish methods, failures, sensitivity analyses and independent replications.
+Каждая гипотеза требует предварительно зарегистрированного дизайна проверки, базового сравнения, ясных метрик результата, отчёта о неопределённости и публикации отрицательных результатов.
 
 ---
 
-## 17. Risks, failure modes and safeguards
+## 16. Программа экспериментальной проверки
 
-| Risk | Why it matters | Required safeguard |
+SYNERGY следует сравнивать с альтернативными институциональными конструкциями, а не оценивать только относительно собственных идеализированных предпосылок.
+
+### 16.1. Базовые модели
+
+Как минимум необходимо сравнить:
+
+1. децентрализованную рыночную экономику;
+2. модель централизованного распределения;
+3. регулируемую рыночную экономику с системой социального обеспечения;
+4. кооперативную модель и модель собственности работников;
+5. сетевую экономику под доминированием платформ;
+6. рыночную координацию с поддержкой ИИ;
+7. гибридную архитектуру SYNERGY.
+
+Это стилизованные модели. Реальные экономики сочетают институты и не сводятся к одному ярлыку.
+
+### 16.2. Среда симуляции
+
+Первая агентная симуляция может включать:
+
+- 10 000 участников;
+- 1 000 предприятий или проектов;
+- 10 секторов;
+- неоднородные навыки, предпочтения и начальные ресурсы;
+- рынки труда, капитала, знаний и ресурсов;
+- балансы домохозяйств и фирм;
+- сетевые зависимости и общую инфраструктуру;
+- вход, выход, дефолт и банкротство;
+- налоги, трансферты, инвестиции и кредит;
+- технологические и экологические шоки;
+- несколько структур управления и собственности.
+
+Это предлагаемые параметры эксперимента, а не результаты уже выполненной симуляции.
+
+### 16.3. Правила справедливого сравнения
+
+- Использовать сопоставимые начальные ресурсы и явно документировать предпосылки.
+- Применять одинаковые внешние шоки ко всем вариантам модели.
+- Показывать распределения, а не только средние значения.
+- Выполнять анализ чувствительности и использовать несколько случайных начальных последовательностей.
+- Разделять калибровку модели и её валидацию.
+- Публиковать код, схемы данных и ограничения.
+- Проверять сценарии отказа, стратегические манипуляции и захват институтов.
+- Не представлять результаты симуляции как эмпирическое доказательство для реальных экономик.
+
+### 16.4. Последовательность пилотирования
+
+**Этап A — Формализация:** определения, границы учёта, гипотезы и спецификация модели.  
+**Этап B — Синтетическая симуляция:** агентные и сетевые модели с воспроизводимыми параметрами.  
+**Этап C — Историческая калибровка:** сопоставление поведения модели с доступными реальными наборами данных.  
+**Этап D — Институциональные кейсы:** кооперативы, собственность работников, общая инфраструктура и цифровые платформы.  
+**Этап E — Небольшие пилоты:** добровольные эксперименты, соответствующие закону, с информированными участниками и независимой оценкой.  
+**Этап F — Репликация:** публикация методов, неудач, анализа чувствительности и независимых повторных исследований.
+
+---
+
+## 17. Риски, сценарии отказа и защитные меры
+
+| Риск | Почему это важно | Необходимая защита |
 |---|---|---|
-| Algorithmic centralization | AI can become an unaccountable allocation authority | Bounded permissions, audit, human review and appeal |
-| Token/asset confusion | Digital units may be mistaken for ownership or backing | Legal-rights registry and transparent claim documentation |
-| Ponzi-like financing | New inflows may be used to satisfy earlier claims | Cash-flow audits, liability disclosure and independent solvency tests |
-| Governance capture | Insiders may control funds, validators or voting | Conflict disclosure, independent review and concentration limits |
-| Metric gaming | Participants optimize indicators instead of real outcomes | Multiple measures, audit samples and qualitative review |
-| Illiquidity | Shared assets may not be saleable when participants need cash | Liquidity planning, redemption rules and stress tests |
-| Over-indebtedness | Credit expansion can create systemic fragility | Underwriting, collateral policy and default-resolution rules |
-| Privacy abuse | Economic graphs can expose sensitive relationships | Data minimization, consent, access control and privacy-preserving analysis |
-| Ecological externalities | Private gains can impose public and future costs | Physical accounting, limits and restoration obligations |
-| Regulatory mismatch | Token or fund structures may trigger legal obligations | Jurisdiction-specific legal review before deployment |
+| Алгоритмическая централизация | ИИ может превратиться в неподотчётную инстанцию распределения | Ограниченные разрешения, аудит, человеческая проверка и обжалование |
+| Смешение токена и актива | Цифровые единицы могут быть ошибочно приняты за собственность или обеспечение | Реестр юридических прав и прозрачное описание требований |
+| Финансирование по модели Понци | Новые поступления могут использоваться для удовлетворения прежних требований | Аудит денежных потоков, раскрытие обязательств и независимые тесты платёжеспособности |
+| Захват управления | Инсайдеры могут контролировать фонды, валидаторов или голосование | Раскрытие конфликтов, независимая проверка и ограничения концентрации |
+| Манипулирование метриками | Участники могут оптимизировать показатели вместо реальных результатов | Несколько метрик, выборочные аудиты и качественная проверка |
+| Неликвидность | Общие активы могут быть непродаваемыми, когда участникам нужны деньги | Планирование ликвидности, правила погашения и стресс-тесты |
+| Чрезмерная задолженность | Расширение кредита может создавать системную хрупкость | Андеррайтинг, политика обеспечения и правила урегулирования дефолтов |
+| Нарушение приватности | Экономические графы могут раскрывать чувствительные связи | Минимизация данных, согласие, контроль доступа и приватные методы анализа |
+| Экологические внешние эффекты | Частная выгода может создавать общественные и будущие издержки | Физический учёт, ограничения и обязательства по восстановлению |
+| Несоответствие регулированию | Токены и фонды могут создавать юридические обязанности | Юридическая проверка с учётом конкретной юрисдикции до запуска |
 
-A system that claims to promote broad prosperity must be especially strict about financial integrity. No token price, internal valuation or AI forecast should be presented as guaranteed value.
-
----
-
-## 18. Governance model
-
-The proposed governance model is **polycentric and hybrid**:
-
-- participants and communities govern matters that directly affect them;
-- enterprises retain operational autonomy within law and agreed contracts;
-- markets coordinate decentralized exchange;
-- cooperatives and common institutions govern shared assets;
-- public institutions protect rights, competition and public goods;
-- DAO mechanisms may coordinate transparent, bounded decisions;
-- independent validators and auditors verify claims and processes;
-- AI supports analysis and may execute only explicitly delegated, bounded tasks.
-
-Governance design must answer, for every decision:
-
-1. Who has authority?
-2. What evidence can they use?
-3. What are the limits of that authority?
-4. Who audits the decision?
-5. Who bears the cost of an error?
-6. How can affected participants appeal?
-7. How can authority be revoked or amended?
-
-Decentralization alone does not guarantee fairness. A decentralized system can still concentrate influence through wealth, information, infrastructure, delegation or technical expertise.
+Система, заявляющая о поддержке широкого благосостояния, должна особенно строго относиться к финансовой целостности. Ни цена токена, ни внутренняя оценка, ни прогноз ИИ не должны представляться как гарантированная стоимость.
 
 ---
 
-## 19. Implementation roadmap
+## 18. Модель управления
 
-### Phase 1 — Research foundation
-Establish a precise glossary; map relevant literature; define the ten-volume program; identify unresolved contradictions and trade-offs; create a citation and evidence standard.
+Предлагаемая модель управления — **полицентрическая и гибридная**:
 
-### Phase 2 — Formal models
-Build value, production, contribution and ownership models; specify balance-sheet and cash-flow accounting; define governance and AI authority constraints; document hypotheses and falsification criteria.
+- участники и сообщества управляют вопросами, которые непосредственно их затрагивают;
+- предприятия сохраняют операционную автономию в рамках закона и согласованных договоров;
+- рынки координируют децентрализованный обмен;
+- кооперативы и общие институты управляют совместными активами;
+- публичные институты защищают права, конкуренцию и общественные блага;
+- механизмы DAO могут координировать прозрачные и ограниченные решения;
+- независимые валидаторы и аудиторы проверяют требования и процессы;
+- ИИ поддерживает анализ и может выполнять только явно делегированные и ограниченные задачи.
 
-### Phase 3 — Simulation
-Implement agent-based and network models; compare institutional baselines; test shocks, incentives, concentration and default; publish reproducible experiments.
+Для каждого решения система управления должна отвечать на вопросы:
 
-### Phase 4 — Protocol architecture
-Define participant, asset, project and transaction schemas; define ownership and claims registry; design contribution accounting and audit trails; specify payment, credit and risk interfaces; define AI permission boundaries.
+1. Кто обладает полномочиями?
+2. Какие доказательства он может использовать?
+3. Каковы границы его полномочий?
+4. Кто проверяет решение?
+5. Кто несёт издержки ошибки?
+6. Как затронутые участники могут подать апелляцию?
+7. Как полномочия могут быть отозваны или изменены?
 
-### Phase 5 — Controlled pilots
-Select narrow use cases with real productive activity; obtain legal and regulatory review; disclose risks and participant rights; use independent evaluation; scale only when results justify it.
-
----
-
-## 20. What would falsify or weaken the SYNERGY thesis?
-
-A serious research program must state what evidence could prove it wrong.
-
-The central thesis would be weakened if repeated, well-designed comparisons showed that:
-
-- hybrid governance consistently creates higher coordination costs than its benefits;
-- collective ownership mechanisms systematically reduce investment or maintenance without compensating gains;
-- AI coordination does not improve outcomes over simpler transparent systems;
-- contribution accounting cannot be made robust against manipulation or double counting;
-- broad asset participation creates unacceptable concentration, liquidity or governance risks;
-- proposed institutions cannot preserve individual autonomy and due process;
-- improvements in measured prosperity depend on hidden subsidies, unsustainable debt or depletion of natural assets.
-
-The objective is not to defend SYNERGY regardless of evidence. It is to discover which elements work, for whom, under what conditions, at what cost and with what safeguards.
+Децентрализация сама по себе не гарантирует справедливость. В децентрализованной системе влияние всё равно может концентрироваться через богатство, информацию, инфраструктуру, делегирование или техническую экспертизу.
 
 ---
 
-## 21. Initial research deliverables
+## 19. Дорожная карта реализации
 
-The repository should progressively contain:
+### Этап 1 — Исследовательская основа
+Создать точный глоссарий; картировать релевантную литературу; определить программу из десяти томов; выявить неразрешённые противоречия и компромиссы; установить стандарт цитирования и доказательств.
 
-- README.md — this overview and conceptual framework;
-- research/ — volume papers and literature reviews;
-- models/ — formal specifications and mathematical models;
-- simulations/ — reproducible experiments and agent-based models;
-- data/ — documented public datasets and schemas;
-- architecture/ — system diagrams, interfaces and protocol specifications;
-- governance/ — constitutional rules, decision rights and audit procedures;
-- experiments/ — hypotheses, protocols, results and replication notes;
-- references/ — bibliography and source annotations.
+### Этап 2 — Формальные модели
+Построить модели ценности, производства, вклада и собственности; определить учёт балансов и денежных потоков; задать ограничения управления и полномочий ИИ; документировать гипотезы и критерии опровержения.
 
-No result should be described as validated until its method, data, assumptions and limitations are documented.
+### Этап 3 — Симуляция
+Реализовать агентные и сетевые модели; сравнить институциональные базовые варианты; проверить шоки, стимулы, концентрацию и дефолты; публиковать воспроизводимые эксперименты.
+
+### Этап 4 — Архитектура протокола
+Определить схемы участников, активов, проектов и транзакций; создать реестр собственности и требований; спроектировать учёт вклада и аудиторские следы; определить интерфейсы платежей, кредита и рисков; установить границы разрешений ИИ.
+
+### Этап 5 — Контролируемые пилоты
+Выбирать узкие сценарии с реальной производительной деятельностью; проводить юридическую и регуляторную проверку; раскрывать риски и права участников; использовать независимую оценку; масштабировать только при наличии подтверждающих результатов.
 
 ---
 
-## 22. Selected references and foundations
+## 20. Что могло бы опровергнуть или ослабить гипотезу SYNERGY?
 
-These sources provide starting points for the research program. They are not endorsements of the entire SYNERGY proposal.
+Серьёзная исследовательская программа должна заранее указывать, какие доказательства способны показать её ошибочность.
 
-1. **World Bank — The Changing Wealth of Nations 2024.** Comprehensive wealth accounting across produced, human and natural capital, with attention to sustainability and the asset base behind future prosperity.  
+Центральная гипотеза будет ослаблена, если повторные качественные сравнения покажут, что:
+
+- гибридное управление систематически создаёт более высокие издержки координации, чем выгоды;
+- механизмы коллективной собственности систематически снижают инвестиции или обслуживание активов без компенсирующих преимуществ;
+- координация с помощью ИИ не улучшает результаты по сравнению с более простыми прозрачными системами;
+- учёт вклада невозможно защитить от манипуляций и двойного счёта;
+- широкое участие в активах создаёт неприемлемые риски концентрации, ликвидности или управления;
+- предлагаемые институты не способны сохранять индивидуальную автономию и надлежащую процедуру;
+- улучшение измеряемого благосостояния зависит от скрытых субсидий, неустойчивого долга или истощения природных активов.
+
+Цель не в том, чтобы защищать SYNERGY независимо от доказательств. Цель — выяснить, какие элементы работают, для кого, при каких условиях, с какими затратами и защитными механизмами.
+
+---
+
+## 21. Первоначальные исследовательские результаты
+
+Репозиторий должен постепенно включать:
+
+- `README.md` — этот обзор и концептуальную рамку;
+- `research/` — исследовательские тома и обзоры литературы;
+- `models/` — формальные спецификации и математические модели;
+- `simulations/` — воспроизводимые эксперименты и агентные модели;
+- `data/` — документированные открытые наборы данных и схемы;
+- `architecture/` — системные диаграммы, интерфейсы и спецификации протоколов;
+- `governance/` — конституционные правила, права принятия решений и процедуры аудита;
+- `experiments/` — гипотезы, протоколы, результаты и заметки о репликации;
+- `references/` — библиография и аннотации источников.
+
+Ни один результат нельзя называть подтверждённым, пока не задокументированы его метод, данные, предпосылки и ограничения.
+
+---
+
+## 22. Выбранные источники и основания
+
+Эти источники являются отправной точкой исследовательской программы. Они не означают одобрения всей концепции SYNERGY.
+
+1. **Всемирный банк — The Changing Wealth of Nations 2024.** Комплексный учёт богатства по произведённому, человеческому и природному капиталу с акцентом на устойчивость и активную базу будущего благосостояния.  
    https://www.worldbank.org/en/publication/the-changing-wealth-of-nations
 
-2. **World Bank — Wealth Accounting Data Catalog.** Data and methodological resources for comprehensive wealth measurement.  
+2. **Всемирный банк — Wealth Accounting Data Catalog.** Данные и методологические материалы для комплексного измерения богатства.  
    https://datacatalog.worldbank.org/search/dataset/0042066/wealth-accounting
 
-3. **United Nations Environment Programme — Inclusive Wealth Report 2023.** Framework for assessing produced, human and natural capital and long-term well-being.  
+3. **Программа ООН по окружающей среде — Inclusive Wealth Report 2023.** Подход к оценке произведённого, человеческого и природного капитала и долгосрочного благополучия.  
    https://wedocs.unep.org/items/0ad41edf-57d1-4fba-abd6-d6bf552ec2fb
 
-4. **OECD — Understanding Financial Accounts (2017).** Explanation of financial assets, liabilities, non-financial assets and net worth accounting.  
+4. **ОЭСР — Understanding Financial Accounts (2017).** Объяснение финансовых активов, обязательств, нефинансовых активов и учёта чистой стоимости.  
    https://www.oecd.org/content/dam/oecd/en/publications/reports/2017/11/understanding-financial-accounts_g1g8072a/9789264281288-en.pdf
 
-5. **BIS / CPMI — Tokenisation in the context of money and other assets (21 October 2024).** Concepts, market structure, governance and risk considerations for token arrangements.  
+5. **БМР / CPMI — Tokenisation in the context of money and other assets (21 октября 2024 года).** Понятия, структура рынков, управление и риски токенизированных конструкций.  
    https://www.bis.org/publications/tokenisation-context-money-and-other-assets-concepts-and-implications-central-banks
 
-6. **BIS — Financial stability implications of tokenisation (28 August 2025).** Potential benefits and risks of tokenized financial and real assets.  
+6. **БМР — Financial stability implications of tokenisation (28 августа 2025 года).** Возможные преимущества и риски токенизированных финансовых и реальных активов.  
    https://www.bis.org/publications/fsi-summary-financial-stability-implications-tokenisation-executive-summary
 
-7. **O'Boyle, E. H., Patel, P. C. & Gonzalez-Mulé, E. (2016). “Employee ownership and firm performance: a meta-analysis.”** Meta-analysis of 102 samples and 56,984 firms; reports a small positive association, not a universal causal guarantee.  
+7. **O'Boyle, E. H., Patel, P. C. & Gonzalez-Mulé, E. (2016). “Employee ownership and firm performance: a meta-analysis.”** Метаанализ 102 выборок и 56 984 фирм; выявляет небольшую положительную связь, но не универсальную причинную гарантию.  
    https://doi.org/10.1111/1748-8583.12115
 
-8. **Kim, K. Y. & Patel, P. C. (2021). “A Multilevel Contingency Model of Employee Ownership and Firm Productivity.”** Evidence that effects can depend on industry growth and instability.  
+8. **Kim, K. Y. & Patel, P. C. (2021). “A Multilevel Contingency Model of Employee Ownership and Firm Productivity.”** Данные о том, что эффекты могут зависеть от роста и нестабильности отрасли.  
    https://doi.org/10.1287/orsc.2020.1404
 
-9. **Ostrom, Elinor (1990). Governing the Commons.** Foundational analysis of institutions for collective action and common-pool resources.
+9. **Остром, Элинор (1990). Governing the Commons.** Фундаментальный анализ институтов коллективного действия и общих ресурсов.
 
-10. **Coase, Ronald H. (1937). “The Nature of the Firm.”** Foundational analysis of transaction costs and organizational boundaries.
+10. **Коуз, Рональд Х. (1937). “The Nature of the Firm.”** Фундаментальный анализ трансакционных издержек и организационных границ.
 
-11. **Hayek, Friedrich A. (1945). “The Use of Knowledge in Society.”** Foundational analysis of dispersed knowledge and price coordination.
+11. **Хайек, Фридрих А. (1945). “The Use of Knowledge in Society.”** Фундаментальный анализ рассеянного знания и ценовой координации.
 
-12. **Sen, Amartya (1999). Development as Freedom.** Capability-based perspective on development and human freedom.
+12. **Сен, Амартия (1999). Development as Freedom.** Подход к развитию через возможности человека и свободу.
 
-13. **Piketty, Thomas (2014). Capital in the Twenty-First Century.** Historical and theoretical analysis of wealth concentration and capital-income dynamics.
+13. **Пикетти, Тома (2014). Capital in the Twenty-First Century.** Исторический и теоретический анализ концентрации богатства и динамики доходности капитала.
 
 ---
 
-## 23. Working glossary
+## 23. Рабочий глоссарий
 
-| Term | Working definition |
+| Термин | Рабочее определение |
 |---|---|
-| Synergistic Economics | Proposed framework combining markets, cooperation, broad ownership and accountable computational coordination. |
-| Synergy | Additional outcome arising from interaction, measured against an explicit counterfactual. |
-| Economic graph | Network representation of participants, assets, transactions and dependencies. |
-| Productive capital | Assets and capabilities used to support future production. |
-| Collective capital | Productive assets governed or beneficially held for a defined group or public purpose. |
-| Universal Basic Capital | Proposed mechanisms for broad access to productive assets, subject to risk and governance rules. |
-| Contribution accounting | Evidence-based recording of different inputs to a project or economic process. |
-| Prosperity dashboard | Disaggregated measures of material, social, ecological and institutional outcomes. |
-| Polycentric governance | Multiple decision centres with defined jurisdictions, coordination and accountability. |
-| AI Economic Engine | Computational system supporting analysis and bounded coordination under constitutional constraints. |
-| Tokenization | Digital representation of an asset or a right; it does not by itself create or guarantee the underlying legal right. |
+| Синергетическая экономика | Предлагаемая рамка, объединяющая рынки, сотрудничество, широкую собственность и подотчётную вычислительную координацию. |
+| Синергия | Дополнительный результат взаимодействия, измеряемый относительно явно заданного контрфактического сценария. |
+| Экономический граф | Сетевое представление участников, активов, транзакций и зависимостей. |
+| Производительный капитал | Активы и возможности, используемые для поддержки будущего производства. |
+| Коллективный капитал | Производительные активы, которыми управляет или от которых получает выгоду определённая группа либо общественная цель. |
+| Универсальный базовый капитал | Предлагаемые механизмы широкого доступа к производительным активам с учётом рисков и правил управления. |
+| Учёт вклада | Основанная на доказательствах фиксация различных ресурсов, внесённых в проект или экономический процесс. |
+| Панель благосостояния | Раздельные показатели материальных, социальных, экологических и институциональных результатов. |
+| Полицентрическое управление | Несколько центров принятия решений с определёнными юрисдикциями, координацией и подотчётностью. |
+| Экономический движок ИИ | Вычислительная система для анализа и ограниченной координации в рамках конституционных ограничений. |
+| Токенизация | Цифровое представление актива или права; сама по себе она не создаёт и не гарантирует базовое юридическое право. |
 
 ---
 
-## 24. Final statement
+## 24. Заключительное положение
 
-SYNERGISTIC ECONOMICS begins with a simple but demanding proposition:
+**Синергетическая экономика** начинается с простого, но требовательного положения:
 
-**An economy should not only reward the creation of value. It should also expand the number of people who can create value, participate in productive assets, shape the institutions they depend on and share in the long-term benefits of economic development.**
+**Экономика должна не только вознаграждать создание ценности. Она должна также расширять круг людей, способных создавать ценность, участвовать в производительных активах, влиять на институты, от которых они зависят, и разделять долгосрочные выгоды экономического развития.**
 
-The challenge is to achieve this without destroying the incentives, freedom, competition, accountability and financial discipline on which productive economies depend.
+Задача — добиться этого, не разрушая стимулы, свободу, конкуренцию, подотчётность и финансовую дисциплину, на которых держатся производительные экономики.
 
-SYNERGY will be judged not by the ambition of its language, the price of its tokens or the complexity of its algorithms, but by transparent evidence: whether it creates more durable productive capacity, broader opportunity, fairer participation, stronger resilience and sustainable prosperity.
+SYNERGY следует оценивать не по амбициозности формулировок, цене токенов или сложности алгоритмов, а по прозрачным доказательствам: создаёт ли проект более устойчивую производительную способность, расширяет ли возможности, делает ли участие справедливее, укрепляет ли устойчивость и обеспечивает ли долгосрочное благосостояние.
 
 ---
 
-*This document is a living research framework. Definitions, models and hypotheses may change as evidence accumulates. Changes should be versioned, sourced and explained.*
+*Этот документ представляет собой развивающуюся исследовательскую рамку. Определения, модели и гипотезы могут меняться по мере накопления доказательств. Изменения должны версионироваться, сопровождаться источниками и объяснениями.*

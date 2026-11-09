@@ -8,6 +8,7 @@ import argparse
 import json
 from collections import defaultdict
 from datetime import datetime, timezone
+import math
 from pathlib import Path
 from typing import Any
 
@@ -36,9 +37,13 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
         for error in validator.iter_errors(record):
             path = ".".join(str(part) for part in error.absolute_path) or "$"
             issues.append(f"records[{index}].{path}: {error.message}")
+        if not isinstance(record, dict):
+            issues.append(f"records[{index}]: expected an object; cross-record checks skipped")
 
     by_id: dict[str, dict[str, Any]] = {}
     for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            continue
         record_id = record.get("id")
         if not isinstance(record_id, str):
             continue
@@ -77,11 +82,19 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
             "contributorEntityId": entity_types,
             "projectId": {"project"},
         },
-        "economic_event": {"actorEntityId": entity_types},
+        "economic_event": {
+            "actorEntityId": entity_types,
+            "subjectEntityIds": entity_types,
+            "causationEventId": {"economic_event"},
+            "reversalOfEventId": {"economic_event"},
+        },
     }
 
     def check_ref(source_id: str, field: str, target_id: Any, allowed: set[str]) -> None:
         if target_id is None:
+            return
+        if not isinstance(target_id, str):
+            issues.append(f"{source_id}.{field}: reference must be a string")
             return
         target = by_id.get(target_id)
         if target is None:
@@ -93,6 +106,8 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
             )
 
     for record in records:
+        if not isinstance(record, dict):
+            continue
         source_id = record.get("id", "<missing-id>")
         kind = record.get("recordType")
         for field, allowed in reference_rules.get(kind, {}).items():
@@ -108,20 +123,15 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
             else:
                 check_ref(source_id, field, value, allowed)
 
-        if kind == "economic_event":
-            for index, target_id in enumerate(record.get("subjectEntityIds", [])):
-                if target_id not in by_id:
-                    issues.append(
-                        f"{source_id}.subjectEntityIds[{index}]: "
-                        f"unresolved reference {target_id!r}"
-                    )
-
     seen_idempotency: dict[str, str] = {}
     for record in records:
-        if record.get("recordType") != "economic_event":
+        if not isinstance(record, dict) or record.get("recordType") != "economic_event":
             continue
         key = record.get("idempotencyKey")
         if not key:
+            continue
+        if not isinstance(key, str):
+            issues.append(f"{record.get('id', '<missing-id>')}.idempotencyKey: key must be a string")
             continue
         previous = seen_idempotency.get(key)
         if previous is not None:
@@ -136,30 +146,43 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
     # Different right classes are not fungible and must never be summed together.
     ownership_groups: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for record in records:
-        if record.get("recordType") != "ownership_claim":
+        if not isinstance(record, dict) or record.get("recordType") != "ownership_claim":
             continue
         if record.get("rightType") not in {"legal_title", "beneficial_interest"}:
             continue
         if record.get("verificationStatus") not in {"document_checked", "registry_confirmed"}:
             continue
-        if isinstance(record.get("share"), (int, float)):
-            ownership_groups[(record.get("assetId"), record.get("rightType"))].append(record)
+        share = record.get("share")
+        asset_id = record.get("assetId")
+        if (isinstance(share, (int, float)) and not isinstance(share, bool)
+                and math.isfinite(share) and isinstance(asset_id, str)):
+            ownership_groups[(asset_id, record.get("rightType"))].append(record)
 
     earliest = datetime.min.replace(tzinfo=timezone.utc)
     latest = datetime.max.replace(tzinfo=timezone.utc)
     for (asset_id, right_type), claims in ownership_groups.items():
-        boundaries = sorted({
-            _parse_time(claim.get("validFrom"), earliest)
-            for claim in claims
-        } | {
-            _parse_time(claim.get("validUntil"), latest)
-            for claim in claims
-        })
+        valid_claims = []
+        for claim in claims:
+            try:
+                start = _parse_time(claim.get("validFrom"), earliest)
+                end = _parse_time(claim.get("validUntil"), latest)
+            except (TypeError, ValueError, OverflowError):
+                issues.append(
+                    f"{claim.get('id', '<missing-id>')}: invalid ownership-claim time interval"
+                )
+                continue
+            if start >= end:
+                issues.append(
+                    f"{claim.get('id', '<missing-id>')}: ownership-claim interval must be non-empty"
+                )
+                continue
+            valid_claims.append((claim, start, end))
+        boundaries = sorted({start for _, start, _ in valid_claims}
+                            | {end for _, _, end in valid_claims})
         for point in boundaries:
             active = [
-                claim for claim in claims
-                if _parse_time(claim.get("validFrom"), earliest) <= point
-                and point < _parse_time(claim.get("validUntil"), latest)
+                claim for claim, start, end in valid_claims
+                if start <= point < end
             ]
             total = sum(claim["share"] for claim in active)
             if total > 1.000000001:

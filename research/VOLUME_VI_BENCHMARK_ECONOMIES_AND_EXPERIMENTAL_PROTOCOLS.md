@@ -4,7 +4,7 @@
 **Research program:** SYNERGISTIC ECONOMICS  
 **Document ID:** SYNERGY-ECON-V6-001  
 **Version:** 0.1 — 9 November 2026  
-**Status:** Experimental protocol proposal; no experiments have yet been run or validated  
+**Status:** Experimental protocol proposal. The repository contains deterministic component-level stress simulations, but no comparative institutional experiment under this protocol has yet been run or validated.  
 **Preceding volumes:** [Volume 0](VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md); [Volume 0A](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md); [Volume I](VOLUME_I_FOUNDATIONS.md); [Volume II](VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md); [Volume III](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md); [Volume IV](VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md); [Volume V](VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md)
 
 ---

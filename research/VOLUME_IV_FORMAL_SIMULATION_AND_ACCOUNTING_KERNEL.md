@@ -4,7 +4,7 @@
 **Research program:** SYNERGISTIC ECONOMICS  
 **Document ID:** SYNERGY-ECON-V4-001  
 **Version:** 0.1 — 9 November 2026  
-**Status:** Technical research specification; not yet an implemented or validated simulator  
+**Status:** Technical target specification. The repository now contains a minimal accounting kernel and two partial economic simulation prototypes; they do not yet implement or validate the complete simulator specified in this volume.  
 **Preceding volumes:** [Volume 0](VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md); [Volume 0A](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md); [Volume I](VOLUME_I_FOUNDATIONS.md); [Volume II](VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md); [Volume III](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md)  
 **Institutional architecture:** [SYNERGY Cellular Consortium Economy](SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)
 
@@ -918,7 +918,7 @@ Only after legal, security, accounting, governance and privacy review. Begin wit
 
 ## 46. Minimum viable simulation
 
-The first prototype should contain:
+The first integrated prototype for the full target architecture should eventually contain:
 - 7 heterogeneous cells;
 - 30–100 agents across persons, enterprises and funders;
 - 3–5 production sectors;
@@ -980,7 +980,7 @@ No unresolved decision should be hidden in implementation defaults. Every defaul
 
 # 16. Research status and limitations
 
-This specification defines a target architecture and a minimum research prototype. It is not evidence that the software exists, that the schema is final, or that the system has passed security, accounting or empirical validation.
+This specification defines a target architecture and an integrated minimum research prototype. The repository now contains an executable accounting kernel, a seven-cell simulation, a general input-output simulation and an initial canonical schema. These are partial components, not a complete implementation of this specification. The schema remains subject to revision, and the integrated system has not passed independent security, accounting, legal or empirical validation.
 
 The mathematical model and comparative simulation programme are developed in [Volume V — Executable Economic Model](VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md). The next implementation artifact should be a versioned technical package containing:
 - JSON Schema or equivalent typed definitions for entities and events;

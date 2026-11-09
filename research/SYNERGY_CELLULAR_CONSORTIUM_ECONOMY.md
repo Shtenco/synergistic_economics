@@ -3,7 +3,7 @@
 
 **Document ID:** SYNERGY-SCCE-IA-001  
 **Version:** 0.1 — 9 November 2026  
-**Status:** Integrated research and system-design specification; implementation and empirical validation pending  
+**Status:** Integrated research and system-design specification. Partial accounting and production prototypes now exist in the repository, but the integrated cellular-consortium architecture and its empirical validation remain pending.  
 **Parent theory:** SYNERGISTIC ECONOMICS, Volume I — Foundations  
 **Related research:** [Volume II — Multidimensional Value and Production](VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md); [Volume III — Contribution, Ownership and Distribution](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md); SYNERGY EURASIAN EIIOM, V6.6, V7; DECOCI / DEGOV
 
@@ -889,7 +889,7 @@ A simulation is not a deployment result. A contract deployment is not proof of e
 
 ## 49. Minimum viable prototype
 
-The first executable prototype should implement seven heterogeneous cells; a small multi-stage production network; digital twins per enterprise, asset and project; typed neighbour edges; a deterministic cellular transition engine; eight candidate local rules; an opt-in mutual-aid request and offer; a cell treasury with separate operating, productive and reserve balances; a minimal DAO mandate simulation; an event log with evidence references; accounting and physical conservation checks; and independent, market, local-CA and federated policy baselines.
+The first **integrated SCCE prototype** should eventually implement seven heterogeneous cells; a small multi-stage production network; digital twins per enterprise, asset and project; typed neighbour edges; a deterministic cellular transition engine; eight candidate local rules; an opt-in mutual-aid request and offer; a cell treasury with separate operating, productive and reserve balances; a minimal DAO mandate simulation; an event log with evidence references; accounting and physical conservation checks; and independent, market, local-CA and federated policy baselines. The repository's current Prototype 1 and Prototype 2 cover only selected production, inventory, market and accounting components; they do not yet implement the full integrated SCCE feature set.
 
 The prototype should first run in simulation and shadow mode. No real funds should be controlled until authorization, custody, security, legal and reconciliation requirements are independently satisfied.
 

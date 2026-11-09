@@ -122,6 +122,12 @@ class InputOutputEconomy:
         self.price_adjustment = dec(price_adjustment)
         self.max_price_change = dec(max_price_change)
         self.household_demand_multiplier = dec(household_demand_multiplier)
+        if (not self.price_adjustment.is_finite() or self.price_adjustment < 0
+                or not self.max_price_change.is_finite()
+                or not ZERO <= self.max_price_change < D("1")
+                or not self.household_demand_multiplier.is_finite()
+                or self.household_demand_multiplier < 0):
+            raise EconomyError("invalid price adjustment or demand multiplier")
         self.import_cash = ZERO
         self.initial_cash = self._system_cash()
         self.period_results = []
@@ -174,21 +180,35 @@ class InputOutputEconomy:
             raise EconomyError("household ids must be non-empty and unique")
         known = set(product_ids)
         for p in self.products:
-            if p.base_price <= 0 or p.import_price <= 0 or p.import_capacity < 0:
-                raise EconomyError("invalid product price or import capacity")
+            values = (p.base_price, p.import_price, p.import_capacity, p.demand_weight)
+            if (any(not value.is_finite() for value in values)
+                    or p.base_price <= 0 or p.import_price <= 0
+                    or p.import_capacity < 0 or p.demand_weight < 0):
+                raise EconomyError("invalid product price, capacity or demand weight")
         for f in self.firm_configs:
             if f.output_product not in known or set(f.recipe) - known or set(f.initial_inventory) - known:
                 raise EconomyError("firm references unknown product")
+            if f.output_product in f.recipe:
+                raise EconomyError("self-input recipes are not supported in this prototype")
             if any(v <= 0 for v in f.recipe.values()) or any(v < 0 for v in f.initial_inventory.values()):
                 raise EconomyError("recipe coefficients must be positive and stocks non-negative")
-            if min(f.labour_per_unit, f.labour_capacity, f.output_capacity, f.wage_per_labour, f.initial_cash) < 0:
-                raise EconomyError("negative firm parameter")
+            numeric_values = (f.labour_per_unit, f.labour_capacity, f.output_capacity,
+                              f.wage_per_labour, f.initial_cash, f.domestic_ask_markup,
+                              *f.recipe.values(), *f.initial_inventory.values())
+            if any(not value.is_finite() for value in numeric_values):
+                raise EconomyError("non-finite firm parameter")
+            if (min(f.labour_per_unit, f.labour_capacity, f.output_capacity,
+                    f.wage_per_labour, f.initial_cash) < 0
+                    or f.domestic_ask_markup <= 0):
+                raise EconomyError("negative firm parameter or non-positive ask markup")
             if f.labour_per_unit <= 0:
                 raise EconomyError("labour_per_unit must be positive")
         for h in self.household_configs:
-            if set(h.basket) - known or any(v < 0 for v in h.basket.values()):
+            if set(h.basket) - known or any(not v.is_finite() or v < 0 for v in h.basket.values()):
                 raise EconomyError("invalid household basket")
-            if h.initial_cash < 0 or not D("0") <= h.consumption_propensity <= D("1"):
+            if (not h.initial_cash.is_finite() or not h.consumption_propensity.is_finite()
+                    or h.initial_cash < 0
+                    or not D("0") <= h.consumption_propensity <= D("1")):
                 raise EconomyError("invalid household budget")
 
     def _system_cash(self):
@@ -269,9 +289,17 @@ class InputOutputEconomy:
         proposed_price = reference * factor
         lowest_ask = min((o[3] for o in offers if o[2] > 0), default=reference)
         highest_bid = reference * D("1.8")
-        clearing_price = max(lowest_ask, min(highest_bid, proposed_price))
+        upper_price = reference * (D("1") + self.max_price_change)
+        # Do not jump the reference price to an expensive ask. If the lowest
+        # ask lies above the permitted one-period price band or buyer bid cap,
+        # this period has no executable trade at that ask; the bounded reference
+        # price moves only by the configured adjustment rule.
+        if lowest_ask <= min(upper_price, highest_bid):
+            clearing_price = max(lowest_ask, min(highest_bid, proposed_price))
+        else:
+            clearing_price = proposed_price
         eligible_offers = [o for o in offers if o[2] > 0 and o[3] <= clearing_price]
-        eligible_demand = [o for o in demand_orders if o.quantity > 0 and clearing_price <= reference * D("1.8")]
+        eligible_demand = [o for o in demand_orders if o.quantity > 0 and clearing_price <= highest_bid]
         available = sum((o[2] for o in eligible_offers), ZERO)
         requested = sum((o.quantity for o in eligible_demand), ZERO)
         traded = min(available, requested)
@@ -366,7 +394,6 @@ class InputOutputEconomy:
                 "traded": actual_traded, "shortage": shortage, "price": clearing_price}
 
     def step(self, period):
-        cash_open = self._system_cash()
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         household_consumption_open = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)

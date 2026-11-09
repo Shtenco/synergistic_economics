@@ -56,7 +56,7 @@ class InputOutputEconomyTests(unittest.TestCase):
             D(baseline["cumulative_household_expenditure"])
         )
 
-    def test_high_ask_imports_enter_only_after_price_reaches_their_offer(self):
+    def test_high_ask_imports_wait_for_bounded_price_discovery(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
         model = InputOutputEconomy(
             products=[Product("test-good", "unit", D("1"), D("2"), D("10"))],
@@ -68,12 +68,29 @@ class InputOutputEconomyTests(unittest.TestCase):
                 "test-household", D("100"), {"test-good": D("5")}, D("1")
             )]
         )
-        model.step(1)
-        self.assertEqual(sum((h.consumption.get("test-good", D("0")) for h in model.households.values()), D("0")), 0)
-        for period in range(2, 6):
-            model.step(period)
+        previous_price = model.prices["test-good"]
+        first = model.step(1)
+        first_price = D(first.prices["test-good"])
+        self.assertEqual(D(first.imports["test-good"]), 0)
+        self.assertLessEqual(first_price, previous_price * D("1.35"))
+        self.assertEqual(D(first.household_consumption["test-good"]), 0)
+
+        for period in range(2, 12):
+            previous_price = model.prices["test-good"]
+            result = model.step(period)
+            current_price = model.prices["test-good"]
+            self.assertLessEqual(current_price, previous_price * D("1.35"))
+            self.assertGreaterEqual(current_price, previous_price * D("0.65"))
         imported = sum((D(r.imports["test-good"]) for r in model.period_results), D("0"))
         self.assertGreater(imported, 0)
+
+    def test_invalid_market_parameters_are_rejected(self):
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(max_price_change=D("1.0"))
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(price_adjustment=D("-0.1"))
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(household_demand_multiplier=D("-1"))
 
     def test_import_shock_does_not_break_conservation(self):
         summary = run_scenario("energy_import_shock", 8)["summary"]
@@ -89,6 +106,19 @@ class InputOutputEconomyTests(unittest.TestCase):
         summary = run_scenario("compound_shock", 12)["summary"]
         self.assertEqual(D(summary["cash_conservation_error"]), 0)
         self.assertEqual(D(summary["max_abs_physical_balance_error"]), 0)
+
+    def test_self_input_recipe_is_rejected_until_explicitly_modelled(self):
+        products = InputOutputEconomy.default_products()
+        firms = InputOutputEconomy.default_firms()
+        base = firms[0]
+        firms[0] = type(base)(
+            base.firm_id, base.output_product, {"grain": D("0.1")},
+            base.labour_per_unit, base.labour_capacity, base.output_capacity,
+            base.wage_per_labour, base.initial_cash, base.initial_inventory,
+            base.domestic_ask_markup
+        )
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(products, firms, InputOutputEconomy.default_households())
 
     def test_invalid_product_reference_is_rejected(self):
         products = InputOutputEconomy.default_products()
