@@ -444,6 +444,24 @@ Institutional changes should progress through explicit hypotheses, limited pilot
 
 ---
 
+### Principle D11 — Financial and accounting integrity
+
+Derived from A1, A5, A6, A7, A9 and A12.
+
+Every financial mechanism must distinguish issuance, deposits, credit, payment instructions, settlement assets, liquidity, solvency, income, wealth and real productive capacity. Consolidation boundaries, collateral, maturity, loss allocation and recognition rules must be explicit. No internal transfer, new liability or token issuance may be presented as net real wealth creation without independently evidenced growth in the underlying asset base or productive capacity.
+
+**Test:** Reconcile entity-level and consolidated balance sheets, cash flows, claims and obligations. Verify that intercompany transfers, credit principal and token issuance are not double-counted as output or net wealth.
+
+### Principle D12 — Bounded and contestable computational authority
+
+Derived from A2, A7, A8, A10 and A11.
+
+AI and automated systems may operate only within a documented mandate, defined action space, risk limits, data permissions and reversible execution boundaries. Recommendation, authorization, execution, audit and appeal must be separable for consequential actions. Affected participants must have a route to explanation and review.
+
+**Test:** Red-team model failure, data manipulation, objective gaming, unauthorized action and concentrated control. Verify logs, permission boundaries, override and recovery procedures.
+
+---
+
 # Part VI. A decision framework for choosing mechanisms
 
 ## 14. The coordination problem
