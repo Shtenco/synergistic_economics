@@ -25,6 +25,8 @@ The conceptual overview is expanded into standalone research volumes. The first 
 
 - **[Prototype 1 — Seven-Cell Economy](prototype/SEVEN_CELL_ECONOMY.md)** — executable 7-cell simulation with household cash budgets, shared energy, paid material inputs, investment, reserves, bilateral trade credit, insolvency triggers, ecological stocks, five deterministic scenarios and cash-conservation tests. [Scenario results](prototype/results/seven_cell_scenario_comparison.json) · [Python model](prototype/seven_cell_economy.py) · [Tests](prototype/test_seven_cell_economy.py)
 
+- **[Prototype 2 — General Input-Output Economy](prototype/GENERAL_IO_ECONOMY.md)** — data-driven multi-product production network with multiple suppliers, input recipes, household baskets, product-level price adjustment, import offers, inventory accounting, physical-balance identities and exact cash conservation. [Python model](prototype/io_economy.py) · [Tests](prototype/test_io_economy.py)
+
 - **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
 
 The remaining volumes will be added sequentially after their concepts, models and evidence requirements are developed.
