@@ -101,6 +101,13 @@ class CanonicalSchemaTests(unittest.TestCase):
         issues = validate_records(records, self.schema)
         self.assertTrue(any("sum to" in issue and "> 1" in issue for issue in issues))
 
+    def test_event_subject_reference_type_is_checked(self):
+        records = [dict(x) for x in self.examples["records"]]
+        event = next(x for x in records if x["recordType"] == "economic_event")
+        event["subjectEntityIds"] = ["asset:tractor-001"]
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("expected" in issue and "subjectEntityIds" in issue for issue in issues))
+
     def test_duplicate_event_idempotency_key_is_reported(self):
         records = [dict(x) for x in self.examples["records"]]
         event = next(x for x in records if x["recordType"] == "economic_event")
