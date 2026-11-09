@@ -8,6 +8,15 @@
 
 > **Core proposition:** Build an economy in which individual initiative, competitive discovery, cooperation, productive ownership, technological progress and broad-based prosperity reinforce one another — without concentrating all economic coordination in either a central authority or a handful of private platforms.
 
+## Research documents
+
+The conceptual overview is expanded into standalone research volumes. The first foundational volume is available:
+
+- **[Volume I — Foundations of Synergistic Economics](research/VOLUME_I_FOUNDATIONS.md)** — ontology of the economy, universal constraints, institutional tensions, twelve axioms, derived principles, mechanism-selection framework, mathematical model, constitutional logic and research propositions.
+
+The remaining volumes will be added sequentially after their concepts, models and evidence requirements are developed.
+
+
 ---
 
 ## 1. Executive summary
