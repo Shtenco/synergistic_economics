@@ -5,7 +5,7 @@
 **Version:** 0.1 — 9 November 2026  
 **Status:** Integrated research and system-design specification; implementation and empirical validation pending  
 **Parent theory:** SYNERGISTIC ECONOMICS, Volume I — Foundations  
-**Related research:** Multidimensional Value and Production; Contribution and Distribution; SYNERGY EURASIAN EIIOM, V6.6, V7; DECOCI / DEGOV
+**Related research:** [Volume II — Multidimensional Value and Production](VOLUME_II_MULTIDIMENSIONAL_VALUE_AND_PRODUCTION.md); [Volume III — Contribution, Ownership and Distribution](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md); SYNERGY EURASIAN EIIOM, V6.6, V7; DECOCI / DEGOV
 
 ---
 
