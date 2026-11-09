@@ -918,7 +918,7 @@ Only after legal, security, accounting, governance and privacy review. Begin wit
 
 ## 46. Minimum viable simulation
 
-The first prototype should contain:
+The first integrated prototype for the full target architecture should eventually contain:
 - 7 heterogeneous cells;
 - 30–100 agents across persons, enterprises and funders;
 - 3–5 production sectors;
