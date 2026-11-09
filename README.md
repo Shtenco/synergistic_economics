@@ -14,6 +14,8 @@ The conceptual overview is expanded into standalone research volumes. The first 
 
 - **[Volume I — Foundations of Synergistic Economics](research/VOLUME_I_FOUNDATIONS.md)** — ontology of the economy, universal constraints, institutional tensions, twelve axioms, derived principles, mechanism-selection framework, mathematical model, constitutional logic and research propositions.
 
+- **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
+
 The remaining volumes will be added sequentially after their concepts, models and evidence requirements are developed.
 
 
