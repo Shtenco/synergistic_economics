@@ -1,0 +1,102 @@
+{
+  "$comment": "Illustrative synthetic records only; they assert no legal or economic fact.",
+  "records": [
+    {
+      "id": "person:member-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "person",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "self_reported",
+        "confidence": 0.7
+      },
+      "displayName": "Member 001",
+      "participationStatus": "active",
+      "consent": {
+        "status": "granted",
+        "scope": [
+          "participation",
+          "contribution_recording"
+        ]
+      }
+    },
+    {
+      "id": "cell:food-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "economic_cell",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "system_observed"
+      },
+      "name": "Food production cell",
+      "memberEntityIds": [
+        "person:member-001"
+      ],
+      "enterpriseIds": [
+        "enterprise:co-op-001"
+      ],
+      "governanceModel": "member_cooperative"
+    },
+    {
+      "id": "asset:tractor-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "asset",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "counterparty_attested",
+        "evidenceRefs": [
+          "evidence:asset-register-001"
+        ]
+      },
+      "name": "Shared tractor",
+      "assetClass": "equipment",
+      "quantity": {
+        "value": 1,
+        "unit": "unit"
+      },
+      "condition": "maintained",
+      "custodianEntityId": "cell:food-001"
+    },
+    {
+      "id": "contribution:work-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "contribution",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "third_party_verified",
+        "confidence": 0.9
+      },
+      "contributorEntityId": "person:member-001",
+      "projectId": "project:harvest-001",
+      "contributionType": "labour",
+      "description": "Harvest work shift",
+      "quantity": {
+        "value": 8,
+        "unit": "hour"
+      },
+      "causalAttribution": "joint",
+      "sciScore": 12.5,
+      "sciModelVersion": "sci-experimental-0.1"
+    },
+    {
+      "id": "event:shipment-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "economic_event",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "system_observed"
+      },
+      "eventType": "inventory.shipped",
+      "effectiveAt": "2026-11-09T12:00:00Z",
+      "recordedAt": "2026-11-09T12:00:02Z",
+      "idempotencyKey": "shipment:order-001:line-1",
+      "payload": {
+        "quantity": {
+          "value": 5,
+          "unit": "crate"
+        },
+        "orderId": "order:001"
+      }
+    }
+  ]
+}
