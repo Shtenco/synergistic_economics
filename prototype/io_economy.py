@@ -349,6 +349,10 @@ class InputOutputEconomy:
     def step(self, period):
         cash_open = self._system_cash()
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
+        household_consumption_open = {
+            p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
+            for p in self.products
+        }
         opening_stock = {
             p.product_id: sum((f.inventory.get(p.product_id, ZERO) for f in self.firms.values()), ZERO)
             for p in self.products
@@ -403,6 +407,7 @@ class InputOutputEconomy:
             })
         household_consumption = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
+            - household_consumption_open[p.product_id]
             for p in self.products
         }
         imports = {pid: market[pid]["imports"] for pid in self.product_by_id}
