@@ -855,44 +855,44 @@ If a scalar objective is required for a bounded operational decision, weights mu
 
 # Part V — Proposed constitutional and design commitments
 
-## 32. Status and logical role of the S1–S12 statements
+## 32. Status and logical role of the S1–S12 commitments
 
 These twelve statements are **not a second independent set of foundational axioms**. Following the reconciliation in [Volume 0A — Axiom Reconciliation and Methodological Audit](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md), they are retained as proposed constitutional/design commitments and research rules derived from, or constrained by, the canonical A1–A12 foundational set in Volume I. They include normative commitments, operational requirements and methodological rules; they are not all empirical propositions of the same logical kind. The mapping and bridge assumptions are documented in Volume 0A.
 
-### Axiom S1 — Human agency and dignity
+### Commitment S1 — Human agency and dignity
 A person is not reducible to productivity, creditworthiness, contribution score or economic utility. Basic rights and due process are not conditional on an economic metric.
 
-### Axiom S2 — Real-resource constraint
+### Commitment S2 — Real-resource constraint
 Every production and distribution system is constrained by real resources, time, capabilities, technology, ecological systems and institutional capacity. Financial claims do not eliminate these constraints.
 
-### Axiom S3 — Plural value
+### Commitment S3 — Plural value
 Economic outcomes have multiple dimensions. Price, utility, production, income, wealth, knowledge, capability, social impact and ecological condition are distinct categories.
 
-### Axiom S4 — Distributed knowledge
+### Commitment S4 — Distributed knowledge
 Relevant economic knowledge is dispersed, incomplete, changing and often tacit. No single actor or model should be presumed to possess it all.
 
-### Axiom S5 — Institutional plurality
+### Commitment S5 — Institutional plurality
 Markets, firms, cooperatives, commons, public institutions and federations are alternative and sometimes complementary coordination mechanisms. No one form is universally optimal.
 
-### Axiom S6 — Conditional cooperation
+### Commitment S6 — Conditional cooperation
 Cooperation can create additional value when complementarities, trust and governance benefits exceed coordination, monitoring, integration and external costs. It can also create collusion and capture.
 
-### Axiom S7 — Contestability and exit
+### Commitment S7 — Contestability and exit
 Economic power must be constrained by meaningful entry, exit, appeal, interoperability and protection against coercive dependency.
 
-### Axiom S8 — Explicit rights and obligations
+### Commitment S8 — Explicit rights and obligations
 Ownership, control, custody, liability, access and cash-flow rights must be separately defined and evidenced. A ledger entry alone does not create legal or physical truth.
 
-### Axiom S9 — Financial integrity
+### Commitment S9 — Financial integrity
 Money, credit, payment, settlement, liquidity, solvency and real wealth must be separately measured and reconciled. Internal transfers and new liabilities are not automatically net wealth creation.
 
-### Axiom S10 — Reproduction across time
+### Commitment S10 — Reproduction across time
 A viable economy must maintain and renew human capabilities, produced assets, institutions and natural systems. Current output cannot be maximized by silently consuming the conditions of future production.
 
-### Axiom S11 — Bounded computational authority
+### Commitment S11 — Bounded computational authority
 AI and automated systems may recommend or execute delegated actions only within explicit mandates, risk limits, auditability, human appeal and constitutional constraints.
 
-### Axiom S12 — Evidence and falsifiability
+### Commitment S12 — Evidence and falsifiability
 Claims of superior performance must be compared with credible baselines, disclose assumptions and uncertainty, and remain open to independent replication and refutation.
 
 ## 33. Derived design principles
