@@ -318,10 +318,15 @@ class InputOutputEconomy:
                 state.expenditure += payment
         imported = ZERO
         domestic_sold = ZERO
-        for (kind, seller_id), amount in seller_allocations.items():
-            if amount <= 0:
-                continue
-            revenue = cash(amount * clearing_price)
+        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in actual_buyer_allocations.values()), ZERO)
+        seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
+        seller_cash_assigned = ZERO
+        for index, ((kind, seller_id), amount) in enumerate(seller_items):
+            # Allocate cent-rounding residual to the final actual seller, not to an artificial plug account.
+            revenue = cash(amount * clearing_price) if index < len(seller_items) - 1 else buyer_cash - seller_cash_assigned
+            if revenue < 0:
+                raise EconomyError("negative seller settlement after rounding")
+            seller_cash_assigned += revenue
             if kind == "firm":
                 seller = self.firms[seller_id]
                 seller.inventory[product_id] = max(ZERO, seller.inventory.get(product_id, ZERO) - amount)
@@ -331,13 +336,6 @@ class InputOutputEconomy:
             else:
                 self.import_cash += revenue
                 imported += amount
-        # Buyers and sellers must settle the same cash amount to the cent.
-        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in actual_buyer_allocations.values()), ZERO)
-        seller_cash = sum((cash(qty_value * clearing_price) for qty_value in seller_allocations.values()), ZERO)
-        settlement_difference = buyer_cash - seller_cash
-        if settlement_difference != 0:
-            # Assign rounding residual to the external supplier account; record it explicitly.
-            self.import_cash += settlement_difference
         self.prices[product_id] = clearing_price
         shortage = max(ZERO, total_demand - actual_traded)
         self._event(f"p{period}:market:{product_id}", "market_clearing", {
