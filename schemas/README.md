@@ -40,7 +40,7 @@ These contracts define interoperable record shapes for the SYNERGY economic rese
 
 ## Validation boundary
 
-The schema validates structure and local constraints. It cannot validate cross-record references, database-wide uniqueness, legal status, accounting balance, asset existence, consent validity, causal contribution or economic outcomes. Those require application-level checks, independent evidence and, where relevant, legal review.
+The schema validates structure and local constraints. It cannot validate cross-record references, database-wide uniqueness, legal status, accounting balance, asset existence, consent validity, causal contribution or economic outcomes. Those require application-level checks, independent evidence and, where relevant, legal review. The cross-record validator is defensive against malformed records: it reports invalid object shapes, non-string references and malformed ownership intervals instead of assuming every record has already passed schema validation.
 
 The root schema accepts one canonical record. The examples file is an envelope with a records array; validate each item in that array separately against the root schema.
 
@@ -50,7 +50,7 @@ The companion validator checks more than JSON shape:
 
 - duplicate record IDs;
 - typed references between participants, enterprises, cells, federations, projects, assets, accounts and ownership claims;
-- unresolved event subjects and duplicate event idempotency keys;
+- typed event actor/subject references, causal and reversal-event references, unresolved subjects and duplicate event idempotency keys;
 - aggregate overlap of verified legal-title and beneficial-interest shares for the same asset and right class.
 
 Run it with:

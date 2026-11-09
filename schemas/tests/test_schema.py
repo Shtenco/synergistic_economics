@@ -56,6 +56,31 @@ class CanonicalSchemaTests(unittest.TestCase):
         }
         self.assertFalse(self.validator.is_valid(claim))
 
+    def test_non_object_record_is_reported_without_crashing(self):
+        issues = validate_records([None, "not-a-record"], self.schema)
+        self.assertTrue(any("expected an object" in issue for issue in issues))
+
+    def test_non_string_reference_is_reported_without_crashing(self):
+        records = [dict(x) for x in self.examples["records"]]
+        contribution = next(x for x in records if x["recordType"] == "contribution")
+        contribution["projectId"] = {"bad": "reference"}
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("reference must be a string" in issue for issue in issues))
+
+    def test_malformed_ownership_interval_is_reported_without_crashing(self):
+        records = [dict(x) for x in self.examples["records"]]
+        records.append({
+            "id": "claim:malformed-time", "schemaVersion": "1.0.0",
+            "recordType": "ownership_claim", "createdAt": "2026-11-09T12:00:00Z",
+            "provenance": {"sourceType": "public_registry"},
+            "assetId": "asset:tractor-001", "claimantEntityId": "person:member-001",
+            "rightType": "legal_title", "share": 0.5,
+            "legalBasisRef": "registry:claim",
+            "verificationStatus": "registry_confirmed", "validFrom": "not-a-date"
+        })
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("invalid ownership-claim time interval" in issue for issue in issues))
+
     def test_missing_reference_is_reported(self):
         records = [dict(x) for x in self.examples["records"]]
         contribution = next(x for x in records if x["recordType"] == "contribution")
@@ -75,6 +100,13 @@ class CanonicalSchemaTests(unittest.TestCase):
         records.extend([dict(base, id="claim:test-a"), dict(base, id="claim:test-b", share=0.5)])
         issues = validate_records(records, self.schema)
         self.assertTrue(any("sum to" in issue and "> 1" in issue for issue in issues))
+
+    def test_event_subject_reference_type_is_checked(self):
+        records = [dict(x) for x in self.examples["records"]]
+        event = next(x for x in records if x["recordType"] == "economic_event")
+        event["subjectEntityIds"] = ["asset:tractor-001"]
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("expected" in issue and "subjectEntityIds" in issue for issue in issues))
 
     def test_duplicate_event_idempotency_key_is_reported(self):
         records = [dict(x) for x in self.examples["records"]]
