@@ -44,6 +44,24 @@ The schema validates structure and local constraints. It cannot validate cross-r
 
 The root schema accepts one canonical record. The examples file is an envelope with a records array; validate each item in that array separately against the root schema.
 
+## Cross-record validation
+
+The companion validator checks more than JSON shape:
+
+- duplicate record IDs;
+- typed references between participants, enterprises, cells, federations, projects, assets, accounts and ownership claims;
+- unresolved event subjects and duplicate event idempotency keys;
+- aggregate overlap of verified legal-title and beneficial-interest shares for the same asset and right class.
+
+Run it with:
+
+```bash
+python -m pip install -r schemas/requirements-dev.txt
+python schemas/validate_records.py schemas/examples/canonical_records.json
+```
+
+The ownership aggregation is intentionally limited to verified claims of the same right class. It does not sum different rights (for example, legal title and usufruct), decide whether a claim is legally valid, or infer rights from contribution scores. Time intervals are treated as half-open: validFrom is inclusive and validUntil is exclusive.
+
 ## Versioning policy
 
 - Patch: editorial clarifications without changing accepted instances.
