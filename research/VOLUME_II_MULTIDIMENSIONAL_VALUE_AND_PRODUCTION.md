@@ -6,7 +6,7 @@
 **Version:** 0.1 — 9 November 2026  
 **Status:** Foundational theory draft; definitions, models and hypotheses require formal, empirical and accounting review  
 **Preceding volumes:** [Volume 0 — Synthesis of Economic Thought](VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md); [Volume 0A — Axiom Reconciliation and Methodological Audit](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md); [Volume I — Foundations](VOLUME_I_FOUNDATIONS.md)  
-**Related architecture:** [SYNERGY Cellular Consortium Economy](SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)
+**Related architecture:** [SYNERGY Cellular Consortium Economy](SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md); [Volume III — Contribution, Ownership and Distribution](VOLUME_III_CONTRIBUTION_OWNERSHIP_AND_DISTRIBUTION.md)
 
 ---
 
