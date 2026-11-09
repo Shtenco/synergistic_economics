@@ -40,6 +40,8 @@ The event store records and orders events; it does not yet rebuild all domain st
 
 The test suite checks:
 1. a balanced inter-cell transfer preserves consolidated cash;
+2. a transfer cannot overdraw available cash;
+3. duplicate transfer idempotency keys cannot create a second journal posting;
 2. an unbalanced journal is rejected before posting;
 3. duplicate event idempotency keys are rejected;
 4. production is bounded by the tightest input constraint;
