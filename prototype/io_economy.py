@@ -252,8 +252,12 @@ class InputOutputEconomy:
         total_demand = sum((o.quantity for o in demand_orders), ZERO)
         total_supply = sum((x[2] for x in offers), ZERO)
         reference = self.prices[product_id]
-        if total_supply > 0:
-            imbalance = (total_demand - total_supply) / max(total_supply, D("0.00000001"))
+        # Only supply offered at or below the current reference price enters the
+        # current-price imbalance signal. Higher-ask imports are not treated as
+        # immediately available merely because their capacity exists.
+        priced_supply = sum((x[2] for x in offers if x[3] <= reference), ZERO)
+        if priced_supply > 0:
+            imbalance = (total_demand - priced_supply) / max(priced_supply, D("0.00000001"))
         else:
             imbalance = D("1") if total_demand > 0 else ZERO
         imbalance = max(D("-1"), min(D("1"), imbalance))
@@ -275,9 +279,16 @@ class InputOutputEconomy:
                 buyer_allocations[(order.buyer_kind, order.buyer_id)] = buyer_allocations.get((order.buyer_kind, order.buyer_id), ZERO) + allocation
         seller_allocations = {}
         if available > 0 and traded > 0:
-            for seller_id, seller_kind, offer_qty, ask in eligible_offers:
-                allocation = qty(traded * offer_qty / available)
-                seller_allocations[(seller_kind, seller_id)] = seller_allocations.get((seller_kind, seller_id), ZERO) + allocation
+            # Merit order: use the lowest-ask supplier first; expensive imports
+            # fill only the residual quantity once their ask is reached.
+            remaining_supply = traded
+            for seller_id, seller_kind, offer_qty, ask in sorted(eligible_offers, key=lambda x: (x[3], x[1], x[0])):
+                allocation = min(offer_qty, remaining_supply)
+                if allocation > 0:
+                    seller_allocations[(seller_kind, seller_id)] = qty(allocation)
+                    remaining_supply -= allocation
+                if remaining_supply <= 0:
+                    break
         # Correct tiny Decimal rounding drift deterministically on the last eligible buyer/seller.
         if buyer_allocations:
             drift = traded - sum(buyer_allocations.values(), ZERO)
