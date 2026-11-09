@@ -42,3 +42,5 @@ These are research instruments, not production financial software or calibrated 
 The seven-cell model has a single representative household cash pool, one shared energy supplier, an external material supplier, fixed prices, simplified capital, a single renewable resource stock and a narrow insolvency trigger. See the model specification for the full limitations and next upgrades.
 
 Passing software tests validates only the tested invariants. It does not validate the SYNERGY economic thesis.
+
+Scenario outputs include a deterministic `event_log_digest` over the ordered event payload digests; it is an integrity checksum, not a cryptographic chain with previous-event linkage.
