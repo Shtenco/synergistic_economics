@@ -982,7 +982,7 @@ No unresolved decision should be hidden in implementation defaults. Every defaul
 
 This specification defines a target architecture and a minimum research prototype. It is not evidence that the software exists, that the schema is final, or that the system has passed security, accounting or empirical validation.
 
-The next implementation artifact should be a versioned technical package containing:
+The mathematical model and comparative simulation programme are developed in [Volume V — Executable Economic Model](VOLUME_V_EXECUTABLE_ECONOMIC_MODEL.md). The next implementation artifact should be a versioned technical package containing:
 - JSON Schema or equivalent typed definitions for entities and events;
 - a minimal double-entry ledger implementation;
 - deterministic replay;
