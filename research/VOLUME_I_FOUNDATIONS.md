@@ -5,6 +5,7 @@
 **Document:** Volume I — Foundations  
 **Version:** 0.1  
 **Status:** Foundational research draft; propositions require formal and empirical testing  
+**Preceding research:** [Volume 0 — Synthesis of Economic Schools](VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md), which compares the intellectual traditions, their mathematical cores, limits and conditional points of synthesis.  
 **Parent document:** [Project README](../README.md)
 
 ---
