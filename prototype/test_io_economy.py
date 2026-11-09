@@ -107,6 +107,19 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertEqual(D(summary["cash_conservation_error"]), 0)
         self.assertEqual(D(summary["max_abs_physical_balance_error"]), 0)
 
+    def test_self_input_recipe_is_rejected_until_explicitly_modelled(self):
+        products = InputOutputEconomy.default_products()
+        firms = InputOutputEconomy.default_firms()
+        base = firms[0]
+        firms[0] = type(base)(
+            base.firm_id, base.output_product, {"grain": D("0.1")},
+            base.labour_per_unit, base.labour_capacity, base.output_capacity,
+            base.wage_per_labour, base.initial_cash, base.initial_inventory,
+            base.domestic_ask_markup
+        )
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(products, firms, InputOutputEconomy.default_households())
+
     def test_invalid_product_reference_is_rejected(self):
         products = InputOutputEconomy.default_products()
         firms = InputOutputEconomy.default_firms()
