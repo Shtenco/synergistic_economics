@@ -24,3 +24,7 @@ jobs:
         run: python prototype/seven_cell_economy.py --scenario baseline --periods 24
       - name: Run compound crisis simulation
         run: python prototype/seven_cell_economy.py --scenario compound_crisis --periods 24
+      - name: Run baseline input-output simulation
+        run: python prototype/io_economy.py --scenario baseline --periods 12
+      - name: Run compound input-output simulation
+        run: python prototype/io_economy.py --scenario compound_shock --periods 12
