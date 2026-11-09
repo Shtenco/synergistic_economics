@@ -37,6 +37,25 @@ class UnifiedBalanceTests(unittest.TestCase):
             )))
         self.assertEqual(len(ledger.entries), 1)
 
+    def test_journal_rejects_mixed_currencies(self):
+        ledger = DoubleEntryLedger()
+        ledger.add_account(Account("cash-usd", "a", "asset", "USD"))
+        ledger.add_account(Account("cash-eur", "b", "asset", "EUR"))
+        with self.assertRaises(BalanceError):
+            ledger.post(JournalEntry("fx-implicit", "invalid implicit FX", (
+                Posting("cash-usd", debit=money(10)),
+                Posting("cash-eur", credit=money(10)),
+            )))
+
+    def test_loan_rejects_wrong_account_roles(self):
+        ledger = ledger_with_accounts()
+        with self.assertRaises(BalanceError):
+            loan_origination(ledger, lender_cash="cash:lender",
+                             lender_receivable="loan:lender",
+                             borrower_cash="cash:borrower",
+                             borrower_payable="income:borrower",
+                             amount=10, entry_prefix="bad-loan")
+
     def test_loan_principal_is_not_income_and_does_not_create_net_worth(self):
         ledger = ledger_with_accounts()
         loan_origination(ledger, lender_cash="cash:lender",
