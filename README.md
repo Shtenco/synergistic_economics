@@ -37,6 +37,7 @@ The remaining volumes will be added sequentially after their concepts, models an
 - **[Illustrative canonical records](schemas/examples/canonical_records.json)** — synthetic examples separating contribution evidence, ownership claims, account records and event records.
 - **[Schema design and invariants](schemas/README.md)** — field semantics, validation boundaries, versioning rules and known limitations.
 - **[Schema validation tests](schemas/tests/README.md)** — Draft 2020-12 meta-validation and example checks, run locally and in GitHub Actions.
+- **[Cross-record validator](schemas/validate_records.py)** — checks typed references, duplicate IDs and event keys, and overlapping verified ownership shares.
 
 ## 1. Executive summary
 
