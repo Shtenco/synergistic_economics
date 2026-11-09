@@ -4,7 +4,7 @@
 
 **Проект:** SYNERGY ECONOMIC  
 **Статус:** базовая концептуальная рамка и исследовательская программа  
-**Версия:** 0.7 — 10 ноября 2026 года  
+**Версия:** 0.8 — 10 ноября 2026 года  
 **Репозиторий:** https://github.com/Shtenco/synergistic_economics  
 **English version:** [README.en.md](README.en.md)
 
