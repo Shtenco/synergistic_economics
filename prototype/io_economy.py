@@ -188,6 +188,8 @@ class InputOutputEconomy:
         for f in self.firm_configs:
             if f.output_product not in known or set(f.recipe) - known or set(f.initial_inventory) - known:
                 raise EconomyError("firm references unknown product")
+            if f.output_product in f.recipe:
+                raise EconomyError("self-input recipes are not supported in this prototype")
             if any(v <= 0 for v in f.recipe.values()) or any(v < 0 for v in f.initial_inventory.values()):
                 raise EconomyError("recipe coefficients must be positive and stocks non-negative")
             numeric_values = (f.labour_per_unit, f.labour_capacity, f.output_capacity,
