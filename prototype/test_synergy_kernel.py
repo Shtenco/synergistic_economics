@@ -14,6 +14,24 @@ class KernelTests(unittest.TestCase):
         self.assertEqual(before,after)
         self.assertEqual(k.ledger.balance("cash:cell_a"),Decimal("87.50"))
         self.assertEqual(k.ledger.balance("cash:cell_b"),Decimal("37.50"))
+    def test_transfer_cannot_overdraw_cash(self):
+        k=SynergyKernel()
+        k.ledger.add_account("equity:cell_a")
+        k.ledger.post(JournalEntry("OA","UNIT","open a",(JournalLine("cash:cell_a",debit=money(5)),JournalLine("equity:cell_a",credit=money(5)))))
+        with self.assertRaises(KernelError):
+            k.transfer_cash("cell_a","cell_b",10,idempotency_key="overdraw")
+        self.assertEqual(len(k.ledger.entries),1)
+        self.assertEqual(len(k.events.events),0)
+    def test_duplicate_transfer_key_does_not_post_second_journal(self):
+        k=SynergyKernel()
+        k.ledger.add_account("equity:cell_a")
+        k.ledger.post(JournalEntry("OA","UNIT","open a",(JournalLine("cash:cell_a",debit=money(20)),JournalLine("equity:cell_a",credit=money(20)))))
+        k.transfer_cash("cell_a","cell_b",5,idempotency_key="same-key")
+        count=len(k.ledger.entries)
+        with self.assertRaises(KernelError):
+            k.transfer_cash("cell_a","cell_b",5,idempotency_key="same-key")
+        self.assertEqual(len(k.ledger.entries),count)
+        self.assertEqual(len(k.events.events),1)
     def test_unbalanced_journal_rejected_without_posting(self):
         ledger=DoubleEntryLedger({"cash","equity"})
         bad=JournalEntry("BAD","UNIT","bad",(JournalLine("cash",debit=Decimal(10)),JournalLine("equity",credit=Decimal(9))))
