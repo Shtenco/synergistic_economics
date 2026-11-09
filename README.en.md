@@ -3,7 +3,7 @@
 
 **Project:** SYNERGY ECONOMIC  
 **Status:** Foundational conceptual framework / research program  
-**Version:** 0.7 — 10 November 2026  
+**Version:** 0.8 — 10 November 2026  
 **Русская версия:** [README.md](README.md)  
 **Repository:** https://github.com/Shtenco/synergistic_economics
 
