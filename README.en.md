@@ -3,7 +3,8 @@
 
 **Project:** SYNERGY ECONOMIC  
 **Status:** Foundational conceptual framework / research program  
-**Version:** 0.1 — 9 November 2026  
+**Version:** 0.2 — 9 November 2026  
+**Русская версия:** [README.md](README.md)  
 **Repository:** https://github.com/Shtenco/synergy_economic
 
 > **Core proposition:** Build an economy in which individual initiative, competitive discovery, cooperation, productive ownership, technological progress and broad-based prosperity reinforce one another — without concentrating all economic coordination in either a central authority or a handful of private platforms.
@@ -34,6 +35,10 @@ The remaining volumes will be added sequentially after their concepts, models an
 
 ---
 
+
+## Repository audit
+
+- **[Repository audit, 9 November 2026](research/REPOSITORY_AUDIT_2026-11-09_RU.md)** — scope, checks, corrected issues, remaining model limitations and validation status.
 
 ## Canonical data contracts
 
