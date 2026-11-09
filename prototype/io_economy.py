@@ -206,7 +206,9 @@ class InputOutputEconomy:
         for firm_id, state in sorted(self.firms.items()):
             c = state.config
             labour_limited = c.labour_capacity / c.labour_per_unit
-            plans[firm_id] = min(c.output_capacity, labour_limited)
+            output_stock = state.inventory.get(c.output_product, ZERO)
+            inventory_gap = max(ZERO, c.output_capacity - output_stock)
+            plans[firm_id] = min(c.output_capacity, labour_limited, inventory_gap)
         return plans
 
     def _build_orders(self, plans):
