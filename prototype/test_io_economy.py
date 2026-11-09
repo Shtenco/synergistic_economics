@@ -56,6 +56,25 @@ class InputOutputEconomyTests(unittest.TestCase):
             D(baseline["cumulative_household_expenditure"])
         )
 
+    def test_high_ask_imports_enter_only_after_price_reaches_their_offer(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[Product("test-good", "unit", D("1"), D("2"), D("10"))],
+            firms=[FirmConfig(
+                "idle-firm", "test-good", {}, D("1"), D("0"), D("0"),
+                D("1"), D("1000"), {}
+            )],
+            households=[HouseholdConfig(
+                "test-household", D("100"), {"test-good": D("5")}, D("1")
+            )]
+        )
+        model.step(1)
+        self.assertEqual(sum((h.consumption.get("test-good", D("0")) for h in model.households.values()), D("0")), 0)
+        for period in range(2, 6):
+            model.step(period)
+        imported = sum((r.imports["test-good"] for r in model.period_results), D("0"))
+        self.assertGreater(imported, 0)
+
     def test_import_shock_does_not_break_conservation(self):
         summary = run_scenario("energy_import_shock", 8)["summary"]
         self.assertEqual(D(summary["cash_conservation_error"]), 0)
