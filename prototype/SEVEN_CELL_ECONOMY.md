@@ -39,6 +39,8 @@ Here, (L) is labour, (A) productivity, (K) the capital index, (M) materials, (E)
 
 The energy cell plans output against the derived energy requirements of the other cells plus a small buffer. Actual production is scaled to the shared resource extraction allowance.
 
+The current wage rule pays each active cell's configured labour endowment each period, even if actual output is below capacity. It is therefore a fixed-period payroll assumption, not a wage bill calculated from hours actually used in production. Unpaid amounts are tracked as wage arrears.
+
 The shared resource stock evolves as:
 
 \[
