@@ -71,19 +71,25 @@ Let:
 
 The initial production plan is inventory-targeted: the firm replenishes its own output stock toward a target equal to one period of its configured output capacity, rather than producing at full capacity indefinitely. This is a deliberately simple stock-control rule; it prevents unsold output from accumulating without bound.
 
-[
-y_f^{plan} = min(K_f, L_f / ell_f)
-]
+```text
+planned_output = min(
+    output_capacity,
+    labour_capacity / labour_per_unit,
+    max(0, output_capacity - opening_output_inventory)
+)
+```
 
 After input markets clear, actual production is limited by available input stocks and the firm's cash available for wages:
 
-[
-y_f = minleft(y_f^{plan},
-min_{i:a_{if}>0}rac{I_{if}}{a_{if}},
-rac{Cash_f}{ell_f w_f}ight)
-]
+```text
+actual_output = min(
+    planned_output,
+    min(input_inventory[i] / recipe_coefficient[i] for each required input i),
+    firm_cash / (labour_per_unit * wage_per_labour)
+)
+```
 
-where (I_{if}) is the firm's available stock of input (i), and (w_f) is wage per labour unit. Actual output is rounded to the model's declared quantity precision.
+Here, `input_inventory[i]` is the firm's available stock of input `i`. Actual output is rounded to the model's declared quantity precision.
 
 Inputs are consumed when production occurs. Newly produced goods enter inventories after the current market-clearing round and are therefore offered in the next period. This avoids selling the same physical unit twice within one period.
 
@@ -93,29 +99,23 @@ For each product, firms submit input orders and households submit consumption or
 
 Domestic firms offer their opening inventory. The external supplier offers up to the product's import capacity at its import offer price.
 
-For product (i):
-- (D_i): total requested quantity;
-- (S_i(P_i^t)): quantity offered at or below the current reference price (higher-ask supply is not treated as immediately available);
-- (P_i^t): previous reference price;
-- (eta): price adjustment coefficient.
+For product `i`:
+
+- `D_i`: total requested quantity;
+- `S_i(P_i)`: quantity offered at or below the current reference price; higher-ask supply is not treated as immediately available;
+- `P_i`: previous reference price;
+- `eta`: price adjustment coefficient.
 
 The imbalance signal is based on supply currently offered at or below the reference price. An import offer above that price does not suppress the shortage signal merely because its capacity exists. As the price adjusts upward and reaches the import ask, that import capacity becomes eligible. This avoids the false signal that expensive, currently ineligible supply has already cleared the market.
 
-The clearing price uses the lowest eligible ask as a floor and a buyer bid ceiling as a cap. Sellers are allocated in ascending ask-price order (merit order); eligible buyers are rationed pro rata if supply is insufficient. The model therefore does not distribute scarce supply pro rata among sellers with different asks.
+```text
+z_i = clip((D_i - S_i(P_i)) / max(S_i(P_i), epsilon), -1, 1)
+proposed_price = P_i * (1 + eta * z_i)
+```
 
-The imbalance signal is bounded:
+The clearing price uses the lowest eligible ask as a floor and a buyer bid ceiling as a cap. Sellers are allocated in ascending ask-price order (merit order); eligible buyers are rationed pro rata if supply is insufficient. The model does not distribute scarce supply pro rata among sellers with different asks.
 
-[
-z_i = clipleft(rac{D_i-S_i}{max(S_i,epsilon)},-1,1ight)
-]
-
-The proposed price is:
-
-[
-widetilde P_i^{t+1}=P_i^t(1+eta z_i)
-]
-
-It is additionally bounded by the configured maximum one-period price movement, the lowest currently available seller ask and the buyer bid ceiling. All eligible trades for one product execute at one uniform clearing price in this first mechanism.
+The price is additionally bounded by the configured maximum one-period price movement, the lowest currently available seller ask and the buyer bid ceiling. All eligible trades for one product execute at one uniform clearing price in this first mechanism.
 
 If offered supply is insufficient, eligible buyers receive pro-rata allocations. Suppliers are used in ascending ask-price order. If a seller cannot offer at the resulting price, its stock remains in inventory. A shortage is reported as desired demand minus actual traded quantity.
 
@@ -125,13 +125,14 @@ If offered supply is insufficient, eligible buyers receive pro-rata allocations.
 
 ### 5.1 Physical balance by product
 
-For every product (i) and period (t):
-
-[
-OpeningStock_{i,t}+Imports_{i,t}+Production_{i,t}
-=
-IntermediateUse_{i,t}+HouseholdUse_{i,t}+ClosingStock_{i,t}
-]
+```text
+opening_stock[i]
++ imports_sold[i]
++ production[i]
+= intermediate_inputs_consumed[i]
++ household_consumption[i]
++ closing_stock[i]
+```
 
 Intermediate use means physical inputs actually consumed in production, not merely purchases or transfers between firms. Purchased but unused inputs remain in closing inventory.
 
@@ -141,11 +142,12 @@ The model checks this identity for every product after each period. A mismatch r
 
 The current monetary perimeter is firms + households + the external import supplier. All domestic market payments and wage payments are transfers inside this perimeter; import payments move cash to the external supplier, which is still explicitly included in the consolidated perimeter.
 
-[
-sum_f Cash_{f,t}+sum_h Cash_{h,t}+Cash_{external,t}
-=
-InitialSystemCash
-]
+```text
+sum(firm_cash)
++ sum(household_cash)
++ external_import_supplier_cash
+= initial_system_cash
+```
 
 No money is minted in this prototype. No credit principal is created. No unpaid invoice is silently treated as paid. Market purchases settle immediately in cash.
 
@@ -161,12 +163,13 @@ An intermediate sale from one firm to another is not counted as household final 
 
 ## 6. Value-added proxy: strict interpretation
 
-The prototype reports:
-
-[
-GVAProxy_t = sum_f left(P_{p(f),t}y_{f,t}
--sum_i P_{i,t}a_{if}y_{f,t}ight)
-]
+```text
+gross_value_added_proxy =
+    sum_over_firms(
+        output_price * actual_output
+        - sum_over_inputs(input_price * input_quantity_consumed)
+    )
+```
 
 This is an illustrative gross-value-added proxy using current model prices and input quantities consumed. It is **not GDP**, not profit, not household income and not a complete national-accounts measure. It does not yet reconcile taxes, subsidies, inventories at transaction-time prices, capital consumption, mixed income, net operating surplus, own-account production, government and non-market output, or all valuation adjustments.
 
