@@ -105,8 +105,12 @@ class DoubleEntryLedger:
         return self.balances[account_id]
 
     def trial_balance(self) -> D:
-        """Signed debit-normal balances must sum to zero."""
-        return sum(self.balances.values(), ZERO)
+        """Convert normal balances back to debit-positive signed balances."""
+        total = ZERO
+        for account_id, balance in self.balances.items():
+            kind = self.accounts[account_id].kind
+            total += balance if kind in {"asset", "expense"} else -balance
+        return total
 
 
 @dataclass(frozen=True)
@@ -160,6 +164,7 @@ def validate_claim_pairs(claims: Iterable[Claim]) -> Dict[str, D]:
     sides rather than treating the claim as additional system wealth.
     """
     grouped: Dict[str, List[Claim]] = {}
+    claims = list(claims)
     for claim in claims:
         if not claim.instrument_id or not claim.creditor or not claim.debtor:
             raise BalanceError("claim parties and instrument id are required")
@@ -182,6 +187,7 @@ def consolidated_internal_claims(claims: Iterable[Claim], members: Iterable[str]
     This function reports the eliminated gross amount, not net wealth.
     """
     member_set = set(members)
+    claims = list(claims)
     pairs = validate_claim_pairs(claims)
     return sum((amount for instrument_id, amount in pairs.items()
                 if any(c.instrument_id == instrument_id and c.creditor in member_set
