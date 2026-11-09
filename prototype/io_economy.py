@@ -522,7 +522,7 @@ def main():
     parser.add_argument("--output", default="")
     args = parser.parse_args()
     result = run_scenario(args.scenario, args.periods)
-    rendered = json.dumps(result, indent=2, sort_keys=True)
+    rendered = json.dumps(result, indent=2, sort_keys=True, default=str)
     if args.output:
         Path(args.output).write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
