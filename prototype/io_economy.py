@@ -235,7 +235,10 @@ class InputOutputEconomy:
         scaled = []
         for order in orders:
             key = (order.buyer_kind, order.buyer_id)
-            scale = min(D("1"), budgets[key] / notional[key]) if notional[key] > 0 else ZERO
+            # Reserve for the maximum permitted one-period price increase so the
+            # realized spend remains within the buyer's configured budget.
+            protected_notional = notional[key] * (D("1") + self.max_price_change)
+            scale = min(D("1"), budgets[key] / protected_notional) if protected_notional > 0 else ZERO
             scaled.append(MarketOrder(order.buyer_id, order.product_id, qty(order.quantity * scale), order.buyer_kind))
         return scaled, budgets
 
@@ -303,7 +306,9 @@ class InputOutputEconomy:
         for key, amount in sorted(buyer_allocations.items()):
             kind, buyer_id = key
             available_cash = self.firms[buyer_id].cash if kind == "firm" else self.households[buyer_id].cash
-            affordable = qty(available_cash / clearing_price) if clearing_price > 0 else ZERO
+            remaining_budget = buyer_budget.get(key, available_cash)
+            spendable = min(available_cash, remaining_budget)
+            affordable = qty(spendable / clearing_price) if clearing_price > 0 else ZERO
             actual_buyer_allocations[key] = min(amount, affordable)
         actual_traded = sum(actual_buyer_allocations.values(), ZERO)
         if actual_traded < traded and seller_allocations:
@@ -320,6 +325,7 @@ class InputOutputEconomy:
             payment = cash(amount * clearing_price)
             if payment <= 0 or amount <= 0:
                 continue
+            buyer_budget[(kind, buyer_id)] = max(ZERO, buyer_budget.get((kind, buyer_id), ZERO) - payment)
             if kind == "firm":
                 state = self.firms[buyer_id]
                 state.cash -= payment
