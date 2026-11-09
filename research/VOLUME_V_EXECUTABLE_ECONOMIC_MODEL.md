@@ -1107,7 +1107,7 @@ Pause or reject a design if:
 
 The next implementation sequence should be:
 
-- **Volume VI — Benchmark Economies and Experimental Protocols:** fully specified baseline models, initial conditions, parameter tables, scenario matrix, preregistration templates and comparison rules.
+- [**Volume VI — Benchmark Economies and Experimental Protocols**](VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md): baseline models, initial conditions, scenario matrix, preregistration templates and comparison rules.
 - **Technical Specification V5.1 — Canonical Entity and Event Schemas:** machine-readable schemas for agents, cells, assets, accounts, contracts, events and policy versions.
 - **Prototype 0 — Double-entry Accounting Kernel:** executable code with tests and deterministic replay.
 - **Prototype 1 — Seven-cell Production Economy:** a small synthetic economy to exercise production, exchange, credit, shared assets and distribution.
