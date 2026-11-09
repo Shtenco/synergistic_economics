@@ -180,7 +180,7 @@ def validate_claim_pairs(claims: Iterable[Claim]) -> Dict[str, D]:
     for instrument_id, rows in grouped.items():
         if len(rows) != 1:
             raise BalanceError(f"duplicate instrument representation: {instrument_id}")
-        result[instrument_id] = rows[0].amount
+        result[instrument_id] = D(str(rows[0].amount))
     return result
 
 
@@ -205,6 +205,11 @@ def loan_origination(ledger: DoubleEntryLedger, *, lender_cash: str,
     amount = money(amount)
     if amount <= 0:
         raise BalanceError("loan principal must be positive")
+    required = ((lender_cash, "asset"), (lender_receivable, "asset"),
+                (borrower_cash, "asset"), (borrower_payable, "liability"))
+    for account_id, expected_kind in required:
+        if account_id not in ledger.accounts or ledger.accounts[account_id].kind != expected_kind:
+            raise BalanceError(f"{account_id} must be an existing {expected_kind} account")
     account_ids = (lender_cash, lender_receivable, borrower_cash, borrower_payable)
     if any(account_id not in ledger.accounts for account_id in account_ids):
         raise BalanceError("loan references an unknown account")
