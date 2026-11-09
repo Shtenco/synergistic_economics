@@ -143,17 +143,19 @@ class SynergyKernel:
     def transfer_cash(self, sender, recipient, amount, currency="UNIT", idempotency_key=None):
         amount=money(amount)
         if amount <= 0: raise KernelError("Transfer must be positive")
+        if sender == recipient: raise KernelError("Self-transfer is not permitted")
         debit,credit=f"cash:{recipient}",f"cash:{sender}"
         if debit not in self.ledger.accounts or credit not in self.ledger.accounts: raise KernelError("Cash account missing")
         if self.ledger.balance(credit,currency) < amount: raise KernelError("Insufficient available cash")
-        self.sequence+=1
-        jid=f"J{self.sequence:08d}"
-        event_id=f"E{self.sequence:08d}"
+        candidate=self.sequence+1
+        jid=f"J{candidate:08d}"
+        event_id=f"E{candidate:08d}"
         event_key=idempotency_key or jid
         # Validate event uniqueness before posting the journal, avoiding a half-committed transfer.
         if event_id in self.events._ids or event_key in self.events._keys: raise KernelError("Duplicate event or idempotency key")
         self.ledger.post(JournalEntry(jid,currency,"Settled inter-cell transfer",(JournalLine(debit,debit=amount),JournalLine(credit,credit=amount))))
         self.events.append(event_id,"cash_transfer_settled",{"sender":sender,"recipient":recipient,"amount":str(amount),"currency":currency},event_key)
+        self.sequence=candidate
         self.ledger.assert_balanced()
 
 def demo():
