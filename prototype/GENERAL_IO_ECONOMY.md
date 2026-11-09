@@ -32,7 +32,7 @@ A product has:
 - base/reference price;
 - import offer price;
 - period import capacity;
-- demand weight reserved for future priority/rationing experiments.
+- demand weight reserved for future priority/rationing experiments; it is currently metadata and does not affect allocation.
 
 Prices are monetary per physical unit. A tonne of grain, an MWh of energy and a unit of care are not physically additive.
 
@@ -47,7 +47,7 @@ A firm has:
 - opening cash and product-specific inventories;
 - a domestic offer markup relative to the current reference price.
 
-A firm can be a supplier in its output market and a buyer in several input markets. Its input stocks and output stocks coexist in one product-keyed inventory.
+A firm can be a supplier in its output market and a buyer in several input markets. Its input stocks and output stocks coexist in one product-keyed inventory. Self-input recipes (a firm using its own output product as an input) are rejected in this version because seller-buyer self-matching is not yet modelled explicitly.
 
 ### Household
 
