@@ -1,52 +1,44 @@
-# SYNERGY Kernel Prototype
+# SYNERGY Economic Prototypes
 
-A small, dependency-free Python research prototype for selected invariants in Volume IV and Volume V.
+Python 3.10+ research prototypes. Current implementations use the standard library only.
 
-## Requirements
+## Prototype 0 — Kernel
 
-- Python 3.10 or later
-- Standard library only
-- No network access or external packages required
+[synergy_kernel.py](synergy_kernel.py) contains the first small accounting/event/production kernel:
+- balanced debit/credit journal entries;
+- duplicate journal-entry and event-key protection;
+- append-only ordered event log;
+- bounded production, inventory and shipment checks;
+- exact budget-balanced pool allocation;
+- a simple inter-cell cash transfer.
 
-## Run
+## Prototype 1 — Seven-Cell Economy
+
+- [seven_cell_economy.py](seven_cell_economy.py) — deterministic seven-cell simulation.
+- [Model specification](SEVEN_CELL_ECONOMY.md) — state variables, production constraints, period sequence, accounting boundaries, scenarios, first results and limitations.
+- [Scenario comparison JSON](results/seven_cell_scenario_comparison.json) — 24-period baseline and four deterministic stress scenarios.
+- [test_seven_cell_economy.py](test_seven_cell_economy.py) — tests for production response, household budget, cash conservation, credit, defaults and journal integrity.
+
+### Run Prototype 1
 
 From this directory:
 
 ```bash
-python synergy_kernel.py
-python -m unittest -v
+python seven_cell_economy.py --scenario baseline --periods 24
+python seven_cell_economy.py --scenario compound_crisis --periods 24 --output results/compound_crisis.json
+python -m unittest discover -s . -p 'test_*.py' -v
 ```
 
-## Included components
+Scenarios: baseline, demand_collapse, energy_shock, resource_shock, compound_crisis.
 
-- debit/credit journal entries with strict balancing;
-- duplicate journal-entry rejection;
-- append-only event log with deterministic sequence and idempotency keys;
-- deterministic event replay ordering;
-- a capacity-constrained production function with labour, material, energy and demand bottlenecks;
-- inventory checks and shipment bounds;
-- proportional distribution with cent rounding and exact budget balance;
-- a small demonstration of an inter-cell cash transfer.
+## Validation
 
-## Prototype scope and limitations
+GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
 
-This is a **research kernel**, not production financial software. It does not implement legal accounting standards, bank settlement, authentication, authorization, database durability, concurrency control, insolvency law, tax, multi-currency conversion, full event-sourced state reconstruction, privacy controls or a complete economic simulation.
+## Scope and limitations
 
-The ledger is deliberately minimal: balances are debit-positive and the test model uses a closed set of accounts. A production implementation needs a typed chart of accounts, account normal-side semantics, immutable durable storage, transaction atomicity, concurrency safety, audit controls and jurisdiction-specific accounting review.
+These are research instruments, not production financial software or calibrated forecasts. They do not implement legal accounting standards, banking settlement, identity/access controls, durable transactional storage, concurrency safety, tax, full insolvency law, full national accounts, empirical parameter calibration or a complete institutional comparison.
 
-The event store records and orders events; it does not yet rebuild all domain state from events. The production function is a simple bottleneck model, not a calibrated sector model. The allocation function is a mathematical demonstration, not a universal fairness rule.
+The seven-cell model has a single representative household cash pool, one shared energy supplier, an external material supplier, fixed prices, simplified capital, a single renewable resource stock and a narrow insolvency trigger. See the model specification for the full limitations and next upgrades.
 
-## Current invariant tests
-
-The test suite checks:
-1. a balanced inter-cell transfer preserves consolidated cash;
-2. a transfer cannot overdraw available cash;
-3. duplicate transfer idempotency keys cannot create a second journal posting;
-2. an unbalanced journal is rejected before posting;
-3. duplicate event idempotency keys are rejected;
-4. production is bounded by the tightest input constraint;
-5. shipments cannot exceed inventory;
-6. allocation exactly exhausts the declared pool;
-7. negative distribution pools are rejected.
-
-Passing these tests demonstrates only these narrow software properties. It does not validate the full SYNERGY economic theory.
+Passing software tests validates only the tested invariants. It does not validate the SYNERGY economic thesis.
