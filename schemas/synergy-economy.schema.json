@@ -1,0 +1,1050 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shtenco.github.io/synergy-economic/schemas/synergy-economy.schema.json",
+  "title": "SYNERGY Economic Canonical Record Schema",
+  "description": "Canonical interchange contract for economic actors, organizations, assets, accounts, contracts, ownership claims, contributions and events. Structural validation does not prove legal, physical or economic truth.",
+  "type": "object",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 200,
+      "pattern": "^[A-Za-z][A-Za-z0-9._:/-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3,12}$"
+    },
+    "money": {
+      "type": "object",
+      "properties": {
+        "minorUnits": {
+          "type": "integer"
+        },
+        "currency": {
+          "$ref": "#/$defs/currency"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9
+        }
+      },
+      "required": [
+        "minorUnits",
+        "currency",
+        "scale"
+      ],
+      "additionalProperties": false
+    },
+    "quantity": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        }
+      },
+      "required": [
+        "value",
+        "unit"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "sourceType": {
+          "enum": [
+            "self_reported",
+            "counterparty_attested",
+            "system_observed",
+            "third_party_verified",
+            "public_registry",
+            "derived_model",
+            "unknown"
+          ]
+        },
+        "sourceId": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "method": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "evidenceRefs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "uniqueItems": true
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 500
+          }
+        }
+      },
+      "required": [
+        "sourceType"
+      ],
+      "additionalProperties": false
+    },
+    "baseRecord": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "schemaVersion": {
+          "const": "1.0.0"
+        },
+        "recordType": {
+          "type": "string"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        }
+      },
+      "required": [
+        "id",
+        "schemaVersion",
+        "recordType",
+        "createdAt",
+        "provenance"
+      ]
+    },
+    "person": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "person"
+            },
+            "displayName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "jurisdiction": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "participationStatus": {
+              "enum": [
+                "invited",
+                "active",
+                "suspended",
+                "exited",
+                "deceased",
+                "unknown"
+              ]
+            },
+            "consent": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "enum": [
+                    "not_requested",
+                    "granted",
+                    "limited",
+                    "withdrawn",
+                    "unknown"
+                  ]
+                },
+                "scope": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "uniqueItems": true
+                },
+                "recordedAt": {
+                  "$ref": "#/$defs/timestamp"
+                },
+                "expiresAt": {
+                  "$ref": "#/$defs/timestamp"
+                }
+              },
+              "required": [
+                "status"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "recordType",
+            "displayName",
+            "participationStatus"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "household": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "household"
+            },
+            "memberIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "residenceRegion": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "needsProfile": {
+              "type": "object",
+              "properties": {
+                "minimumIncomeFloor": {
+                  "$ref": "#/$defs/money"
+                },
+                "essentialAccessNeeds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "recordType",
+            "memberIds"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "enterprise": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "enterprise"
+            },
+            "legalName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "jurisdiction": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100
+            },
+            "legalForm": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "ownerClaimIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "workerPersonIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "status": {
+              "enum": [
+                "forming",
+                "active",
+                "distressed",
+                "insolvent",
+                "liquidating",
+                "closed"
+              ]
+            }
+          },
+          "required": [
+            "recordType",
+            "legalName",
+            "jurisdiction",
+            "status"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "economicCell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "economic_cell"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "memberEntityIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "enterpriseIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "parentCellId": {
+              "$ref": "#/$defs/id"
+            },
+            "federationId": {
+              "$ref": "#/$defs/id"
+            },
+            "governanceModel": {
+              "enum": [
+                "member_cooperative",
+                "multi_stakeholder",
+                "contractual_network",
+                "public_common",
+                "hybrid",
+                "other"
+              ]
+            },
+            "decisionRulesRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "reserveAccountIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "recordType",
+            "name",
+            "memberEntityIds",
+            "governanceModel"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "federation": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "federation"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            },
+            "cellIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "minItems": 1,
+              "uniqueItems": true
+            },
+            "charterRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "sharedServiceRefs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              }
+            }
+          },
+          "required": [
+            "recordType",
+            "name",
+            "cellIds",
+            "charterRef"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "asset": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "asset"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "assetClass": {
+              "enum": [
+                "land",
+                "building",
+                "equipment",
+                "inventory",
+                "intellectual_property",
+                "software",
+                "data_resource",
+                "financial_asset",
+                "infrastructure",
+                "ecological_resource",
+                "other"
+              ]
+            },
+            "quantity": {
+              "$ref": "#/$defs/quantity"
+            },
+            "condition": {
+              "enum": [
+                "new",
+                "good",
+                "maintained",
+                "degraded",
+                "impaired",
+                "unknown"
+              ]
+            },
+            "custodianEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "location": {
+              "type": "string",
+              "maxLength": 300
+            },
+            "valuation": {
+              "type": "object",
+              "properties": {
+                "amount": {
+                  "$ref": "#/$defs/money"
+                },
+                "method": {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                "asOf": {
+                  "$ref": "#/$defs/timestamp"
+                },
+                "isIndependent": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "method",
+                "asOf"
+              ],
+              "additionalProperties": false
+            },
+            "encumbranceIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "legalRegistryRef": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "recordType",
+            "name",
+            "assetClass",
+            "quantity",
+            "condition"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "project": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "project"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "sponsorEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "participantEntityIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "objective": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "status": {
+              "enum": [
+                "proposed",
+                "approved",
+                "active",
+                "paused",
+                "completed",
+                "cancelled",
+                "failed"
+              ]
+            },
+            "budget": {
+              "$ref": "#/$defs/money"
+            },
+            "milestones": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "dueAt": {
+                    "$ref": "#/$defs/timestamp"
+                  },
+                  "status": {
+                    "enum": [
+                      "planned",
+                      "in_progress",
+                      "done",
+                      "missed",
+                      "cancelled"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "description",
+                  "status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "recordType",
+            "name",
+            "objective",
+            "status"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "account": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "account"
+            },
+            "accountType": {
+              "enum": [
+                "cash",
+                "deposit",
+                "receivable",
+                "payable",
+                "loan_principal",
+                "reserve",
+                "escrow",
+                "capital",
+                "clearing",
+                "other"
+              ]
+            },
+            "ownerEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "currency": {
+              "$ref": "#/$defs/currency"
+            },
+            "ledgerRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "status": {
+              "enum": [
+                "open",
+                "frozen",
+                "closed",
+                "disputed"
+              ]
+            },
+            "isConsolidationEliminationAccount": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "recordType",
+            "accountType",
+            "ownerEntityId",
+            "currency",
+            "ledgerRef",
+            "status"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "contract": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "contract"
+            },
+            "parties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "entityId": {
+                    "$ref": "#/$defs/id"
+                  },
+                  "role": {
+                    "type": "string",
+                    "maxLength": 100
+                  }
+                },
+                "required": [
+                  "entityId",
+                  "role"
+                ],
+                "additionalProperties": false
+              },
+              "minItems": 2
+            },
+            "jurisdiction": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100
+            },
+            "termsRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "effectiveAt": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "expiresAt": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "status": {
+              "enum": [
+                "draft",
+                "offered",
+                "accepted",
+                "active",
+                "fulfilled",
+                "breached",
+                "disputed",
+                "terminated",
+                "void"
+              ]
+            },
+            "consideration": {
+              "$ref": "#/$defs/money"
+            },
+            "disputeResolutionRef": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "recordType",
+            "parties",
+            "jurisdiction",
+            "termsRef",
+            "effectiveAt",
+            "status"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "ownershipClaim": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "ownership_claim"
+            },
+            "assetId": {
+              "$ref": "#/$defs/id"
+            },
+            "claimantEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "rightType": {
+              "enum": [
+                "legal_title",
+                "beneficial_interest",
+                "usufruct",
+                "license",
+                "security_interest",
+                "residual_cashflow",
+                "governance_right",
+                "custody_only",
+                "other"
+              ]
+            },
+            "share": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            },
+            "priority": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "legalBasisRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "jurisdiction": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "validFrom": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "validUntil": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "verificationStatus": {
+              "enum": [
+                "unverified",
+                "document_checked",
+                "registry_confirmed",
+                "disputed",
+                "rejected"
+              ]
+            }
+          },
+          "required": [
+            "recordType",
+            "assetId",
+            "claimantEntityId",
+            "rightType",
+            "legalBasisRef",
+            "verificationStatus"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "contribution": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "contribution"
+            },
+            "contributorEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "projectId": {
+              "$ref": "#/$defs/id"
+            },
+            "contributionType": {
+              "enum": [
+                "labour",
+                "knowledge",
+                "capital",
+                "equipment",
+                "care",
+                "data",
+                "coordination",
+                "risk_bearing",
+                "infrastructure",
+                "ecological_stewardship",
+                "other"
+              ]
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000
+            },
+            "quantity": {
+              "$ref": "#/$defs/quantity"
+            },
+            "timePeriod": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "$ref": "#/$defs/timestamp"
+                },
+                "to": {
+                  "$ref": "#/$defs/timestamp"
+                }
+              },
+              "required": [
+                "from",
+                "to"
+              ],
+              "additionalProperties": false
+            },
+            "evidence": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "causalAttribution": {
+              "enum": [
+                "not_assessed",
+                "individual",
+                "joint",
+                "shared_infrastructure",
+                "uncertain",
+                "contested"
+              ]
+            },
+            "assessmentRef": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "sciScore": {
+              "type": "number",
+              "minimum": 0
+            },
+            "sciModelVersion": {
+              "type": "string",
+              "maxLength": 80
+            },
+            "rightsDeterminationRef": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "required": [
+            "recordType",
+            "contributorEntityId",
+            "contributionType",
+            "description",
+            "causalAttribution"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "economicEvent": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/baseRecord"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "recordType": {
+              "const": "economic_event"
+            },
+            "eventType": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100
+            },
+            "effectiveAt": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "recordedAt": {
+              "$ref": "#/$defs/timestamp"
+            },
+            "actorEntityId": {
+              "$ref": "#/$defs/id"
+            },
+            "subjectEntityIds": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/id"
+              },
+              "uniqueItems": true
+            },
+            "idempotencyKey": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 200
+            },
+            "causationEventId": {
+              "$ref": "#/$defs/id"
+            },
+            "correlationId": {
+              "$ref": "#/$defs/id"
+            },
+            "payload": {
+              "type": "object"
+            },
+            "evidenceRefs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "approvalRefs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 500
+              }
+            },
+            "reversalOfEventId": {
+              "$ref": "#/$defs/id"
+            },
+            "ledgerTransactionId": {
+              "$ref": "#/$defs/id"
+            }
+          },
+          "required": [
+            "recordType",
+            "eventType",
+            "effectiveAt",
+            "recordedAt",
+            "idempotencyKey",
+            "payload"
+          ]
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/person"
+    },
+    {
+      "$ref": "#/$defs/household"
+    },
+    {
+      "$ref": "#/$defs/enterprise"
+    },
+    {
+      "$ref": "#/$defs/economicCell"
+    },
+    {
+      "$ref": "#/$defs/federation"
+    },
+    {
+      "$ref": "#/$defs/asset"
+    },
+    {
+      "$ref": "#/$defs/project"
+    },
+    {
+      "$ref": "#/$defs/account"
+    },
+    {
+      "$ref": "#/$defs/contract"
+    },
+    {
+      "$ref": "#/$defs/ownershipClaim"
+    },
+    {
+      "$ref": "#/$defs/contribution"
+    },
+    {
+      "$ref": "#/$defs/economicEvent"
+    }
+  ]
+}
