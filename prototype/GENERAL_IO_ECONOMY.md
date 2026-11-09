@@ -95,7 +95,7 @@ Inputs are consumed when production occurs. Newly produced goods enter inventori
 
 ## 4. Product markets and price formation
 
-For each product, firms submit input orders and households submit consumption orders. The order book is scaled by each buyer's budget so the sum of its orders at reference prices does not exceed its configured spending budget.
+For each product, firms submit input orders and households submit consumption orders. The order book is scaled by each buyer's budget with a reserve for the maximum permitted one-period price increase. The realized cash settlement is also capped by the buyer's remaining period budget, so processing markets sequentially cannot silently overdraw the configured budget.
 
 Domestic firms offer their opening inventory. The external supplier offers up to the product's import capacity at its import offer price.
 
