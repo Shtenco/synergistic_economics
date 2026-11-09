@@ -123,10 +123,6 @@ def validate_records(records: list[dict[str, Any]], schema: dict[str, Any]) -> l
             else:
                 check_ref(source_id, field, value, allowed)
 
-        if kind == "economic_event":
-            for index, target_id in enumerate(record.get("subjectEntityIds", [])):
-                check_ref(source_id, f"subjectEntityIds[{index}]", target_id, entity_types)
-
     seen_idempotency: dict[str, str] = {}
     for record in records:
         if not isinstance(record, dict) or record.get("recordType") != "economic_event":
