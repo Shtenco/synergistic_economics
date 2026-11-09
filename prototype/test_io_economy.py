@@ -14,6 +14,16 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertEqual(D(summary["max_abs_physical_balance_error"]), 0)
         self.assertGreater(int(summary["event_count"]), 0)
 
+    def test_production_plan_replenishes_output_inventory_toward_capacity(self):
+        model = InputOutputEconomy()
+        firm = model.firms["farm-north"]
+        firm.inventory["grain"] = firm.config.output_capacity
+        plans = model._plan_production()
+        self.assertEqual(plans["farm-north"], 0)
+        firm.inventory["grain"] = 0
+        plans = model._plan_production()
+        self.assertEqual(plans["farm-north"], firm.config.output_capacity)
+
     def test_multiple_suppliers_exist_for_same_product(self):
         model = InputOutputEconomy()
         grain_suppliers = [
