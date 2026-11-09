@@ -95,9 +95,13 @@ Domestic firms offer their opening inventory. The external supplier offers up to
 
 For product (i):
 - (D_i): total requested quantity;
-- (S_i): offered domestic plus import quantity;
+- (S_i(P_i^t)): quantity offered at or below the current reference price (higher-ask supply is not treated as immediately available);
 - (P_i^t): previous reference price;
 - (eta): price adjustment coefficient.
+
+The imbalance signal is based on supply currently offered at or below the reference price. An import offer above that price does not suppress the shortage signal merely because its capacity exists. As the price adjusts upward and reaches the import ask, that import capacity becomes eligible. This avoids the false signal that expensive, currently ineligible supply has already cleared the market.
+
+The clearing price uses the lowest eligible ask as a floor and a buyer bid ceiling as a cap. Sellers are allocated in ascending ask-price order (merit order); eligible buyers are rationed pro rata if supply is insufficient. The model therefore does not distribute scarce supply pro rata among sellers with different asks.
 
 The imbalance signal is bounded:
 
@@ -113,7 +117,7 @@ widetilde P_i^{t+1}=P_i^t(1+eta z_i)
 
 It is additionally bounded by the configured maximum one-period price movement, the lowest currently available seller ask and the buyer bid ceiling. All eligible trades for one product execute at one uniform clearing price in this first mechanism.
 
-If offered supply is insufficient, eligible buyers receive pro-rata allocations. If a seller cannot offer at the resulting price, its stock remains in inventory. A shortage is reported as desired demand minus actual traded quantity.
+If offered supply is insufficient, eligible buyers receive pro-rata allocations. Suppliers are used in ascending ask-price order. If a seller cannot offer at the resulting price, its stock remains in inventory. A shortage is reported as desired demand minus actual traded quantity.
 
 **Important:** this is one explicit price-discovery rule, not a universal market law. It is intentionally replaceable. Later experiments should compare auction clearing, continuous double auction, posted prices, bargaining, administered prices, cooperative allocation and hybrid mechanisms under identical initial conditions.
 
