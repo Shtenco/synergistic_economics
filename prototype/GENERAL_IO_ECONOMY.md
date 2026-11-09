@@ -57,7 +57,7 @@ A household has:
 - a consumption propensity, which limits the budget submitted to markets;
 - wage income, consumption and expenditure records.
 
-Households are separate agents rather than one representative pooled account. The initial model still uses a simple equal split of each firm's wage bill across the three synthetic households. This is a placeholder, not a claim about actual employment relationships or fair distribution.
+Households are separate agents rather than one representative pooled account. The initial model still uses a simple equal split of each firm's wage bill across the three synthetic households. Wages are credited after the period's market-clearing round, so that wage income affects household purchasing power from the next period onward. Both conventions are placeholders, not claims about actual employment relationships, payroll timing or fair distribution.
 
 ## 3. Production network
 
@@ -113,11 +113,11 @@ z_i = clip((D_i - S_i(P_i)) / max(S_i(P_i), epsilon), -1, 1)
 proposed_price = P_i * (1 + eta * z_i)
 ```
 
-The clearing price uses the lowest eligible ask as a floor and a buyer bid ceiling as a cap. Sellers are allocated in ascending ask-price order (merit order); eligible buyers are rationed pro rata if supply is insufficient. The model does not distribute scarce supply pro rata among sellers with different asks.
+The proposed price is bounded by the configured one-period movement band. The clearing price may rise to the lowest eligible ask only when that ask is both inside the one-period upper price band and no higher than the buyer bid ceiling. If the lowest ask lies above either limit, no trade executes at that ask during the period; the reference price follows the bounded adjustment rule instead of jumping to an unaffordable offer. This prevents a high import ask from violating the stated price-change cap.
 
-The price is additionally bounded by the configured maximum one-period price movement, the lowest currently available seller ask and the buyer bid ceiling. All eligible trades for one product execute at one uniform clearing price in this first mechanism.
+Sellers are allocated in ascending ask-price order (merit order); eligible buyers are rationed pro rata if supply is insufficient. The model does not distribute scarce supply pro rata among sellers with different asks. All eligible trades for one product execute at one uniform clearing price in this first mechanism.
 
-If offered supply is insufficient, eligible buyers receive pro-rata allocations. Suppliers are used in ascending ask-price order. If a seller cannot offer at the resulting price, its stock remains in inventory. A shortage is reported as desired demand minus actual traded quantity.
+If offered supply is insufficient, eligible buyers receive pro-rata allocations. Suppliers are used in ascending ask-price order. If a seller cannot offer at the resulting price, its stock remains in inventory. A shortage is reported as budget-adjusted submitted demand minus actual traded quantity; it is not a direct measure of all unmet household needs.
 
 **Important:** this is one explicit price-discovery rule, not a universal market law. It is intentionally replaceable. Later experiments should compare auction clearing, continuous double auction, posted prices, bargaining, administered prices, cooperative allocation and hybrid mechanisms under identical initial conditions.
 
