@@ -9,7 +9,10 @@
 > **Core proposition:** Build an economy in which individual initiative, competitive discovery, cooperation, productive ownership, technological progress and broad-based prosperity reinforce one another — without concentrating all economic coordination in either a central authority or a handful of private platforms.
 
 ## Research documents
-\n- **[Volume 0 — Synthesis of Economic Schools](research/VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md)** — comparative reconstruction of major economic traditions, mathematical cores, limits, contradictions, conditional synthesis, draft SYNERGY axioms and falsifiable hypotheses.\n
+
+- **[Volume 0 — Synthesis of Economic Schools](research/VOLUME_0_SYNTHESIS_OF_ECONOMIC_SCHOOLS.md)** — comparative reconstruction of major economic traditions, mathematical cores, limits, contradictions, conditional synthesis and falsifiable hypotheses.
+- **[Volume 0A — Axiom Reconciliation and Methodological Audit](research/VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md)** — reconciles Volume 0 and Volume I, distinguishes ontological premises, normative commitments, design principles, operational invariants and empirical hypotheses, and adds financial-integrity and bounded-AI requirements.
+
 The conceptual overview is expanded into standalone research volumes. The first foundational volume is available:
 
 - **[Volume I — Foundations of Synergistic Economics](research/VOLUME_I_FOUNDATIONS.md)** — ontology of the economy, universal constraints, institutional tensions, twelve axioms, derived principles, mechanism-selection framework, mathematical model, constitutional logic and research propositions.
