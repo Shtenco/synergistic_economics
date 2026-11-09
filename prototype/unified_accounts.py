@@ -79,9 +79,11 @@ class DoubleEntryLedger:
             raise BalanceError("journal entry needs at least two postings")
         total_debit = ZERO
         total_credit = ZERO
+        currencies = set()
         for line in entry.postings:
             if line.account_id not in self.accounts:
                 raise BalanceError(f"unknown account: {line.account_id}")
+            currencies.add(self.accounts[line.account_id].currency)
             debit, credit = D(str(line.debit)), D(str(line.credit))
             if not debit.is_finite() or not credit.is_finite() or debit < 0 or credit < 0:
                 raise BalanceError("posting amounts must be finite and non-negative")
@@ -89,6 +91,8 @@ class DoubleEntryLedger:
                 raise BalanceError("one posting cannot contain both debit and credit")
             total_debit += debit
             total_credit += credit
+        if len(currencies) != 1:
+            raise BalanceError("a journal entry cannot mix currencies; use explicit FX clearing legs")
         if total_debit != total_credit:
             raise BalanceError("journal entry is not balanced")
         # Apply only after every validation passes.
@@ -201,6 +205,23 @@ def loan_origination(ledger: DoubleEntryLedger, *, lender_cash: str,
     amount = money(amount)
     if amount <= 0:
         raise BalanceError("loan principal must be positive")
+    account_ids = (lender_cash, lender_receivable, borrower_cash, borrower_payable)
+    if any(account_id not in ledger.accounts for account_id in account_ids):
+        raise BalanceError("loan references an unknown account")
+    lender_cash_account = ledger.accounts[lender_cash]
+    lender_receivable_account = ledger.accounts[lender_receivable]
+    borrower_cash_account = ledger.accounts[borrower_cash]
+    borrower_payable_account = ledger.accounts[borrower_payable]
+    if (lender_cash_account.owner != lender_receivable_account.owner
+            or borrower_cash_account.owner != borrower_payable_account.owner
+            or lender_cash_account.owner == borrower_cash_account.owner):
+        raise BalanceError("loan accounts must belong to distinct lender and borrower entities")
+    if (lender_cash_account.kind != "asset" or lender_receivable_account.kind != "asset"
+            or borrower_cash_account.kind != "asset" or borrower_payable_account.kind != "liability"):
+        raise BalanceError("loan requires lender cash/receivable assets and borrower cash/liability accounts")
+    if len({a.currency for a in (lender_cash_account, lender_receivable_account,
+                                  borrower_cash_account, borrower_payable_account)}) != 1:
+        raise BalanceError("loan accounts must use one currency; model FX separately")
     ledger.post(JournalEntry(
         f"{entry_prefix}-L", "Loan disbursement — lender",
         (Posting(lender_receivable, debit=amount), Posting(lender_cash, credit=amount))))
@@ -253,6 +274,14 @@ def token_issue_as_liability(ledger: DoubleEntryLedger, *, cash_account: str,
     amount = money(amount)
     if amount <= 0:
         raise BalanceError("issuance amount must be positive")
+    if cash_account not in ledger.accounts or token_liability_account not in ledger.accounts:
+        raise BalanceError("token issuance references an unknown account")
+    cash = ledger.accounts[cash_account]
+    liability = ledger.accounts[token_liability_account]
+    if cash.kind != "asset" or liability.kind != "liability" or cash.owner != liability.owner:
+        raise BalanceError("token issuance requires issuer-owned cash asset and token liability")
+    if cash.currency != liability.currency:
+        raise BalanceError("token backing and liability must use the same currency")
     ledger.post(JournalEntry(
         entry_id, "Token issuance against received cash",
         (Posting(cash_account, debit=amount),
