@@ -69,7 +69,7 @@ Let:
 - (ell_f) denote labour per unit of output;
 - (K_f) denote output capacity.
 
-The initial production plan is:
+The initial production plan is inventory-targeted: the firm replenishes its own output stock toward a target equal to one period of its configured output capacity, rather than producing at full capacity indefinitely. This is a deliberately simple stock-control rule; it prevents unsold output from accumulating without bound.
 
 [
 y_f^{plan} = min(K_f, L_f / ell_f)
