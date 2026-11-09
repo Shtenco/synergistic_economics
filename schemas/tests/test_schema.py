@@ -69,8 +69,15 @@ class CanonicalSchemaTests(unittest.TestCase):
 
     def test_malformed_ownership_interval_is_reported_without_crashing(self):
         records = [dict(x) for x in self.examples["records"]]
-        claim = next(x for x in records if x["recordType"] == "ownership_claim")
-        claim["validFrom"] = "not-a-date"
+        records.append({
+            "id": "claim:malformed-time", "schemaVersion": "1.0.0",
+            "recordType": "ownership_claim", "createdAt": "2026-11-09T12:00:00Z",
+            "provenance": {"sourceType": "public_registry"},
+            "assetId": "asset:tractor-001", "claimantEntityId": "person:member-001",
+            "rightType": "legal_title", "share": 0.5,
+            "legalBasisRef": "registry:claim",
+            "verificationStatus": "registry_confirmed", "validFrom": "not-a-date"
+        })
         issues = validate_records(records, self.schema)
         self.assertTrue(any("invalid ownership-claim time interval" in issue for issue in issues))
 
