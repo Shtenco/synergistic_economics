@@ -56,6 +56,24 @@ class CanonicalSchemaTests(unittest.TestCase):
         }
         self.assertFalse(self.validator.is_valid(claim))
 
+    def test_non_object_record_is_reported_without_crashing(self):
+        issues = validate_records([None, "not-a-record"], self.schema)
+        self.assertTrue(any("expected an object" in issue for issue in issues))
+
+    def test_non_string_reference_is_reported_without_crashing(self):
+        records = [dict(x) for x in self.examples["records"]]
+        contribution = next(x for x in records if x["recordType"] == "contribution")
+        contribution["projectId"] = {"bad": "reference"}
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("reference must be a string" in issue for issue in issues))
+
+    def test_malformed_ownership_interval_is_reported_without_crashing(self):
+        records = [dict(x) for x in self.examples["records"]]
+        claim = next(x for x in records if x["recordType"] == "ownership_claim")
+        claim["validFrom"] = "not-a-date"
+        issues = validate_records(records, self.schema)
+        self.assertTrue(any("invalid ownership-claim time interval" in issue for issue in issues))
+
     def test_missing_reference_is_reported(self):
         records = [dict(x) for x in self.examples["records"]]
         contribution = next(x for x in records if x["recordType"] == "contribution")
