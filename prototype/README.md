@@ -31,6 +31,27 @@ python -m unittest discover -s . -p 'test_*.py' -v
 
 Scenarios: baseline, demand_collapse, energy_shock, resource_shock, compound_crisis.
 
+
+## Prototype 2 — General Input-Output Economy
+
+- [io_economy.py](io_economy.py) — data-driven multi-product, multi-firm simulation with multiple suppliers, input recipes, household baskets, product-level market clearing, adaptive prices, import offers, inventories and physical/cash conservation.
+- [Model specification](GENERAL_IO_ECONOMY.md) — entities, production equations, market-clearing rule, accounting identities, scenario assumptions and explicit limitations.
+- [test_io_economy.py](test_io_economy.py) — tests for deterministic execution, multiple suppliers, market and accounting invariants, shocks and flow/stock separation.
+
+### Run Prototype 2
+
+From the repository root:
+
+```bash
+python prototype/io_economy.py --scenario baseline --periods 12
+python prototype/io_economy.py --scenario compound_shock --periods 12
+python -m unittest discover -s prototype -p 'test_*.py' -v
+```
+
+Scenarios: baseline, demand_collapse, energy_import_shock, metals_shortage, compound_shock.
+
+Prototype 2 currently uses immediate cash settlement. Trade credit, maturity schedules, defaults, capital accumulation and ecological constraints are explicitly deferred to separately testable modules; they are not simulated by this version.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
