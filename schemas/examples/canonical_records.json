@@ -21,6 +21,41 @@
       }
     },
     {
+      "id": "enterprise:co-op-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "enterprise",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "public_registry",
+        "evidenceRefs": [
+          "registry:co-op-001"
+        ]
+      },
+      "legalName": "Food Cooperative 001",
+      "jurisdiction": "Example jurisdiction",
+      "legalForm": "cooperative",
+      "workerPersonIds": [
+        "person:member-001"
+      ],
+      "status": "active"
+    },
+    {
+      "id": "project:harvest-001",
+      "schemaVersion": "1.0.0",
+      "recordType": "project",
+      "createdAt": "2026-11-09T12:00:00Z",
+      "provenance": {
+        "sourceType": "system_observed"
+      },
+      "name": "Harvest 001",
+      "sponsorEntityId": "enterprise:co-op-001",
+      "participantEntityIds": [
+        "person:member-001"
+      ],
+      "objective": "Produce and distribute a seasonal harvest",
+      "status": "active"
+    },
+    {
       "id": "cell:food-001",
       "schemaVersion": "1.0.0",
       "recordType": "economic_cell",
