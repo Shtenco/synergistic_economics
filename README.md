@@ -23,6 +23,8 @@ The conceptual overview is expanded into standalone research volumes. The first 
 - **[Volume VI — Benchmark Economies and Experimental Protocols](research/VOLUME_VI_BENCHMARK_ECONOMIES_AND_EXPERIMENTAL_PROTOCOLS.md)** — specifies fair institutional baselines, treatment decomposition, common initial conditions, shock scenarios, outcome metrics, preregistration, robustness, rejection criteria and reproducible reporting.
 - **[Prototype — SYNERGY Kernel](prototype/README.md)** — first dependency-free Python research prototype: double-entry journal checks, event log, bounded production, inventory and budget-balanced allocation, with invariant tests.
 
+- **[Prototype 1 — Seven-Cell Economy](prototype/SEVEN_CELL_ECONOMY.md)** — executable 7-cell simulation with household cash budgets, shared energy, paid material inputs, investment, reserves, bilateral trade credit, insolvency triggers, ecological stocks, five deterministic scenarios and cash-conservation tests. [Scenario results](prototype/results/seven_cell_scenario_comparison.json) · [Python model](prototype/seven_cell_economy.py) · [Tests](prototype/test_seven_cell_economy.py)
+
 - **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
 
 The remaining volumes will be added sequentially after their concepts, models and evidence requirements are developed.
