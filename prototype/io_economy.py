@@ -350,6 +350,7 @@ class InputOutputEconomy:
 
     def step(self, period):
         cash_open = self._system_cash()
+        household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         opening_stock = {
             p.product_id: sum((f.inventory.get(p.product_id, ZERO) for f in self.firms.values()), ZERO)
             for p in self.products
@@ -439,7 +440,7 @@ class InputOutputEconomy:
             household_consumption={k: str(v) for k, v in household_consumption.items()},
             closing_inventory={k: str(v) for k, v in closing_stock.items()},
             shortages={k: str(market[k]["shortage"]) for k in market},
-            wages=wages_total, household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO),
+            wages=wages_total, household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
             cash_error=cash_error, physical_balance_error=physical_error, event_digest=digest
