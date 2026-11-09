@@ -853,11 +853,11 @@ subject to rights floors, essential-service floors, solvency, ecological thresho
 
 If a scalar objective is required for a bounded operational decision, weights must be published and sensitivity-tested. Some constraints must remain hard constraints rather than compensable terms.
 
-# Part V — Draft axioms for SYNERGISTIC ECONOMICS
+# Part V — Proposed constitutional and design commitments
 
-## 32. Status of the axioms
+## 32. Status and logical role of the S1–S12 statements
 
-These are **proposed axioms for the research programme**, not universally proven laws. They must be reviewed for consistency, operational definitions and unintended consequences. Normative commitments (rights, dignity) must be distinguished from empirical hypotheses (network effects, institutional performance).
+These twelve statements are **not a second independent set of foundational axioms**. Following the reconciliation in [Volume 0A — Axiom Reconciliation and Methodological Audit](VOLUME_0A_AXIOM_RECONCILIATION_AND_METHOD_AUDIT.md), they are retained as proposed constitutional/design commitments and research rules derived from, or constrained by, the canonical A1–A12 foundational set in Volume I. They include normative commitments, operational requirements and methodological rules; they are not all empirical propositions of the same logical kind. The mapping and bridge assumptions are documented in Volume 0A.
 
 ### Axiom S1 — Human agency and dignity
 A person is not reducible to productivity, creditworthiness, contribution score or economic utility. Basic rights and due process are not conditional on an economic metric.
