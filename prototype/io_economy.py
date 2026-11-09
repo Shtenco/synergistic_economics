@@ -394,7 +394,6 @@ class InputOutputEconomy:
                 "traded": actual_traded, "shortage": shortage, "price": clearing_price}
 
     def step(self, period):
-        cash_open = self._system_cash()
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         household_consumption_open = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
