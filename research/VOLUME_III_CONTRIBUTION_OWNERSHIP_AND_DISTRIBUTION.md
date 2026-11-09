@@ -983,7 +983,7 @@ Every hypothesis must define population, treatment, comparison, outcome, measure
 - **The Cellular Consortium Economy** provides the proposed institutional setting: voluntary cells, shared assets, digital twins, inter-cell cooperation, UEP, SCI and UOF.
 - **This Volume III** specifies how contribution evidence, ownership rights, contractual claims and distribution mechanisms should interact without being collapsed into one score.
 
-The next research layer should translate these institutional rules into a **formal simulation and accounting specification**: state variables, ledger schemas, event types, allocation algorithms, governance permissions, adversarial test cases and reproducible benchmark scenarios.
+The next research layer is specified in [Volume IV — Formal Simulation and Accounting Kernel](VOLUME_IV_FORMAL_SIMULATION_AND_ACCOUNTING_KERNEL.md): state variables, ledger schemas, event types, allocation algorithms, governance permissions, adversarial test cases and reproducible benchmark scenarios.
 
 ---
 
