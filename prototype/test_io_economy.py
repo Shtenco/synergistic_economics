@@ -72,7 +72,7 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertEqual(sum((h.consumption.get("test-good", D("0")) for h in model.households.values()), D("0")), 0)
         for period in range(2, 6):
             model.step(period)
-        imported = sum((r.imports["test-good"] for r in model.period_results), D("0"))
+        imported = sum((D(r.imports["test-good"]) for r in model.period_results), D("0"))
         self.assertGreater(imported, 0)
 
     def test_import_shock_does_not_break_conservation(self):
