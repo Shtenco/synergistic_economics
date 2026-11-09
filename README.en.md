@@ -3,7 +3,7 @@
 
 **Project:** SYNERGY ECONOMIC  
 **Status:** Foundational conceptual framework / research program  
-**Version:** 0.8 — 10 November 2026  
+**Version:** 0.9 — 10 November 2026  
 **Русская версия:** [README.md](README.md)  
 **Repository:** https://github.com/Shtenco/synergistic_economics
 
@@ -30,6 +30,7 @@ The conceptual overview is expanded into standalone research volumes. The first 
 - **[Volume XII — Theory of Capital, Investment and Productive Project Finance](research/VOLUME_XII_CAPITAL_INVESTMENT_AND_PRODUCTIVE_FINANCE.md)** — distinguishes productive assets, financial claims and ownership rights; formalizes capital formation, project appraisal, NPV/IRR/DSCR, financing structures, risk, collective assets and UOF.
 - **[Volume XIII — Theory of Labour, Economic Contribution, Income and Distribution](research/VOLUME_XIII_LABOR_CONTRIBUTION_INCOME_AND_DISTRIBUTION.md)** — separates labour, contribution, ownership and income; formalizes multidimensional contribution assessment, primary distribution, guarantees, team rewards, collective outcomes, appeals and anti-manipulation safeguards.
 - **[Volume XIV — Theory of Wellbeing, Consumption, Needs and Quality of Life](research/VOLUME_XIV_WELLBEING_CONSUMPTION_NEEDS_AND_QUALITY_OF_LIFE.md)** — develops multidimensional wellbeing, the capability approach, minimum thresholds, public goods, scarcity allocation, ecological limits and intergenerational sustainability.
+- **[Volume XV — Complete Conceptual Architecture of Synergistic Economics](research/VOLUME_XV_COMPLETE_CONCEPTUAL_ARCHITECTURE_OF_SYNERGISTIC_ECONOMICS.md)** — closes the initial conceptual framework by unifying ontology, categories, axioms, causal logic, production, macroeconomics, money, capital, labour, distribution, institutions, wellbeing, ecology, constraints and scientific standards. It does not claim empirical validation.
 - **[Prototype — SYNERGY Kernel](prototype/README.md)** — first dependency-free Python research prototype: double-entry journal checks, event log, bounded production, inventory and budget-balanced allocation, with invariant tests.
 
 - **[Prototype 1 — Seven-Cell Economy](prototype/SEVEN_CELL_ECONOMY.md)** — executable 7-cell simulation with household cash budgets, shared energy, paid material inputs, investment, reserves, bilateral trade credit, insolvency triggers, ecological stocks, five deterministic scenarios and cash-conservation tests. [Scenario results](prototype/results/seven_cell_scenario_comparison.json) · [Python model](prototype/seven_cell_economy.py) · [Tests](prototype/test_seven_cell_economy.py)
@@ -38,7 +39,7 @@ The conceptual overview is expanded into standalone research volumes. The first 
 
 - **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
 
-Volumes VII–XIV progressively develop the theory of reproducible economic capacity, its mathematical representation, network dynamics, institutional architecture and monetary-financial system and capital-investment and distribution architecture. Further thematic volumes will be added as their concepts, models and evidence requirements are developed.
+Volumes VII–XV progressively develop the theory of reproducible economic capacity, its mathematical representation, network dynamics, institutional architecture and monetary-financial system and capital-investment and distribution architecture. Volume XV fixes the current version's complete conceptual architecture; formal integration, calibration and empirical validation remain subsequent stages.
 
 
 ---
