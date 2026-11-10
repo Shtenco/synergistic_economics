@@ -662,3 +662,61 @@ journal and SFC position register are not yet unified. Other event families
 still require explicit posting templates and the entity journal is not yet
 the authoritative source of financial positions. A2.4.4 remains OPEN and
 A2.4.8 remains BLOCKED. PR #4 remains Draft; `main` remains untouched.
+
+
+## 11 November continuation — durable A2.4.4 financial event groups
+
+A further reliability review found that the entity journal's event-ID barrier
+is scoped to one in-memory `EntityJournal` instance. It does not survive a
+process restart. In addition, a multi-event economic transaction could be
+persisted in separate calls without a single all-or-nothing storage boundary.
+
+Added a standard-library SQLite prototype:
+- `prototype/financial_event_store.py` persists immutable event groups,
+  event envelopes and journal postings;
+- a stable group ID and optional causation ID link related events;
+- event IDs are globally unique within the database;
+- identical group replay is idempotent, while changed content under the same
+  group ID and event-ID reuse across groups are rejected;
+- event envelope, event rows and all posting rows are committed in one
+  `BEGIN IMMEDIATE` transaction;
+- SQLite WAL and `synchronous=FULL` are configured;
+- database triggers reject UPDATE/DELETE of committed group, event and
+  posting rows;
+- integrity verification checks SQLite structure, foreign keys, payload
+  hashes, event ordering and the posting-row mirror against the envelope.
+
+Added `audit_financial_event_store.py` and included it in the prototype CI
+wrapper, which now executes fifteen separate A2.4 audit scripts. The wrapper
+sets `PYTHONHASHSEED=0` for deterministic subprocess execution. Negative
+controls cover restart replay, changed group payload, global event-ID reuse,
+binary floating-point amount rejection, immutable rows, injected mid-write
+rollback and detection of out-of-band posting corruption.
+
+Commits for this continuation:
+- `578bf4ee96faca3a7d44b7a5fdb68e975dc4d2a3` — initial SQLite event store;
+- `4ead17d3839edfd09801311b0ecd42eac442ded4` — durable-store adversarial fixture;
+- `f187e8c004fb8e522623cc89927fb06c0d67fdf1` — wire store fixture into prototype CI;
+- `8b82cf7bc76b38803afb5c40419520496497d66b` — per-connection FULL sync,
+  append-only triggers and payload/posting integrity checks;
+- `23c01a006264909da2ac116edad53d61a9655da8` — immutable-row negative controls;
+- `bd8f823f567a64c4bd85be22cb73244e58c51f52` — durable-store contract and
+  production acceptance gates;
+- `f9cb598e290c625de87052d0da94d26f34ca9678` — fail-closed integrity handling;
+- `ec58bdb52af01173232054effc02d1eef616956e` — out-of-band posting-corruption
+  detection;
+- `90177269dc33a5a100369c19cc79d5cc02d6adc2` — deterministic CI subprocess
+  environment.
+
+**Scope boundary:** the store is a single-host SQLite component prototype. It
+is downstream of accounting validation and does not replace
+`EntityJournal.post()`. It atomically persists event envelopes and postings,
+but it does **not** yet update SFC instrument positions or sector balance
+sheets in the same transaction, nor does it provide distributed replication,
+production backup/restore, key management or operational controls. It must
+not be represented as a production financial ledger.
+
+**Execution status:** the code and CI wrapper are committed. Exact-head GitHub
+Actions execution and logs remain pending; no PASS is claimed. A2.4.4 remains
+OPEN, A2.4.7 remains OPEN, and A2.4.8 remains BLOCKED. PR #4 remains Draft and
+unmerged; `main` remains untouched.
