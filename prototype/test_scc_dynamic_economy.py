@@ -114,6 +114,20 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         difference = result["paired_differences_vs_market"]["cellular"]["final_fulfilment_rate"]
         self.assertEqual(difference["n"], 4)
 
+    def test_dynamic_model_accepts_distinct_sparse_communication_network(self):
+        sparse_messages = (
+            ("cell-1", "cell-2"),
+            ("cell-2", "cell-3"),
+            ("cell-3", "cell-4"),
+        )
+        model = DynamicCellularEconomy(
+            "cellular", seed=8, shock="none", cellular_hops=2,
+            communication_edges=sparse_messages,
+        )
+        model.run(8)
+        self.assertTrue(model.validate())
+        self.assertGreaterEqual(model.summary()["total_messages"], 0)
+
     def test_invalid_policy_rejected(self):
         with self.assertRaises(DynamicEconomyError):
             DynamicCellularEconomy("wishful-thinking")
