@@ -61,6 +61,9 @@ class CellSpec:
     resource_regeneration: float = 0.35
     resource_capacity: float = 18.0
     safety_stock: float = 0.45
+    trade_consent: bool = True
+    relay_consent: bool = True
+    allowed_counterparties: frozenset[str] | None = None
 
 
 @dataclass
@@ -226,6 +229,10 @@ class DynamicCellularEconomy:
         ids = {s.cell_id for s in self.specs}
         if ids != {f"cell-{i}" for i in range(1, 8)}:
             raise DynamicEconomyError("the Stage-B topology expects cell-1 through cell-7")
+        for spec in self.specs:
+            if (spec.allowed_counterparties is not None
+                    and not spec.allowed_counterparties.issubset(ids)):
+                raise DynamicEconomyError("unknown allowed counterparty")
         outputs = [s.output for s in self.specs]
         if set(outputs) != set(("food", "materials", "energy", "machinery",
                                 "logistics", "software", "care")):
