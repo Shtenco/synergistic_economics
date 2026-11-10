@@ -144,7 +144,35 @@ Experiments should compare:
 - cell-level versus household-level inequality;
 - distribution under supply shocks and network fragmentation.
 
-## 8. Limitations and next work
+## 8. Preliminary paired household-distribution results
+
+The CI experiment ran 20 paired seeds, 24 periods, the compound shock, two-hop cellular reach, ten synthetic households per cell and priority dispersion 0.4. For each seed and economic regime, Stage B was simulated once. Proportional and priority-weighted household rationing then received the exact same per-cell physical consumption and persistent household panel.
+
+| Stage-B regime | Overall fulfilment (both rules) | Essential fulfilment (both rules) | Household lower-decile essential fulfilment: proportional | Priority-weighted | Household minimum: proportional | Priority-weighted | Essential-fulfilment Gini: proportional | Priority-weighted |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Cellular | 46.21% | 42.64% | 31.26% | 23.75% | 29.65% | 17.09% | 0.2411 | 0.2946 |
+| Central | 47.04% | 44.27% | 11.18% | 11.58% | 8.37% | 7.56% | 0.4727 | 0.4773 |
+| Cooperative | 51.99% | 45.50% | 31.81% | 27.79% | 28.77% | 20.71% | 0.1844 | 0.2055 |
+| Market | 47.63% | 46.57% | 3.54% | 3.56% | 2.18% | 2.14% | 0.4348 | 0.4356 |
+
+The aggregate fulfilment columns are unchanged by household rationing, as they must be: both rules distribute the same already-consumed physical quantities. The household lower tail, minimum and Gini can nevertheless change substantially.
+
+Paired priority-weighted-minus-proportional differences:
+
+| Regime | Lower-decile essential fulfilment | Minimum household essential fulfilment | Essential-fulfilment Gini |
+|---|---:|---:|---:|
+| Cellular | −7.50 pp (95% CI −8.08 to −6.93) | −12.56 pp (−13.33 to −11.79) | +0.0535 (+0.0504 to +0.0567) |
+| Central | +0.40 pp (+0.32 to +0.48) | −0.81 pp (−0.91 to −0.71) | +0.0046 (+0.0034 to +0.0057) |
+| Cooperative | −4.02 pp (−4.33 to −3.72) | −8.06 pp (−8.71 to −7.41) | +0.0258 (+0.0238 to +0.0277) |
+| Market | +0.016 pp (+0.002 to +0.030) | −0.035 pp (−0.070 to +0.001) | +0.00074 (+0.00044 to +0.00105) |
+
+**Interpretation.** In this synthetic sample, the market regime has the highest aggregate essential fulfilment (46.57%) but the weakest household lower decile (3.54%). The cooperative regime has the highest overall fulfilment (51.99%) and a much stronger lower-decile result (31.81%) under proportional rationing. Cellular is close to the cooperative lower tail (31.26%) but has lower aggregate essential fulfilment (42.64%). These comparisons expose a real distinction between aggregate service and the distribution of that service; they do not establish a real-world ranking.
+
+The priority-weighted rule does not improve aggregate consumption. With random priority weights drawn independently of household need, it substantially worsens the cellular and cooperative lower tails and increases their inequality. This is a warning against arbitrary priority scores, not evidence that all needs-based priority rules are harmful. Priority must be grounded in explicit, auditable need criteria, not demographic proxies or a score of human worth.
+
+The experiment is post-hoc: it cannot change production, trade, employment or total output. Its household profiles are synthetic and not calibrated to survey data. The 95% intervals are normal-approximation intervals across 20 seeds. The results are exploratory and must not be represented as measured human welfare.
+
+## 9. Limitations and next work
 
 Not yet implemented:
 - household income, wages, transfers, ownership income or purchasing power;
