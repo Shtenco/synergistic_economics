@@ -42,18 +42,18 @@ Every seed is paired across regimes. The 100-seed summaries below use the same 1
 - **Unmet demand and input shortage:** physical quantities, reported separately.
 - **Logistics and coordination costs:** synthetic diagnostics. Coordination cost is currently a fixed charge per executed allocation; it excludes failed messages, search, governance, enforcement and the labour time consumed by coordination.
 
-The fixed-price indices are not GDP, value added, income, profit, utility or empirically measured welfare. Logistics and monetary coordination diagnostics are not calibrated to the consumption index and must not be subtracted from it to claim net welfare. Coordination labour is deducted from productive capacity, but its default per-message time is synthetic and requires sensitivity analysis. Non-cellular message counts are estimates; cellular messages are counted from the hop-by-hop trace. Governance, enforcement, meetings and dispute resolution remain incomplete.
+The fixed-price indices are not GDP, value added, income, profit, utility or empirically measured welfare. Logistics and monetary coordination diagnostics are not calibrated to the consumption index and must not be subtracted from it to claim net welfare. Coordination labour is deducted from productive capacity, but packet and record time assumptions are synthetic and require sensitivity analysis. Non-cellular message counts are estimates; cellular packets and payload records are counted from the hop-by-hop trace after batching. Governance, enforcement, meetings and dispute resolution remain incomplete.
 
 ## 4. Baseline: no external shock
 
 100 paired seeds, 24 periods, two-hop local reach for the cellular arm.
 
-| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Coordination labour hours |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Market | 51.78% | 51.65–51.91% | 51.15% | 51.03–51.27% | 51.62% | 0.360 | 706.11 | 1,644 | 68.47 | 16.44 |
-| Central | 56.40% | 55.97–56.83% | 54.84% | 54.52–55.16% | 55.66% | 0.235 | 771.81 | 1,885 | 76.58 | 18.85 |
-| Cooperative | 60.27% | 60.11–60.44% | 53.17% | 52.99–53.36% | 56.26% | 0.113 | 824.68 | 2,932 | 121.33 | 29.32 |
-| Cellular, 2 hops | 51.87% | 51.75–51.98% | 49.07% | 48.95–49.19% | 50.35% | 0.151 | 721.97 | 11,189 | 123.32 | 111.89 |
+| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Packets | Payload records | Coordination cost | Coordination labour hours |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Market | 51.78% | 51.65–51.91% | 51.15% | 51.03–51.27% | 51.62% | 0.360 | 706.11 | 1,644 | 1,644 | 68.47 | 16.44 |
+| Central | 56.40% | 55.97–56.83% | 54.84% | 54.52–55.16% | 55.66% | 0.235 | 771.81 | 1,885 | 1,885 | 76.58 | 18.85 |
+| Cooperative | 60.27% | 60.11–60.44% | 53.17% | 52.99–53.36% | 56.26% | 0.113 | 824.68 | 2,932 | 2,932 | 121.33 | 29.32 |
+| Cellular, 2 hops | 51.87% | 51.75–51.98% | 49.07% | 48.95–49.19% | 50.35% | 0.151 | 721.97 | 10,141 | 11,190 | 121.22 | 103.51 |
 
 Paired mean differences versus the market arm:
 - Central: final fulfilment **+4.62 percentage points** (95% CI +4.16 to +5.08); essential fulfilment +3.69 points; fixed-price consumption index +65.70 (CI +58.86 to +72.55).
@@ -66,14 +66,14 @@ Paired mean differences versus the market arm:
 
 The compound shock combines a food-demand increase, reduced resource regeneration and lower productivity. 100 paired seeds, 24 periods.
 
-| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Coordination labour hours |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Market | 47.50% | 47.35–47.64% | 46.67% | 46.49–46.86% | 47.23% | 0.426 | 761.23 | 1,612 | 66.50 | 16.12 |
-| Central | 46.22% | 46.01–46.42% | 44.12% | 43.90–44.33% | 45.53% | 0.317 | 747.99 | 1,814 | 72.12 | 18.14 |
-| Cooperative | 51.21% | 51.06–51.35% | 45.60% | 45.44–45.76% | 48.22% | 0.150 | 826.42 | 2,858 | 116.72 | 28.58 |
-| Cellular, 2 hops | 46.00% | 45.85–46.15% | 42.77% | 42.58–42.96% | 44.30% | 0.170 | 754.18 | 11,608 | 125.22 | 116.08 |
-| Cellular, 3 hops | 46.67% | 46.53–46.82% | 42.12% | 41.96–42.29% | 44.38% | 0.160 | 759.45 | 12,307 | 133.66 | 123.07 |
-| Cellular, 1 hop | 14.93% | 14.77–15.10% | 10.87% | 10.69–11.06% | 13.20% | 0.360 | 263.67 | 3,890 | 38.82 | 38.90 |
+| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Packets | Payload records | Coordination cost | Coordination labour hours |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Market | 47.50% | 47.35–47.64% | 46.67% | 46.49–46.86% | 47.23% | 0.426 | 761.23 | 1,612 | 1,612 | 66.50 | 16.12 |
+| Central | 46.22% | 46.01–46.42% | 44.12% | 43.90–44.33% | 45.53% | 0.317 | 747.99 | 1,814 | 1,814 | 72.12 | 18.14 |
+| Cooperative | 51.21% | 51.06–51.35% | 45.60% | 45.44–45.76% | 48.22% | 0.150 | 826.42 | 2,858 | 2,858 | 116.72 | 28.58 |
+| Cellular, 2 hops | 46.00% | 45.85–46.15% | 42.77% | 42.58–42.96% | 44.30% | 0.170 | 754.18 | 10,526 | 11,608 | 123.07 | 107.43 |
+| Cellular, 3 hops | 46.68% | 46.53–46.82% | 42.12% | 41.96–42.29% | 44.38% | 0.160 | 11,209 | 12,305 | 131.45 | 114.28 |
+| Cellular, 1 hop | 14.93% | 14.77–15.10% | 10.87% | 10.69–11.06% | 13.20% | 0.360 | 263.67 | 3,890 | 3,890 | 38.82 | 38.90 |
 
 Paired mean differences versus the market arm:
 - Cooperative: final fulfilment **+3.71 points** (CI +3.63 to +3.79); weighted fulfilment +0.99 points; consumption index +65.19 (CI +63.96 to +66.41); essential fulfilment −1.07 points.
