@@ -31,6 +31,8 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_capital_bridge.py
       - name: A2.4.2 same-cohort capital integration fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_same_cohort_capital.py
+      - name: A2.4.2 B8.1 cohort ontology and state transitions
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_b81_cohort_contract.py
       - name: A2.4.3 native-unit product balances
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_dimensions.py
       - name: A2.4.3 typed product valuation adapter
