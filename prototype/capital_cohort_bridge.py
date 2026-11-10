@@ -19,10 +19,11 @@ class CapitalBridgeError(ValueError):
     """Invalid cohort state or an unsafe mapping into the SCCE engine."""
 
 
+# Match the B8.1 active-cohort operating-state vocabulary exactly.
+# Final retirement is a stock-removal event, not a persistent operating state.
 OPERATING_STATES = {
-    "operating", "reserve", "repair", "remanufacturing", "storage", "retired"
+    "operating", "reserve", "diagnostics", "repair", "remanufacturing", "storage"
 }
-NON_RETIRED_STATES = OPERATING_STATES - {"retired"}
 RETIREMENT_REASONS = {"none", "planned", "failure", "obsolescence", "accident", "other"}
 
 
@@ -95,11 +96,10 @@ def validate_cohort(cohort: CapitalCohort) -> None:
     if (not isinstance(cohort.retirement_reason, str)
             or cohort.retirement_reason not in RETIREMENT_REASONS):
         raise CapitalBridgeError("unknown retirement reason")
-    if cohort.operating_status == "retired":
-        if cohort.retirement_reason == "none":
-            raise CapitalBridgeError("retired cohort requires an explicit retirement reason")
-    elif cohort.retirement_reason != "none":
-        raise CapitalBridgeError("non-retired cohort cannot carry a final retirement reason")
+    if cohort.retirement_reason != "none":
+        raise CapitalBridgeError(
+            "active cohort records must use retirement_reason='none'; "
+            "final retirement removes quantity through a separate transition event")
 
 
 def aggregate_capital_services(
@@ -130,8 +130,11 @@ def aggregate_capital_services(
             raise CapitalBridgeError(f"cohort references unknown cell: {cohort.cell_id}")
 
         quantity = float(cohort.quantity)
-        if cohort.operating_status != "retired":
-            physical[cohort.cell_id] += quantity
+        # Every record in this adapter is an extant physical cohort. A final
+        # retirement is represented by removing quantity in the B8.1 state
+        # transition and recording its retirement event, not by retaining a
+        # pseudo-state that is absent from the canonical B8.1 state vocabulary.
+        physical[cohort.cell_id] += quantity
         if cohort.operating_status == "operating":
             operating[cohort.cell_id] += quantity
             services[cohort.cell_id] += (
