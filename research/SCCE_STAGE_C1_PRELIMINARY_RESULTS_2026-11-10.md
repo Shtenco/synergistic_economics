@@ -130,7 +130,7 @@ The minimum-household measure reinforces the warning. At a 25% floor, cellular m
 
 This is not evidence that a 75% floor is intrinsically best, or that proportional allocation is a complete theory of fairness. It shows that a nominal floor does not protect anyone when total physical supply is below the combined floor claims. If a protected minimum is a constitutional commitment, it must be paired with an explicit supply guarantee, emergency procurement/reserve mechanism, or a transparent statement that the guarantee is infeasible under current physical constraints. A rationing formula cannot manufacture the missing goods.
 
-## 7. Limitations
+## 8. Limitations
 
 - Household needs and priorities are synthetic, not survey-calibrated.
 - The household bridge is post-hoc: household allocations do not yet feed back into Stage-B production or inter-cell matching.
@@ -139,9 +139,9 @@ This is not evidence that a 75% floor is intrinsically best, or that proportiona
 - A 20-seed experiment is exploratory; larger seed counts and parameter sensitivity are required.
 - Fulfilment rates are physical allocation metrics, not a complete measure of welfare.
 
-## 8. Decision
+## 9. Decision
 
-Stage C1 now exposes a distributional effect that cell-level averages conceal. The current evidence rejects the assumption that priority-weighted rationing is automatically more equitable. Before any endogenous household economy is integrated into SCCE, the allocator should include a protected essential floor and demonstrate that it improves lower-tail outcomes without violating physical conservation or cell autonomy.
+Stage C1 exposes a distributional effect that cell-level averages conceal. The current evidence rejects the assumption that arbitrary priority weighting is automatically more equitable. It also does **not** show that the tested floor-priority rule improves the lower tail under the compound shock: a 25% floor leaves a priority-weighted residual that worsens lower-tail outcomes, while 50% and 75% floors are largely non-binding because physical supply is below the combined floor claims. The next step is not to tune the floor fraction until a synthetic metric looks favourable. It is to test explicit supply assurance—reserve capacity, redundancy, emergency procurement and voluntary mutual aid—then integrate household requests into local cell transitions under the Stage-C2 design.
 
 ---
 
