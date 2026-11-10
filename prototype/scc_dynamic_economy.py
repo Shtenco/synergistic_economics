@@ -118,6 +118,8 @@ class PeriodResult:
     output_by_product: Dict[str, float]
     final_consumption_by_product: Dict[str, float]
     final_demand_by_product: Dict[str, float]
+    final_demand_by_cell: Dict[str, Dict[str, float]]
+    final_consumption_by_cell: Dict[str, Dict[str, float]]
     essential_fulfilment: float
     weighted_fulfilment: float
     unmet_final_units: float
@@ -656,6 +658,9 @@ class DynamicCellularEconomy:
         priority_by_cell = {cid: {} for cid in self.cells}
         demand_by_cell: Dict[str, Dict[str, float]] = {cid: {} for cid in self.cells}
         served_by_cell = {cid: 0.0 for cid in self.cells}
+        served_by_cell_product = {
+            cid: {p: 0.0 for p in FINAL_PRODUCTS} for cid in self.cells
+        }
         weighted_demand = weighted_served = total_demand = 0.0
         for cid, c in self.cells.items():
             for p in FINAL_PRODUCTS:
@@ -671,6 +676,7 @@ class DynamicCellularEconomy:
                 total_demand += need
                 weighted_demand += need * priority
                 served_by_cell[cid] += local
+                served_by_cell_product[cid][p] += local
                 weighted_served += local * priority
 
         # Remaining demand is matched through the same institutional rule.
@@ -696,6 +702,7 @@ class DynamicCellularEconomy:
             buyer = self.cells[a.buyer]
             buyer.stocks[a.product] = max(0.0, buyer.stocks[a.product] - a.quantity)
             served_by_cell[a.buyer] += a.quantity
+            served_by_cell_product[a.buyer][a.product] += a.quantity
             priority = buyer.spec.priorities.get(a.product, 1.0)
             weighted_served += a.quantity * priority
         final_served_by_buyer = {(p, cid): 0.0 for p in FINAL_PRODUCTS for cid in self.cells}
@@ -772,6 +779,8 @@ class DynamicCellularEconomy:
         resource_stock = sum(c.stocks["raw_resource"] for c in self.cells.values())
         result = PeriodResult(
             period, output_by_product, final_consumption, final_demand_totals,
+            {cid: dict(values) for cid, values in demand_by_cell.items()},
+            {cid: dict(values) for cid, values in served_by_cell_product.items()},
             essential_fulfilment, weighted_fulfilment,
             max(0.0, total_demand - sum(served_by_cell.values())),
             total_input_shortage, logistics, coordination, message_count,
