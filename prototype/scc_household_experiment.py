@@ -75,6 +75,7 @@ def run_household_distribution_experiment(
                 cellular_hops=cellular_hops,
             )
             model.run(periods)
+            model.validate()
             distributions = {}
             for household_policy in HOUSEHOLD_POLICIES:
                 # The same seed preserves a stable household panel across all
