@@ -416,7 +416,15 @@ class DynamicCellularEconomy:
         plans: Dict[str, float] = {}
         input_need: Dict[str, Dict[str, float]] = {p: {} for p in INPUT_PRODUCTS}
         planning_world = MatchWorld(
-            tuple(MatchCell(cid, {}, {}, {}, {}) for cid in self.cells),
+            tuple(
+                MatchCell(
+                    cid, {}, {}, {}, {},
+                    trade_consent=self.cells[cid].spec.trade_consent,
+                    relay_consent=self.cells[cid].spec.relay_consent,
+                    allowed_counterparties=self.cells[cid].spec.allowed_counterparties,
+                )
+                for cid in self.cells
+            ),
             self.edges, BASE_PRICES,
             self.transport_cost_per_hop, self.transaction_cost,
             self.communication_edges)
