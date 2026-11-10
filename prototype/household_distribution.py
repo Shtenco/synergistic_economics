@@ -176,6 +176,26 @@ def allocate_households(
     )
 
 
+def allocate_period_households(
+    households: Sequence[Household],
+    period_result,
+    policy: str = "proportional",
+) -> tuple[HouseholdAllocation, ...]:
+    """Distribute Stage-B cell consumption without counting it a second time.
+
+    The adapter consumes PeriodResult.final_consumption_by_cell, which is the
+    physical quantity already counted as cell-level final consumption.
+    Returned household allocations are a disaggregation of that same quantity,
+    not an additional delivery or consumption event.
+    """
+    cell_supply = getattr(period_result, "final_consumption_by_cell", None)
+    if not isinstance(cell_supply, Mapping):
+        raise HouseholdDistributionError(
+            "period result must expose final_consumption_by_cell"
+        )
+    return allocate_households(households, cell_supply, policy)
+
+
 def evaluate_households(
     households: Sequence[Household],
     allocations: Sequence[HouseholdAllocation],
