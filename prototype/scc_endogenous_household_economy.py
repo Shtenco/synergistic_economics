@@ -20,6 +20,7 @@ from scc_dynamic_economy import (
     POLICIES,
 )
 from scc_household_bridge import households_from_cell_demand
+from care_service_queue import CareServiceQueue
 from household_distribution import (
     Household,
     HouseholdAllocation,
@@ -78,6 +79,7 @@ class EndogenousHouseholdEconomy:
         backlog_retention: float = 0.5,
         max_backlog_periods: float = 1.0,
         backlog_service_order: str = "backlog_first",
+        max_care_queue_age_periods: int = 3,
     ):
         if policy not in POLICIES:
             raise EndogenousHouseholdError("unknown economic policy")
@@ -91,6 +93,8 @@ class EndogenousHouseholdEconomy:
             raise EndogenousHouseholdError("essential_floor_fraction must be in [0, 1]")
         if backlog_service_order not in ("current_first", "backlog_first"):
             raise EndogenousHouseholdError("backlog_service_order must be current_first or backlog_first")
+        if not isinstance(max_care_queue_age_periods, int) or max_care_queue_age_periods < 1:
+            raise EndogenousHouseholdError("max_care_queue_age_periods must be a positive integer")
 
         self.policy = policy
         self.seed = seed
@@ -101,6 +105,7 @@ class EndogenousHouseholdEconomy:
         self.backlog_retention = backlog_retention
         self.max_backlog_periods = max_backlog_periods
         self.backlog_service_order = backlog_service_order
+        self.max_care_queue_age_periods = max_care_queue_age_periods
 
         self.base_specs = DynamicCellularEconomy.default_specs(seed)
         self.base_specs_by_id = {spec.cell_id: spec for spec in self.base_specs}
@@ -125,13 +130,26 @@ class EndogenousHouseholdEconomy:
         # Only delayed care-service claims carry over. Recurring food needs are
         # period-specific: unmet food is recorded as deprivation exposure, not
         # converted into a larger food order in the next period.
+        self.care_queues = {
+            h.household_id: CareServiceQueue(
+                capacity=float(h.essential_needs.get("care", 0.0))
+                * self.max_backlog_periods,
+                max_age_periods=self.max_care_queue_age_periods,
+                retention=self.backlog_retention,
+            )
+            for h in self.households
+        }
+        # Numeric mirror retained for the demand-signal interface.
         self.essential_backlog = {
             h.household_id: {
-                p: 0.0 for p in h.essential_needs
-                if p in CARRYOVER_ESSENTIAL_PRODUCTS
+                p: self.care_queues[h.household_id].total_quantity
+                for p in h.essential_needs if p in CARRYOVER_ESSENTIAL_PRODUCTS
             }
             for h in self.households
         }
+        self.cumulative_expired_care = 0.0
+        self.cumulative_attrited_care = 0.0
+        self.cumulative_unqueued_care = 0.0
         self.cumulative_unmet_food = {h.household_id: 0.0 for h in self.households}
         self._cumulative_food_need = {h.household_id: 0.0 for h in self.households}
         self._cumulative_food_served = {h.household_id: 0.0 for h in self.households}
@@ -278,20 +296,21 @@ class EndogenousHouseholdEconomy:
             for product, need in state["essential"].items():
                 delivered = float(claim.essential_served.get(product, 0.0))
                 if product in CARRYOVER_ESSENTIAL_PRODUCTS:
-                    old_backlog = float(state["opening_backlog"].get(product, 0.0))
+                    queue = self.care_queues[base.household_id]
                     if self.backlog_service_order == "current_first":
                         current_served = min(float(need), delivered)
-                        backlog_served = max(0.0, delivered - current_served)
+                        backlog_request = max(0.0, delivered - current_served)
+                        backlog_served = queue.serve_fifo(backlog_request)
                     else:
-                        backlog_served = min(old_backlog, delivered)
+                        backlog_served = queue.serve_fifo(delivered)
                         current_served = min(
                             float(need), max(0.0, delivered - backlog_served))
-                    residual_backlog = max(0.0, old_backlog - backlog_served)
                     current_unmet = max(0.0, float(need) - current_served)
-                    retained = self.backlog_retention * (
-                        residual_backlog + current_unmet)
-                    cap = float(base.essential_needs.get(product, 0.0)) * self.max_backlog_periods
-                    next_backlog[product] = min(cap, retained)
+                    queue_update = queue.advance_and_add(current_unmet, period)
+                    self.cumulative_expired_care += queue_update["expired"]
+                    self.cumulative_attrited_care += queue_update["attrited"]
+                    self.cumulative_unqueued_care += queue_update["overflow"]
+                    next_backlog[product] = queue.total_quantity
                     current_care_demand += float(need)
                     current_care_served += current_served
                     self._cumulative_care_need[base.household_id] += float(need)
@@ -373,11 +392,13 @@ class EndogenousHouseholdEconomy:
             if not 0.0 - EPS <= result.lower_decile_current_essential_fulfilment <= 1.0 + EPS:
                 raise EndogenousHouseholdError("lower-decile fulfilment outside [0, 1]")
         for household_id, products in self.essential_backlog.items():
-            base = self.households_by_id[household_id]
+            queue = self.care_queues[household_id]
+            queue.validate()
             for product, quantity in products.items():
-                cap = float(base.essential_needs.get(product, 0.0)) * self.max_backlog_periods
-                if quantity < -EPS or quantity > cap + EPS:
-                    raise EndogenousHouseholdError("household essential backlog exceeds its cap")
+                if product not in CARRYOVER_ESSENTIAL_PRODUCTS:
+                    raise EndogenousHouseholdError("only queueable services may carry over")
+                if abs(quantity - queue.total_quantity) > 1e-8:
+                    raise EndogenousHouseholdError("care queue mirror does not reconcile")
         return True
 
     def summary(self):
@@ -409,6 +430,7 @@ class EndogenousHouseholdEconomy:
             "policy": self.policy,
             "household_policy": self.household_policy,
             "backlog_service_order": self.backlog_service_order,
+            "max_care_queue_age_periods": self.max_care_queue_age_periods,
             "seed": self.seed,
             "shock": self.shock,
             "periods": len(self.period_results),
@@ -429,6 +451,14 @@ class EndogenousHouseholdEconomy:
             "total_care_delivered": total_care_delivered,
             "cumulative_care_backlog_served": cumulative_care_backlog_served,
             "cumulative_unmet_food_units": sum(self.cumulative_unmet_food.values()),
+            "cumulative_expired_care_claim_units": self.cumulative_expired_care,
+            "cumulative_attrited_care_claim_units": self.cumulative_attrited_care,
+            "cumulative_unqueued_care_claim_units": self.cumulative_unqueued_care,
+            "care_queue_age_distribution": {
+                str(age): sum(queue.age_distribution().get(age, 0.0)
+                              for queue in self.care_queues.values())
+                for age in range(self.max_care_queue_age_periods)
+            },
             "cumulative_lower_decile_current_essential_fulfilment": sorted_rates[lower_index],
             "cumulative_minimum_current_essential_fulfilment": min(sorted_rates, default=1.0),
             "cumulative_household_essential_gini": self._gini(household_rates),
