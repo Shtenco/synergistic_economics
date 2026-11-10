@@ -147,7 +147,7 @@ class FinancialEventStore:
                     ).fetchall()
                     for group in groups:
                         rows = connection.execute(
-                            "SELECT event_id FROM events WHERE group_id = ? ORDER BY rowid",
+                            "SELECT event_id FROM events WHERE group_id = ? ORDER BY event_index",
                             (group["group_id"],),
                         ).fetchall()
                         for event_index, row in enumerate(rows):
@@ -335,7 +335,7 @@ class FinancialEventStore:
                     if not isinstance(payload_events, list) or not payload_events:
                         return False
                     stored_events = connection.execute(
-                        "SELECT event_id, event_type, effective_period, payload_sha256, payload_json "
+                        "SELECT event_id, event_type, effective_period, event_index, payload_sha256, payload_json "
                         "FROM events WHERE group_id = ? ORDER BY rowid",
                         (group["group_id"],),
                     ).fetchall()
