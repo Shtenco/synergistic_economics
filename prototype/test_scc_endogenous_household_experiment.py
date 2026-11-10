@@ -13,8 +13,10 @@ class SCCEEndogenousHouseholdExperimentTests(unittest.TestCase):
             runs=2, shock="compound", periods=6, cellular_hops=2,
             households_per_cell=5, priority_dispersion=0.3,
             backlog_retention=0.5, max_backlog_periods=1.0,
+            max_care_queue_age_periods=2,
         )
         self.assertEqual(result["runs"], 2)
+        self.assertEqual(result["max_care_queue_age_periods"], 2)
         self.assertEqual(len(result["paired_runs"]), 2 * 4 * 3)
         self.assertEqual(
             result["summary"]["cellular"]["proportional"]
