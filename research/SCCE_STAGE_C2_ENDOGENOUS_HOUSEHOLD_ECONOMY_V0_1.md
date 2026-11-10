@@ -71,7 +71,7 @@ The household layer connects to the cellular economy through explicit, typed edg
 - **membership/governance:** household to cell, with consent and decision rights;
 - **care/community support:** household-to-household or cell-to-household service links.
 
-A household request can be visible only to its chosen provider, authorized federation or explicitly consented discovery network. Personal need data must not be broadcast to all cells by default.
+A household request can be visible only to its chosen provider, authorized federation or explicitly consented discovery network. Personal need data must not be broadcast to all cells by default. The first C2-A1 prototype suppresses aggregates below a minimum contributor count and omits individual identifiers and priority weights. This is only a small-group disclosure control, **not formal differential privacy**: repeated-query differencing, auxiliary information and collusion remain unaddressed and must be tested before real household data are used.
 
 A cell's household-facing demand signal is an aggregate of authorized requests, not an unrestricted copy of household records. Public aggregate signals must be privacy-preserving and must not permit trivial re-identification in small cells.
 
