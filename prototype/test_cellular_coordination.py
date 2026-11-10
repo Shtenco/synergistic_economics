@@ -102,6 +102,14 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(set(result["summary"]), {
             "market", "central", "cooperative", "cellular"
         })
+        stats = result["summary"]["cellular"]["fulfilment_rate"]
+        self.assertEqual(stats["n"], 5)
+        self.assertLessEqual(stats["ci95_low"], stats["mean"])
+        self.assertGreaterEqual(stats["ci95_high"], stats["mean"])
+        self.assertEqual(
+            result["paired_differences_vs_market"]["cellular"]["fulfilment_rate"]["n"],
+            5,
+        )
 
     def test_invalid_local_horizon_rejected(self):
         with self.assertRaises(CoordinationError):
