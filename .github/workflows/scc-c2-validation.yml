@@ -5,6 +5,8 @@ on:
     paths:
       - "prototype/scc_endogenous_household_*.py"
       - "prototype/scc_household_signals.py"
+      - "prototype/care_service_queue.py"
+      - "prototype/test_care_service_queue.py"
       - "prototype/test_scc_endogenous_household_*.py"
       - "prototype/test_scc_household_signals.py"
       - ".github/workflows/scc-c2-validation.yml"
