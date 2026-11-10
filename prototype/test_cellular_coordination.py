@@ -89,6 +89,22 @@ class CellularCoordinationTests(unittest.TestCase):
         for allocations in allocators:
             self.assertEqual(allocations, [])
 
+    def test_trade_opt_out_suppresses_commercial_request_broadcast(self):
+        world = World(
+            cells=(
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0},
+                     trade_consent=False),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0},
+                     relay_consent=True),
+                Cell("seller", {"food": 2.0}, {}, {"food": 1.0}, {"food": 5.0}),
+            ),
+            edges=(("buyer", "relay"), ("relay", "seller")),
+            prices={"food": 2.0},
+        )
+        trace = []
+        self.assertEqual(allocate_relay_cellular(world, max_hops=2, trace=trace), [])
+        self.assertEqual(trace, [])
+
     def test_counterparty_allowlists_are_bilateral(self):
         buyer = Cell(
             "buyer", {}, {"food": 2.0}, {"food": 2.0}, {"food": 10.0},
