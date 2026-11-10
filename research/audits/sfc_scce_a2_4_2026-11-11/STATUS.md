@@ -216,3 +216,29 @@ it. The corrected fixture is committed at
 This is still a synthetic component journal. It does not yet validate all
 financial instrument mirrors, legal claims, full sector ledgers or multi-period
 SFC closure.
+
+
+## Latest PR CI observation — audit harness included
+
+The new wrapper commit `751bbe60ca6e059d560ea5d84089f30f12aa4a56`
+changed `prototype/**`, so the existing main-branch PR workflows were
+triggered and surfaced through the GitHub connector:
+
+- Prototype validation: run `42904924813`, job `130140308153`
+  (`test-economic-prototypes`) — **QUEUED**.
+- SCCE Stage-C2 validation: run `42904924818`, job `130140308848`
+  (`validate-c2-household-feedback`) — **QUEUED**.
+
+At the latest poll both jobs remained queued, with no conclusion, steps or
+logs. This is the first surfaced PR run pair whose test snapshot includes the
+11-script A2.4 unittest wrapper. Later commits `01c43c6f...` and
+`31b12467...` changed only audit documentation/gate records, not the Python
+test wrapper or audit scripts. Still, exact-head completion and log inspection
+are required before marking any script PASS.
+
+Current financial journal fixture includes per-holder deposit-asset /
+deposit-liability mirror checks. It rejects a globally balanced non-bank
+transfer if holder-level liability movements are omitted. The instrument
+stock-flow fixture computes sector financial net lending from transactions
+(T) only; revaluation (V) and other-volume changes (O) affect stocks
+but do not generate financial net lending.
