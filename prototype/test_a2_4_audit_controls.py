@@ -77,6 +77,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_financial_event_store(self):
         self._run_script("audit_financial_event_store.py")
 
+    def test_audit_financial_journal_adapter(self):
+        self._run_script("audit_financial_journal_adapter.py")
+
     def test_audit_instrument_stock_flow(self):
         self._run_script("audit_instrument_stock_flow.py")
 
