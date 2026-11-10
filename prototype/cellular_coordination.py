@@ -34,7 +34,7 @@ class Cell:
     bid: Mapping[str, float]
     trade_consent: bool = True
     allowed_counterparties: frozenset[str] | None = None
-    relay_consent: bool = True
+    relay_consent: bool = False
 
 
 @dataclass(frozen=True)
@@ -684,7 +684,9 @@ def default_world(seed: int = 1, shock: str = "none") -> World:
         }
         bid = {p: 1.0 + 0.12 * priority[p] for p in products}
         supply = dict(producers[cid])
-        cells.append(Cell(cid, supply, demand, priority, bid))
+        # The synthetic benchmark explicitly opts every cell into relaying;
+        # a newly created Cell is otherwise non-relaying by default.
+        cells.append(Cell(cid, supply, demand, priority, bid, relay_consent=True))
     if shock == "supply_crisis":
         for c in cells:
             if c.cell_id in ("cell-3", "cell-6"):
