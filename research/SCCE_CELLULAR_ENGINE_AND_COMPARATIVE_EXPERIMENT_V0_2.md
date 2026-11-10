@@ -241,7 +241,7 @@ The file prototype/cellular_coordination.py implements a narrow local matching e
 - metrics for fulfilment, priority-weighted fulfilment, lower-cell fulfilment, inequality, logistics and coordination costs;
 - deterministic seeds and stress variants.
 
-The cellular protocol uses repeated local request rounds. A buyer contacts its nearest eligible supplier within the allowed hop radius. A supplier allocates available supply among the requests it receives using priority-weighted max-min rationing. Unfilled buyers may approach another supplier in a later round. The protocol does not compute a global optimal allocation.
+The cellular protocol uses repeated local request rounds. A buyer contacts its nearest eligible supplier within the allowed hop radius. A supplier allocates available supply among the requests it receives using priority-weighted max-min rationing. Unfilled buyers may approach another supplier in a later round. The protocol does not compute a global optimal allocation. The current implementation is a single-process simulation harness: it enforces a local information/reach rule, but it is not yet a distributed multi-agent deployment with independent cell processes, network messaging, consensus or fault-tolerant execution. A two-hop setting is a reach-radius experiment, not an implemented federation institution.
 
 ## 12. What this kernel does not yet model
 
