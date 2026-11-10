@@ -163,6 +163,24 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(shared[0]["records"], 2)
         self.assertEqual(set(shared[0]["origins"]), {"buyer-a", "buyer-b"})
 
+    def test_information_visibility_stops_at_nonconsenting_relay(self):
+        world = World(
+            cells=(
+                Cell("origin", {}, {}, {"food": 1.0}, {"food": 1.0}),
+                Cell("private-relay", {}, {}, {"food": 1.0}, {"food": 1.0},
+                     relay_consent=False),
+                Cell("remote", {}, {}, {"food": 1.0}, {"food": 1.0},
+                     relay_consent=True),
+            ),
+            edges=(("origin", "private-relay"), ("private-relay", "remote")),
+            prices={"food": 1.0},
+        )
+        distances = communication_paths(world)
+        self.assertEqual(distances["origin"].get("private-relay"), 1)
+        self.assertNotIn("remote", distances["origin"])
+        self.assertEqual(distances["remote"].get("private-relay"), 1)
+        self.assertNotIn("origin", distances["remote"])
+
     def test_cell_without_relay_consent_does_not_forward_requests(self):
         world = World(
             cells=(
