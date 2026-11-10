@@ -16,18 +16,22 @@
 
 ## Latest SCCE CI
 - Prototype validation run 42810082229: failed one of 133 tests.
-- C2 validation run 42810081975: failed the same test.
-- Failure: scenario-specific assertion expects positive expired care claims for seed 67, but actual expired quantity is 0.0.
-- Queue primitive tests independently cover FIFO expiry, retention and overflow. Current evidence points first to an integration-fixture assumption; do not relax the assertion or alter queue semantics without a deterministic reproducer.
+- C2 validation run 42810081975: failed the same test. Both logs confirm the same assertion failure (0.0 not greater than 0.0); all other 132 tests pass and downstream experiments are skipped.
+- On the audit branch only, the seed-dependent expiry/overflow test was replaced with a controlled physical-delivery fixture. It retains the actual SCCE step, household allocator, FIFO queue, queue ageing and validation path. Period 1 admits a known unmet care quantity; period 2 delivers 25% of combined current-plus-backlog claims, which equals half of the old queue when the opening queue equals current need. The remaining half must expire. A separate capacity fixture admits 1% and records 99% as overflow.
+- The changed test commit is `bea7d625087b7615f764bd97b2e5ce8ebc8c3070`. The commit has no reported status checks yet; this deterministic test is **not yet CI-verified**. Do not claim C2-A3 is green until both workflows run successfully.
+- Queue primitive tests remain unchanged and independently cover FIFO expiry, retention and overflow.
 
 ## Artifacts
 - `FINDINGS_001.md`: SFC arithmetic, interfaces, SCCE CI and A2.4.8 plan.
+- `FINDINGS_002_CARE_QUEUE_INTEGRATION.md`: exact queue timing, failing test path and deterministic-fixture acceptance criteria.
+- `A2_4_2_CAPITAL_STOCK_SERVICES_BRIDGE.md`: typed bridge across B8.1, B4 and SFC gross/net valuation; includes a same-cohort numerical example.
 - `audit_sfc_six_sector.py`: standard-library Decimal control of the six-sector SFC example, credit event distinction and B2 physical balances.
+- `audit_capital_bridge.py`: standard-library Decimal controls for physical quantity, gross/net stock, CFC, disposals, revaluation, capital services and gross/net SFC net lending.
 
 ## Next sequence
-1. Create a deterministic care-queue integration fixture that guarantees unmet care, then verify admission, age, service opportunity, expiry and overflow; rerun both CI workflows.
-2. Complete the gross/net capital and capital-services bridge against B8.1 cohort data; explicitly prevent CFC/retirement double counting.
-3. Define product-level dimensional and valuation contracts linking B2 physical quantities to SFC D.E. without summing unlike units.
-4. Freeze event types for bank-loan creation, non-bank loan transfer, payment, principal repayment, interest, default, write-off, revaluation and other volume changes.
-5. Complete A2.4.1–A2.4.7, then run A2.4.8 with common scenario IDs, event logs, matched initial states and paired comparator seeds.
+1. Run the changed deterministic SCCE integration test and both full CI workflows on a PR or other CI-enabled ref; inspect exact logs. If it fails, debug the real fixture, do not weaken assertions.
+2. Extend A2.4.2 from the synthetic Decimal bridge to a same-cohort integration fixture that consumes B8.1 asset-state records and emits physical quantity, services, gross/net stock and CFC; add empirical data only after units and valuation basis are fixed.
+3. Define A2.4.3 product-level dimensional/valuation contracts linking B2 physical quantities to SFC D.E. without summing unlike units.
+4. Freeze A2.4.4 event types for bank-loan creation, non-bank loan transfer, payment, principal repayment, interest, default, write-off, revaluation and other volume changes.
+5. Complete A2.4.1, A2.4.5, A2.4.6 and A2.4.7, then run A2.4.8 with common scenario IDs, event logs, matched initial states and paired comparator seeds.
 6. Only after those controls pass, design the integrated economic engine boundary.
