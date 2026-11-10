@@ -125,6 +125,19 @@ def main():
     if {cid: cell.capital for cid, cell in untouched.cells.items()} != original:
         raise AssertionError("failed cohort mapping partially mutated engine capital")
 
+    # Malformed numeric and lifecycle fields are rejected explicitly.
+    for malformed in (
+        replace(cohorts[0], quantity=True),
+        replace(cohorts[0], availability=float("nan")),
+        replace(cohorts[0], retirement_reason="magically_retired"),
+    ):
+        try:
+            aggregate_capital_services(tuple(model.cells), (malformed,), baseline)
+        except CapitalBridgeError:
+            pass
+        else:
+            raise AssertionError("malformed cohort numeric/lifecycle field accepted")
+
     # Duplicate identities and incomplete baselines are rejected.
     try:
         aggregate_capital_services(
@@ -146,7 +159,7 @@ def main():
     print("repair downtime reduces service, not physical stock; utilization scales service")
     print("service index maps atomically to CellState.capital before a real SCCE step")
     print("local production proposal responds proportionally to the applied capital multiplier")
-    print("negative controls: zero service, duplicate cohort ID and incomplete baseline rejected")
+    print("negative controls: zero service, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
 
 
 if __name__ == "__main__":
