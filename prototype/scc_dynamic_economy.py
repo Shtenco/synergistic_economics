@@ -869,6 +869,56 @@ def coordination_sensitivity(runs: int = 20, shock: str = "compound",
         "sensitivity": result,
     }
 
+
+
+def coordination_curve(runs: int = 20, shock: str = "compound",
+                       periods: int = 24, cellular_hops: int = 2,
+                       hours_per_message: Sequence[float] = (
+                           0.0, 0.0025, 0.005, 0.01, 0.02, 0.05)):
+    """Paired same-seed response curve for the opportunity cost of messages."""
+    levels = tuple(float(x) for x in hours_per_message)
+    if not levels or any(x < 0 for x in levels):
+        raise DynamicEconomyError("coordination curve levels must be non-negative")
+    if len(set(levels)) != len(levels):
+        raise DynamicEconomyError("coordination curve levels must be unique")
+    runs_by_level = {
+        level: monte_carlo(runs, shock, periods, cellular_hops, level)["paired_runs"]
+        for level in levels
+    }
+    rows = {
+        level: {(row["seed"], row["policy"]): row for row in values}
+        for level, values in runs_by_level.items()
+    }
+    reference = levels[0]
+    metrics = (
+        "final_fulfilment_rate", "mean_essential_fulfilment",
+        "mean_weighted_fulfilment", "fixed_price_final_consumption_index",
+        "fixed_price_gross_output_index", "total_coordination_hours",
+    )
+    result = {}
+    for policy in POLICIES:
+        result[policy] = {}
+        for level in levels:
+            result[policy][str(level)] = {}
+            for metric in metrics:
+                values = [rows[level][(seed, policy)][metric]
+                          for seed in range(1, runs + 1)]
+                reference_values = [
+                    rows[reference][(seed, policy)][metric]
+                    for seed in range(1, runs + 1)
+                ]
+                result[policy][str(level)][metric] = {
+                    "mean": statistics.mean(values),
+                    "paired_delta_vs_reference": _confidence_summary(
+                        [value - ref for value, ref in zip(values, reference_values)]),
+                }
+    return {
+        "runs": runs, "shock": shock, "periods": periods,
+        "cellular_hops": cellular_hops,
+        "reference_hours_per_message": reference,
+        "hours_per_message": list(levels),
+        "curve": result,
+    }
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", choices=POLICIES, default="cellular")
@@ -881,11 +931,17 @@ def main():
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--monte-carlo", type=int, default=0)
     parser.add_argument("--coordination-sensitivity", action="store_true")
+    parser.add_argument("--coordination-curve", action="store_true")
+    parser.add_argument("--coordination-levels", default="0,0.0025,0.005,0.01,0.02,0.05")
     parser.add_argument("--base-coordination-hours", type=float, default=0.01)
     parser.add_argument("--stress-coordination-hours", type=float, default=0.05)
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
-    if args.coordination_sensitivity:
+    if args.coordination_curve:
+        levels = tuple(float(x) for x in args.coordination_levels.split(","))
+        result = coordination_curve(
+            args.monte_carlo or 20, args.shock, args.periods, args.hops, levels)
+    elif args.coordination_sensitivity:
         result = coordination_sensitivity(
             args.monte_carlo or 20, args.shock, args.periods, args.hops,
             args.base_coordination_hours, args.stress_coordination_hours)
