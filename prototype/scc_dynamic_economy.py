@@ -472,7 +472,9 @@ class DynamicCellularEconomy:
             raise DynamicEconomyError("raw resource stock-flow identity violated")
         for period in self.periods:
             if not 0 <= period.essential_fulfilment <= 1 + EPS:
-                raise DynamicEconomyError("essential fulfilment outside [0,1]")
+                raise DynamicEconomyError(
+                    f"essential fulfilment outside [0,1] at period {period.period}: "
+                    f"{period.essential_fulfilment:.12f}")
             if not 0 <= period.weighted_fulfilment <= 1 + EPS:
                 raise DynamicEconomyError("weighted fulfilment outside [0,1]")
         return True
