@@ -146,6 +146,25 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         self.assertTrue(model.validate())
         self.assertGreaterEqual(model.summary()["total_messages"], 0)
 
+    def test_batched_packets_reduce_fixed_coordination_overhead(self):
+        model = DynamicCellularEconomy(
+            "cellular", seed=5, shock="none",
+            coordination_hours_per_message=0.01,
+            coordination_hours_per_additional_record=0.002,
+        )
+        bundled = model._message_load([
+            {"sender": "cell-1", "receiver": "cell-2", "records": 2},
+        ])
+        separate = model._message_load([
+            {"sender": "cell-1", "receiver": "cell-2", "records": 1},
+            {"sender": "cell-1", "receiver": "cell-2", "records": 1},
+        ])
+        self.assertAlmostEqual(sum(bundled.values()), 0.012)
+        self.assertAlmostEqual(sum(separate.values()), 0.020)
+        model.run(6)
+        summary = model.summary()
+        self.assertGreater(summary["total_message_records"], summary["total_messages"])
+
     def test_paired_coordination_sensitivity_uses_same_seeds(self):
         result = coordination_sensitivity(
             runs=3, shock="compound", periods=8, cellular_hops=2,
