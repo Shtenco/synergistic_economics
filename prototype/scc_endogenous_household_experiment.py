@@ -63,7 +63,7 @@ def run_endogenous_household_experiment(
     households_per_cell: int = 10,
     priority_dispersion: float = 0.4,
     essential_floor_fraction: float = 0.5,
-    backlog_retention: float = 0.5,
+    backlog_retention: float = 1.0,
     max_backlog_periods: float = 1.0,
     economic_policies: Sequence[str] = POLICIES,
     household_policies: Sequence[str] = HOUSEHOLD_POLICIES,
@@ -374,7 +374,7 @@ def main():
     parser.add_argument("--households-per-cell", type=int, default=10)
     parser.add_argument("--priority-dispersion", type=float, default=0.4)
     parser.add_argument("--essential-floor-fraction", type=float, default=0.5)
-    parser.add_argument("--backlog-retention", type=float, default=0.5)
+    parser.add_argument("--backlog-retention", type=float, default=1.0)
     parser.add_argument("--max-backlog-periods", type=float, default=1.0)
     parser.add_argument("--max-care-queue-age-periods", type=int, default=3)
     parser.add_argument("--economic-policies", default="market,central,cooperative,cellular")
