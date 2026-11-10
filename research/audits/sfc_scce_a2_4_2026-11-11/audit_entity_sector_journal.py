@@ -16,7 +16,8 @@ CLAIM_ACCOUNTS = {
     "interest_receivable_asset", "interest_payable_liability",
 }
 EVENT_TYPES = {
-    "bank_loan_origination", "nonbank_deposit_transfer",
+    "bank_loan_origination", "nonbank_loan_origination",
+    "nonbank_deposit_transfer",
     "supplier_settlement", "principal_repayment",
     "interest_accrual", "interest_settlement",
     "creditor_writeoff", "legal_forgiveness",
@@ -267,6 +268,80 @@ class EntityJournal:
 
         if debit != credit:
             raise IdentityError(f"unbalanced event {event.event_id}: {debit} != {credit}")
+
+        # Event labels carry economic meaning, not merely a descriptive tag.
+        # In particular, a deposit transfer must never conceal creation of a
+        # non-bank loan, and a loan origination must not silently create a
+        # deposit unless the originator is a bank.
+        by_account = {}
+        for line in event.lines:
+            by_account.setdefault(line.account, []).append(line)
+
+        def exact_accounts(expected):
+            if {name: len(by_account.get(name, ())) for name in expected} != expected or set(by_account) != set(expected):
+                raise IdentityError(
+                    f"{event.event_type} has an invalid account composition: "
+                    f"{ {name: len(rows) for name, rows in by_account.items()} }")
+
+        if event.event_type == "bank_loan_origination":
+            exact_accounts({
+                "loan_asset": 1, "loan_liability": 1,
+                "deposit_asset": 1, "deposit_liability": 1,
+            })
+            loan_asset = by_account["loan_asset"][0]
+            loan_liability = by_account["loan_liability"][0]
+            deposit_asset = by_account["deposit_asset"][0]
+            deposit_liability = by_account["deposit_liability"][0]
+            if any(line.side != side for line, side in (
+                    (loan_asset, "D"), (loan_liability, "C"),
+                    (deposit_asset, "D"), (deposit_liability, "C"))):
+                raise IdentityError("bank loan origination has invalid debit/credit sides")
+            if len({line.amount for line in event.lines}) != 1:
+                raise IdentityError("bank loan origination must match loan and deposit amounts")
+            bank_id = loan_asset.entity_id
+            borrower_id = loan_asset.issuer_entity_id
+            if (registry.sector_of(bank_id, event.effective_period) != "CB"
+                    or loan_liability.entity_id != borrower_id
+                    or loan_liability.counterparty_entity_id != bank_id
+                    or deposit_asset.entity_id != borrower_id
+                    or deposit_asset.issuer_entity_id != bank_id
+                    or deposit_liability.entity_id != bank_id
+                    or deposit_liability.counterparty_entity_id != borrower_id):
+                raise IdentityError("bank loan origination participant/issuer roles do not reconcile")
+
+        elif event.event_type == "nonbank_loan_origination":
+            exact_accounts({"loan_asset": 1, "loan_liability": 1})
+            loan_asset = by_account["loan_asset"][0]
+            loan_liability = by_account["loan_liability"][0]
+            if (loan_asset.side != "D" or loan_liability.side != "C"
+                    or loan_asset.amount != loan_liability.amount
+                    or registry.sector_of(loan_asset.entity_id, event.effective_period) == "CB"
+                    or loan_asset.issuer_entity_id != loan_liability.entity_id
+                    or loan_liability.counterparty_entity_id != loan_asset.entity_id):
+                raise IdentityError("non-bank loan origination must create one mirrored loan and no deposit")
+
+        elif event.event_type == "nonbank_deposit_transfer":
+            exact_accounts({"deposit_asset": 2, "deposit_liability": 2})
+            asset_debit = [x for x in by_account["deposit_asset"] if x.side == "D"]
+            asset_credit = [x for x in by_account["deposit_asset"] if x.side == "C"]
+            liability_debit = [x for x in by_account["deposit_liability"] if x.side == "D"]
+            liability_credit = [x for x in by_account["deposit_liability"] if x.side == "C"]
+            if any(len(x) != 1 for x in (
+                    asset_debit, asset_credit, liability_debit, liability_credit)):
+                raise IdentityError("deposit transfer requires one payer and one recipient on both sides")
+            recipient, payer = asset_debit[0], asset_credit[0]
+            payer_liability, recipient_liability = liability_debit[0], liability_credit[0]
+            bank_id = payer_liability.entity_id
+            if (len({x.amount for x in event.lines}) != 1
+                    or payer.entity_id == recipient.entity_id
+                    or payer_liability.entity_id != recipient_liability.entity_id
+                    or payer_liability.entity_id != bank_id
+                    or payer.issuer_entity_id != bank_id
+                    or recipient.issuer_entity_id != bank_id
+                    or payer_liability.counterparty_entity_id != payer.entity_id
+                    or recipient_liability.counterparty_entity_id != recipient.entity_id):
+                raise IdentityError("deposit transfer must move existing deposits between two holders at one issuer")
+
         # A unilateral creditor write-off is a narrowly typed accounting
         # recognition event: one loan-asset credit against one loss-allowance
         # debit. It does not extinguish the debtor's legal claim. All other
@@ -471,11 +546,20 @@ def main():
     ))
     journal.post(e1)
 
-    # Transfer of existing deposits: the holder changes; system deposits do not.
-    e2 = JournalEvent("E2", "nonbank_deposit_transfer", p, (
+    # Non-bank credit origination creates a loan claim/liability but no new
+    # deposits. The subsequent transfer moves an existing deposit between
+    # holders; it changes neither the banking-system deposit total nor its
+    # issuer liability stock.
+    e2 = JournalEvent("E2", "nonbank_loan_origination", p, (
         make_line(registry, p, "loan_asset", "D", 19, "household-1",
                   issuer="company-2", instrument_id="loan-household-company",
                   instrument_class="loan", maturity="2029"),
+        make_line(registry, p, "loan_liability", "C", 19, "company-2",
+                  counterparty="household-1", issuer="company-2",
+                  instrument_id="loan-household-company",
+                  instrument_class="loan", maturity="2029"),
+    ))
+    e2_transfer = JournalEvent("E2-TRANSFER", "nonbank_deposit_transfer", p, (
         make_line(registry, p, "deposit_asset", "C", 19, "household-1",
                   issuer="bank-1", instrument_id="deposit-household-1",
                   instrument_class="deposit"),
@@ -490,14 +574,11 @@ def main():
                   counterparty="company-2", issuer="bank-1",
                   instrument_id="deposit-company-2",
                   instrument_class="deposit"),
-        make_line(registry, p, "loan_liability", "C", 19, "company-2",
-                  counterparty="household-1", issuer="company-2",
-                  instrument_id="loan-household-company",
-                  instrument_class="loan", maturity="2029"),
     ))
     journal.post(e2)
+    journal.post(e2_transfer)
     assert deposit_holder_issuer_deltas(e1)
-    assert deposit_holder_issuer_deltas(e2)
+    assert deposit_holder_issuer_deltas(e2_transfer)
 
     # Supplier settlement retains distinct payer and supplier entity IDs.
     e3 = JournalEvent("E3", "supplier_settlement", p, (
@@ -765,7 +846,7 @@ def main():
                 counterparty_sector="H")
         if line.account == "deposit_liability"
         and line.counterparty_entity_id == "household-1" else line
-        for line in e2.lines
+        for line in e2_transfer.lines
     )
     try:
         EntityJournal(registry).post(
@@ -848,7 +929,8 @@ def main():
     print("stable entity IDs are distinct from controlled six-sector membership")
     print("all recognized claim assets/liabilities mirror by entity and full instrument identity")
     print("deposit claim mirrors validate holder and issuer entities, not sector labels")
-    print("entity-level origination, transfer, supplier settlement, principal, interest, write-off and forgiveness events checked")
+    print("bank loan origination, non-bank loan origination and existing-deposit transfer are distinct event types")
+    print("entity-level supplier settlement, principal, interest, write-off and forgiveness events checked")
     print("10 holder claims and 10 issuer liabilities reconcile at entity level")
     print("sector financial NL derived only after claim reconciliation: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23")
     print("effective-dated sector changes, write-off versus legal forgiveness and T/V/O stock flow are distinguished")
