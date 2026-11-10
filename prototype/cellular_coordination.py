@@ -1,0 +1,454 @@
+"""Stage-A SCCE cellular coordination kernel.
+
+This module tests local-neighbour economic matching. It is deliberately not a
+complete macroeconomy: production recipes, credit, ownership, wages, capital
+accumulation and ecological stocks remain in the existing prototypes.
+Only the standard library is used.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import random
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
+
+
+EPS = 1e-10
+
+
+class CoordinationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class Cell:
+    cell_id: str
+    supply: Mapping[str, float]
+    demand: Mapping[str, float]
+    priority: Mapping[str, float]
+    bid: Mapping[str, float]
+
+
+@dataclass(frozen=True)
+class Allocation:
+    product: str
+    seller: str
+    buyer: str
+    quantity: float
+    distance: int
+
+
+@dataclass(frozen=True)
+class World:
+    cells: Tuple[Cell, ...]
+    edges: Tuple[Tuple[str, str], ...]
+    prices: Mapping[str, float]
+    transport_cost_per_hop: float = 0.04
+    transaction_cost: float = 0.15
+
+    def __post_init__(self):
+        ids = [c.cell_id for c in self.cells]
+        if len(ids) != len(set(ids)) or not ids:
+            raise CoordinationError("cell ids must be unique and non-empty")
+        known = set(ids)
+        for a, b in self.edges:
+            if a not in known or b not in known or a == b:
+                raise CoordinationError("invalid network edge")
+        if self.transport_cost_per_hop < 0 or self.transaction_cost < 0:
+            raise CoordinationError("coordination costs cannot be negative")
+        products = set(self.prices)
+        if not products:
+            raise CoordinationError("at least one product is required")
+        for c in self.cells:
+            if any(v < 0 for v in c.supply.values()):
+                raise CoordinationError("negative supply")
+            if any(v < 0 for v in c.demand.values()):
+                raise CoordinationError("negative demand")
+            if any(v <= 0 for v in c.priority.values()):
+                raise CoordinationError("priority must be positive")
+            if any(v < 0 for v in c.bid.values()):
+                raise CoordinationError("bid cannot be negative")
+            if not set(c.supply).issubset(products) or not set(c.demand).issubset(products):
+                raise CoordinationError("unknown product in cell")
+
+
+def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
+    graph = {c.cell_id: set() for c in world.cells}
+    for a, b in world.edges:
+        graph[a].add(b)
+        graph[b].add(a)
+    distances = {}
+    for origin in graph:
+        dist = {origin: 0}
+        queue = deque([origin])
+        while queue:
+            node = queue.popleft()
+            for nxt in sorted(graph[node]):
+                if nxt not in dist:
+                    dist[nxt] = dist[node] + 1
+                    queue.append(nxt)
+        distances[origin] = dist
+    return distances
+
+
+def _weighted_waterfill(needs: Mapping[str, float],
+                        weights: Mapping[str, float],
+                        capacity: float) -> Dict[str, float]:
+    """Priority-weighted max-min allocation, never exceeding any request."""
+    remaining = {k: max(0.0, float(v)) for k, v in needs.items()}
+    result = {k: 0.0 for k in remaining}
+    left = max(0.0, float(capacity))
+    active = set(k for k, v in remaining.items() if v > EPS)
+    while left > EPS and active:
+        total_weight = sum(max(EPS, float(weights[k])) for k in active)
+        saturated = []
+        proposed = {}
+        for k in active:
+            share = left * max(EPS, float(weights[k])) / total_weight
+            proposed[k] = share
+            if share >= remaining[k] - EPS:
+                saturated.append(k)
+        if not saturated:
+            for k, share in proposed.items():
+                result[k] += share
+                remaining[k] -= share
+            left = 0.0
+        else:
+            for k in saturated:
+                take = remaining[k]
+                result[k] += take
+                left -= take
+                remaining[k] = 0.0
+                active.remove(k)
+    return result
+
+
+def _products(world: World) -> List[str]:
+    return sorted(world.prices)
+
+
+def _state(world: World):
+    supply = {p: {c.cell_id: float(c.supply.get(p, 0.0)) for c in world.cells}
+              for p in _products(world)}
+    demand = {p: {c.cell_id: float(c.demand.get(p, 0.0)) for c in world.cells}
+              for p in _products(world)}
+    return supply, demand
+
+
+def _route_allocations(world: World, product: str,
+                       buyer_targets: Mapping[str, float],
+                       supply: Dict[str, float],
+                       distances: Mapping[str, Mapping[str, int]]) -> List[Allocation]:
+    """Assign already determined buyer quantities to nearest available sellers."""
+    result = []
+    for buyer in sorted(buyer_targets):
+        left = buyer_targets[buyer]
+        sellers = sorted(
+            (s for s, q in supply.items() if q > EPS and buyer in distances[s]),
+            key=lambda s: (distances[buyer][s], s))
+        for seller in sellers:
+            if left <= EPS:
+                break
+            qty = min(left, supply[seller])
+            if qty > EPS:
+                result.append(Allocation(product, seller, buyer, qty,
+                                         distances[buyer][seller]))
+                supply[seller] -= qty
+                left -= qty
+    return result
+
+
+def allocate_central(world: World) -> List[Allocation]:
+    """Global-information benchmark: highest social priority, then shortest route."""
+    supply, demand = _state(world)
+    dist = shortest_paths(world)
+    allocations = []
+    cells = {c.cell_id: c for c in world.cells}
+    for p in _products(world):
+        buyers = sorted(
+            (b for b, q in demand[p].items() if q > EPS),
+            key=lambda b: (-cells[b].priority.get(p, 1.0), b))
+        for buyer in buyers:
+            left = demand[p][buyer]
+            sellers = sorted(
+                (s for s, q in supply[p].items() if q > EPS and buyer in dist[s]),
+                key=lambda s: (dist[buyer][s], s))
+            for seller in sellers:
+                if left <= EPS:
+                    break
+                qty = min(left, supply[p][seller])
+                if qty > EPS:
+                    allocations.append(Allocation(p, seller, buyer, qty,
+                                                   dist[buyer][seller]))
+                    supply[p][seller] -= qty
+                    left -= qty
+    return allocations
+
+
+def allocate_market(world: World) -> List[Allocation]:
+    """Global bilateral market: bids rank buyers; delivered asks rank sellers."""
+    supply, demand = _state(world)
+    dist = shortest_paths(world)
+    cells = {c.cell_id: c for c in world.cells}
+    allocations = []
+    for p in _products(world):
+        price = float(world.prices[p])
+        buyers = sorted(
+            (b for b, q in demand[p].items() if q > EPS),
+            key=lambda b: (-cells[b].bid.get(p, price), b))
+        for buyer in buyers:
+            left = demand[p][buyer]
+            sellers = sorted(
+                (s for s, q in supply[p].items() if q > EPS and buyer in dist[s]),
+                key=lambda s: (price + dist[buyer][s] * world.transport_cost_per_hop, s))
+            for seller in sellers:
+                delivered_ask = price + dist[buyer][seller] * world.transport_cost_per_hop
+                if cells[buyer].bid.get(p, price) + EPS < delivered_ask:
+                    continue
+                qty = min(left, supply[p][seller])
+                if qty > EPS:
+                    allocations.append(Allocation(p, seller, buyer, qty,
+                                                   dist[buyer][seller]))
+                    supply[p][seller] -= qty
+                    left -= qty
+                if left <= EPS:
+                    break
+    return allocations
+
+
+def allocate_cooperative(world: World) -> List[Allocation]:
+    """Common pool: priority-weighted max-min rationing, then nearest delivery."""
+    supply, demand = _state(world)
+    dist = shortest_paths(world)
+    cells = {c.cell_id: c for c in world.cells}
+    allocations = []
+    for p in _products(world):
+        total_supply = sum(supply[p].values())
+        weights = {b: cells[b].priority.get(p, 1.0) for b in demand[p]}
+        targets = _weighted_waterfill(demand[p], weights, total_supply)
+        allocations.extend(_route_allocations(world, p, targets, supply[p], dist))
+    return allocations
+
+
+def allocate_cellular(world: World, max_hops: int = 1,
+                      max_rounds: int = 8) -> List[Allocation]:
+    """Local protocol: buyers signal needs; reachable suppliers answer in rounds.
+
+    A buyer only contacts suppliers within max_hops. Each supplier allocates its
+    available stock among received requests by weighted max-min priority.
+    Unfilled buyers may contact their next-nearest supplier in a later round.
+    No global optimizer chooses the final matching.
+    """
+    if max_hops < 1 or max_rounds < 1:
+        raise CoordinationError("max_hops and max_rounds must be positive")
+    supply, demand = _state(world)
+    dist = shortest_paths(world)
+    cells = {c.cell_id: c for c in world.cells}
+    allocations = []
+    for p in _products(world):
+        remaining = dict(demand[p])
+        available = dict(supply[p])
+        tried = {b: set() for b in remaining}
+        for _ in range(max_rounds):
+            requests = defaultdict(dict)
+            for buyer in sorted(remaining):
+                if remaining[buyer] <= EPS:
+                    continue
+                candidates = [
+                    s for s, q in available.items()
+                    if q > EPS and s not in tried[buyer]
+                    and buyer in dist[s] and dist[buyer][s] <= max_hops
+                ]
+                if not candidates:
+                    continue
+                seller = min(candidates, key=lambda s: (dist[buyer][s], s))
+                tried[buyer].add(seller)
+                requests[seller][buyer] = remaining[buyer]
+            if not requests:
+                break
+            moved = 0.0
+            for seller in sorted(requests):
+                weights = {b: cells[b].priority.get(p, 1.0)
+                           for b in requests[seller]}
+                granted = _weighted_waterfill(requests[seller], weights,
+                                               available[seller])
+                for buyer, qty in granted.items():
+                    if qty <= EPS:
+                        continue
+                    allocations.append(Allocation(p, seller, buyer, qty,
+                                                   dist[buyer][seller]))
+                    available[seller] -= qty
+                    remaining[buyer] -= qty
+                    moved += qty
+            if moved <= EPS:
+                break
+    return allocations
+
+
+POLICIES = {
+    "market": allocate_market,
+    "central": allocate_central,
+    "cooperative": allocate_cooperative,
+}
+
+
+def evaluate(world: World, allocations: Sequence[Allocation]) -> Dict[str, float]:
+    cells = {c.cell_id: c for c in world.cells}
+    demand_total = 0.0
+    weighted_demand = 0.0
+    weighted_served = 0.0
+    served_by_cell = {c.cell_id: 0.0 for c in world.cells}
+    demand_by_cell = {c.cell_id: 0.0 for c in world.cells}
+    logistics = 0.0
+    coordination = 0.0
+    traded = 0.0
+    for c in world.cells:
+        for p, q in c.demand.items():
+            demand_total += q
+            weighted_demand += q * c.priority.get(p, 1.0)
+            demand_by_cell[c.cell_id] += q
+    for a in allocations:
+        priority = cells[a.buyer].priority.get(a.product, 1.0)
+        weighted_served += a.quantity * priority
+        served_by_cell[a.buyer] += a.quantity
+        logistics += a.quantity * a.distance * world.transport_cost_per_hop
+        coordination += world.transaction_cost
+        traded += a.quantity
+    fulfilment = (sum(served_by_cell.values()) / demand_total) if demand_total else 1.0
+    weighted_fulfilment = weighted_served / weighted_demand if weighted_demand else 1.0
+    cell_rates = [
+        served_by_cell[k] / demand_by_cell[k] if demand_by_cell[k] else 1.0
+        for k in sorted(demand_by_cell)
+    ]
+    mean_rate = sum(cell_rates) / len(cell_rates) if cell_rates else 1.0
+    gini = 0.0
+    if mean_rate > EPS:
+        diffs = sum(abs(a - b) for a in cell_rates for b in cell_rates)
+        gini = diffs / (2.0 * len(cell_rates) ** 2 * mean_rate)
+    return {
+        "demand_units": demand_total,
+        "served_units": traded,
+        "unmet_units": max(0.0, demand_total - traded),
+        "fulfilment_rate": fulfilment,
+        "weighted_fulfilment_rate": weighted_fulfilment,
+        "lower_cell_fulfilment": min(cell_rates) if cell_rates else 1.0,
+        "cell_fulfilment_gini": gini,
+        "logistics_cost": logistics,
+        "coordination_cost": coordination,
+        "weighted_service_value": weighted_served,
+        "net_service_value": weighted_served - logistics - coordination,
+        "transactions": float(len(allocations)),
+        "mean_route_hops": (sum(a.distance for a in allocations) / len(allocations)
+                            if allocations else 0.0),
+    }
+
+
+def default_world(seed: int = 1, shock: str = "none") -> World:
+    """Seven-cell synthetic world with three products and heterogeneous needs."""
+    rng = random.Random(seed)
+    products = ("food", "materials", "energy")
+    producers = {
+        "cell-1": {"food": 22.0},
+        "cell-2": {"materials": 19.0},
+        "cell-3": {"energy": 24.0},
+        "cell-4": {"food": 17.0},
+        "cell-5": {"materials": 21.0},
+        "cell-6": {"energy": 18.0},
+        "cell-7": {"food": 16.0},
+    }
+    edges = (
+        ("cell-1", "cell-2"), ("cell-2", "cell-3"),
+        ("cell-3", "cell-4"), ("cell-4", "cell-5"),
+        ("cell-5", "cell-6"), ("cell-6", "cell-7"),
+        ("cell-7", "cell-1"), ("cell-1", "cell-4"),
+        ("cell-3", "cell-6"),
+    )
+    cells = []
+    for i in range(1, 8):
+        cid = f"cell-{i}"
+        demand = {p: rng.uniform(3.0, 7.0) for p in products}
+        priority = {
+            "food": rng.uniform(1.6, 2.2),
+            "materials": rng.uniform(0.8, 1.2),
+            "energy": rng.uniform(1.2, 1.8),
+        }
+        bid = {p: 1.0 + 0.12 * priority[p] for p in products}
+        supply = dict(producers[cid])
+        cells.append(Cell(cid, supply, demand, priority, bid))
+    if shock == "supply_crisis":
+        for c in cells:
+            if c.cell_id in ("cell-3", "cell-6"):
+                s = dict(c.supply)
+                s["energy"] *= 0.45
+                object.__setattr__(c, "supply", s)
+    elif shock == "demand_surge":
+        for c in cells:
+            d = dict(c.demand)
+            d["food"] *= 1.45
+            object.__setattr__(c, "demand", d)
+    elif shock not in ("none", "compound"):
+        raise CoordinationError("unknown shock: " + shock)
+    elif shock == "compound":
+        for c in cells:
+            d = dict(c.demand)
+            d["food"] *= 1.25
+            object.__setattr__(c, "demand", d)
+            if c.cell_id in ("cell-3", "cell-6"):
+                s = dict(c.supply)
+                s["energy"] *= 0.60
+                object.__setattr__(c, "supply", s)
+    return World(tuple(cells), edges, {p: 1.0 for p in products})
+
+
+def run_comparison(seed: int = 1, shock: str = "none",
+                   cellular_hops: int = 1) -> Dict[str, Dict[str, float]]:
+    world = default_world(seed, shock)
+    results = {
+        "market": evaluate(world, allocate_market(world)),
+        "central": evaluate(world, allocate_central(world)),
+        "cooperative": evaluate(world, allocate_cooperative(world)),
+        "cellular": evaluate(world, allocate_cellular(world, cellular_hops)),
+    }
+    return results
+
+
+def monte_carlo(seeds: Iterable[int] = range(1, 101),
+                shock: str = "none", cellular_hops: int = 1):
+    rows = []
+    for seed in seeds:
+        result = run_comparison(seed, shock, cellular_hops)
+        for regime, metrics in result.items():
+            rows.append({"seed": seed, "shock": shock, "regime": regime, **metrics})
+    grouped = defaultdict(list)
+    for row in rows:
+        for key, value in row.items():
+            if key not in ("seed", "shock", "regime"):
+                grouped[(row["regime"], key)].append(value)
+    summary = {}
+    for (regime, metric), values in grouped.items():
+        summary.setdefault(regime, {})[metric] = sum(values) / len(values)
+    return {"runs": len(list(seeds)) if not isinstance(seeds, range) else len(seeds),
+            "shock": shock, "cellular_hops": cellular_hops,
+            "summary": summary, "rows": rows}
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--shock", choices=("none", "supply_crisis", "demand_surge", "compound"),
+                        default="none")
+    parser.add_argument("--hops", type=int, default=1)
+    parser.add_argument("--monte-carlo", type=int, default=0)
+    args = parser.parse_args()
+    if args.monte_carlo:
+        result = monte_carlo(range(1, args.monte_carlo + 1), args.shock, args.hops)
+    else:
+        result = run_comparison(args.seed, args.shock, args.hops)
+    print(json.dumps(result, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
