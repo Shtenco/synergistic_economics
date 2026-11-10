@@ -210,3 +210,18 @@ and derives the six-sector financial net-lending vector. An independent
 Decimal calculation of those values passed, but the committed script has not
 yet been executed by a recorded runner. G0-D therefore remains **IMPLEMENTED /
 EXECUTION PENDING**, and does not close A2.4.4.
+
+
+### 6.7 A2.4.6 existing-experiment protocol audit
+
+`A2_4_6_EXISTING_EXPERIMENT_PROTOCOL_AUDIT.md` records the actual four
+economic regimes, market comparator, three household allocation policies,
+seed loops, existing horizons/shocks and emitted metrics from the Python source
+and CI workflow. It also identifies the current normal-approximation interval,
+lack of primary/secondary endpoint hierarchy, incomplete incremental-input
+accounting and absence of confirmatory exclusions/held-out seeds.
+
+This closes source discovery for the existing exploratory experiment design,
+not preregistration. Previously observed settings cannot be relabelled as
+preregistered after the fact. A2.4.6 remains **OPEN** until a new confirmatory
+protocol is frozen before results are generated.
