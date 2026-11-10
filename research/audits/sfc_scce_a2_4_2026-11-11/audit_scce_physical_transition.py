@@ -19,6 +19,8 @@ sys.path.insert(0, str(PROTOTYPE))
 from scc_dynamic_economy import (  # noqa: E402
     DynamicCellularEconomy,
     PRODUCTS,
+    FINAL_PRODUCTS,
+    INPUT_PRODUCTS,
 )
 
 
@@ -94,8 +96,18 @@ def main():
                 cell_id = payload.get("cell")
                 if cell_id not in model.cells:
                     raise AssertionError(f"unknown production cell: {cell_id}")
+                cell = model.cells[cell_id]
                 if key_parts[0] != "production" or key_parts[2] != cell_id:
                     raise AssertionError("production key/payload mismatch")
+                if product != cell.spec.output:
+                    raise AssertionError(
+                        f"production product/cell mismatch: {cell_id} produced {product}, "
+                        f"expected {cell.spec.output}")
+                planned = float(payload.get("planned", -1.0))
+                if not math.isfinite(planned) or planned < 0:
+                    raise AssertionError("planned production must be finite and non-negative")
+                close(f"production event/current cell output {cell_id}",
+                      quantity, cell.output_this_period)
                 production[(cell_id, product)] += quantity
                 production_by_product[product] += quantity
             else:
@@ -105,8 +117,16 @@ def main():
                 if seller not in model.cells or buyer not in model.cells:
                     raise AssertionError("delivery references unknown cell")
                 if (seller == buyer or not math.isfinite(distance)
-                        or distance < 0):
+                        or distance <= 0):
                     raise AssertionError("invalid inter-cell delivery endpoints")
+                if event["type"] == "intermediate.input.delivery":
+                    if product not in INPUT_PRODUCTS:
+                        raise AssertionError(
+                            f"non-input product in intermediate delivery: {product}")
+                elif event["type"] == "final.goods.delivery":
+                    if product not in FINAL_PRODUCTS:
+                        raise AssertionError(
+                            f"non-final product in final delivery: {product}")
                 expected_key = (
                     f"{event['type']}:{period}:{product}:{seller}:{buyer}"
                 )
