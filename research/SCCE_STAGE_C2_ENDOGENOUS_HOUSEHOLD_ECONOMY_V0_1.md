@@ -2,12 +2,13 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Research design with C2-A1 demand signals and a first C2-A2 in-loop household delivery/backlog prototype implemented; time, income, ownership and labour feedback remain unimplemented  
+**Status:** Research design, C2-A1/C2-A2 prototypes and a 20-seed paired preliminary experiment implemented; time, income, ownership and labour feedback remain unimplemented  
 **Parent:** [SCCE cellular engine and comparative experiment](SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md)  
 **Predecessor:** [Stage C1 household physical distribution](SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md)  
 **Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)  
 **C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`  
-**C2-A2 implementation:** `prototype/scc_endogenous_household_economy.py`; paired experiment: `prototype/scc_endogenous_household_experiment.py`; tests: `prototype/test_scc_endogenous_household_economy.py` and `prototype/test_scc_endogenous_household_experiment.py`
+**C2-A2 implementation:** `prototype/scc_endogenous_household_economy.py`; paired experiment: `prototype/scc_endogenous_household_experiment.py`; tests: `prototype/test_scc_endogenous_household_economy.py` and `prototype/test_scc_endogenous_household_experiment.py`  
+**Preliminary results:** [SCCE Stage-C2-A2 results](SCCE_STAGE_C2_A2_PRELIMINARY_RESULTS_2026-11-10.md)
 
 ---
 
