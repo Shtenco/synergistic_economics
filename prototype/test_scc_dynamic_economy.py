@@ -114,6 +114,23 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         difference = result["paired_differences_vs_market"]["cellular"]["final_fulfilment_rate"]
         self.assertEqual(difference["n"], 4)
 
+    def test_coordination_messages_consume_productive_labour(self):
+        zero_cost = DynamicCellularEconomy(
+            "cellular", seed=23, shock="none", cellular_hops=2,
+            coordination_hours_per_message=0.0,
+        )
+        costly = DynamicCellularEconomy(
+            "cellular", seed=23, shock="none", cellular_hops=2,
+            coordination_hours_per_message=0.10,
+        )
+        zero_cost.run(12)
+        costly.run(12)
+        self.assertGreater(costly.summary()["total_coordination_hours"], 0)
+        self.assertLess(
+            costly.summary()["fixed_price_gross_output_index"],
+            zero_cost.summary()["fixed_price_gross_output_index"],
+        )
+
     def test_dynamic_model_accepts_distinct_sparse_communication_network(self):
         sparse_messages = (
             ("cell-1", "cell-2"),
