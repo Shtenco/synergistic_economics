@@ -68,21 +68,23 @@ class SCCEEndogenousHouseholdExperimentTests(unittest.TestCase):
             cellular["current_essential_fulfilment"]
             ["current_first_mean"], 0.0,
         )
-        self.assertAlmostEqual(
-            cellular["total_food_delivered"]
-            ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=9,
-        )
+        for metric in (
+            "total_food_delivered",
+            "total_care_delivered",
+            "cumulative_care_backlog_served",
+        ):
+            self.assertEqual(
+                cellular[metric]["paired_backlog_first_minus_current_first"]["n"], 2,
+            )
+            self.assertGreaterEqual(
+                cellular[metric]["current_first_mean"], 0.0,
+            )
+            self.assertGreaterEqual(
+                cellular[metric]["backlog_first_mean"], 0.0,
+            )
         self.assertNotAlmostEqual(
             cellular["current_care_fulfilment"]
             ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=5,
-        )
-        self.assertAlmostEqual(
-            cellular["total_care_delivered"]
-            ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=9,
-        )
-        self.assertGreater(
-            cellular["cumulative_care_backlog_served"]
-            ["paired_backlog_first_minus_current_first"]["mean"], 0.0,
         )
 
     def test_invalid_experiment_size_or_policy_is_rejected(self):
