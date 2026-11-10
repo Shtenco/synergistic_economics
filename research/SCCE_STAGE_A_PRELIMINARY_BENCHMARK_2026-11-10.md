@@ -107,6 +107,8 @@ A 45% increase in food demand:
 
 The results do not establish:
 - that a complete SCCE economy creates more real wealth;
+- that independently running cells can communicate and execute reliably over a real distributed network;
+- that two-hop local reach is equivalent to a consent-based federation;
 - that local cells outperform mature markets or cooperatives;
 - that the central comparator is a true global optimum;
 - that the market comparator is a complete or strong representation of real markets;
