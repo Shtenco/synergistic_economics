@@ -122,15 +122,18 @@ The test suite also checks that priority-weighted allocation changes the distrib
 
 ## 7. Integration with Stage B
 
-The current module is intentionally a separate layer. Stage B presently aggregates final consumption at cell level. The next integration step is to expose final-goods deliveries by receiving cell and pass those physical quantities to Stage C1.
+The module is intentionally a separate layer, but a direct data boundary now exists: Stage B's `PeriodResult.final_consumption_by_cell` exposes the physical quantities already counted as final consumption in each cell. The adapter `allocate_period_households(...)` accepts that field and disaggregates it among household agents.
 
-The integration must preserve the boundary:
-- Stage B determines what goods reach each cell;
-- Stage C1 determines how each cell distributes its available goods among its own households;
-- neither layer may create physical quantities;
-- a household allocation cannot be counted as an inter-cell trade or a second delivery.
+The integration preserves the boundary:
+- Stage B determines what goods reach each cell and records cell-level consumption;
+- Stage C1 splits those same quantities among the cell's households;
+- neither layer creates physical quantities;
+- household disaggregation is not counted as an inter-cell trade or a second delivery;
+- aggregate household quantities must reconcile exactly to the Stage-B cell totals.
 
-After integration, experiments should compare:
+The adapter is tested against a Stage-B-shaped period result. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
+
+Experiments should compare:
 - proportional versus priority-weighted distribution;
 - different essential floors;
 - homogeneous versus heterogeneous household needs;
