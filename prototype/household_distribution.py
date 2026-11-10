@@ -120,7 +120,7 @@ def allocate_households(
         if any(float(q) < 0 for q in h.discretionary_needs.values()):
             raise HouseholdDistributionError("negative discretionary need")
     for cid, stocks in cell_supply.items():
-        if any(float(q) < 0 for q in stocks.values()):
+        if any(float(q) < -EPS for q in stocks.values()):
             raise HouseholdDistributionError("negative cell supply")
 
     by_cell: Dict[str, list[Household]] = {cid: [] for cid in known_cells}
@@ -137,7 +137,8 @@ def allocate_households(
             for p in set(h.essential_needs) | set(h.discretionary_needs)
         } | set(cell_supply[cid]))
         for product in products:
-            available = float(cell_supply[cid].get(product, 0.0))
+            # Clamp only numerical residue; material negative stocks remain invalid.
+            available = max(0.0, float(cell_supply[cid].get(product, 0.0)))
             essential_needs = {
                 h.household_id: float(h.essential_needs.get(product, 0.0))
                 for h in members
@@ -356,6 +357,8 @@ def validate_household_allocation(
     by_id = {a.household_id: a for a in allocations}
     if len(by_id) != len(allocations) or set(by_id) != {h.household_id for h in households}:
         raise HouseholdDistributionError("allocation set does not match households")
+    if any(float(q) < -EPS for stocks in cell_supply.values() for q in stocks.values()):
+        raise HouseholdDistributionError("negative cell supply")
     used: Dict[tuple[str, str], float] = {}
     household_used: Dict[tuple[str, str, str], float] = {}
     needs = {h.household_id: h for h in households}
@@ -382,6 +385,6 @@ def validate_household_allocation(
         if quantity > float(limit) + EPS:
             raise HouseholdDistributionError("household receives more than declared need")
     for (cid, product), quantity in used.items():
-        if quantity > float(cell_supply[cid].get(product, 0.0)) + EPS:
+        if quantity > max(0.0, float(cell_supply[cid].get(product, 0.0))) + EPS:
             raise HouseholdDistributionError("household allocation exceeds cell supply")
     return True
