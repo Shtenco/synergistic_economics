@@ -30,5 +30,15 @@ jobs:
         run: python prototype/io_economy.py --scenario compound_shock --periods 12
       - name: Run paired SCCE cellular comparison (100 seeds)
         run: python prototype/cellular_coordination.py --monte-carlo 100 --shock none --hops 1 --summary-only
+      - name: Run paired SCCE cellular comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock none --hops 1 --summary-only
+      - name: Run paired SCCE cellular comparison with two-hop federation (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock none --hops 2 --summary-only
       - name: Run paired SCCE cellular stress comparison (100 seeds)
         run: python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 2 --summary-only
+      - name: Run paired SCCE local-only stress comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 1 --summary-only
+      - name: Run paired SCCE supply-crisis comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock supply_crisis --hops 2 --summary-only
+      - name: Run paired SCCE demand-surge comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock demand_surge --hops 2 --summary-only
