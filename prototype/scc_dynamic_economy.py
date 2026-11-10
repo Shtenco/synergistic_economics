@@ -22,6 +22,7 @@ from cellular_coordination import (
     allocate_central,
     allocate_cooperative,
     allocate_market,
+    shortest_paths,
 )
 
 EPS = 1e-9
@@ -299,19 +300,58 @@ class DynamicCellularEconomy:
             regenerated += c.stocks["raw_resource"] - before
         self.total_regenerated += regenerated
 
-        # Each producer plans from its own community's demand, its last observed
-        # external orders and its own inventory. No current global demand oracle.
+        # Production planning differs by institution. Central planning sees
+        # current aggregate declared needs; cooperatives pool member needs and
+        # hold a slightly larger shared buffer; markets react to the previous
+        # period's market-wide unmet orders; cellular producers see only unmet
+        # orders signalled inside their configured local neighbourhood.
         plans: Dict[str, float] = {}
         input_need: Dict[str, Dict[str, float]] = {p: {} for p in INPUT_PRODUCTS}
+        distances = shortest_paths(MatchWorld(
+            tuple(MatchCell(cid, {}, {}, {}, {}) for cid in self.cells),
+            self.edges, BASE_PRICES,
+            self.transport_cost_per_hop, self.transaction_cost))
+        total_final_demand = {
+            p: sum(c.spec.final_demand.get(p, 0.0) * demand_mult
+                   for c in self.cells.values())
+            for p in FINAL_PRODUCTS
+        }
         for cid, c in self.cells.items():
             s = c.spec
             local_need = s.final_demand.get(s.output, 0.0) * demand_mult
-            target = local_need + c.last_external_orders + s.safety_stock
-            desired = max(0.0, target - c.stocks[s.output])
             cap = min(s.capacity, s.labour * s.productivity) * c.capital * productivity_mult
+            if s.output in FINAL_PRODUCTS and self.policy in ("central", "cooperative"):
+                buffer = s.safety_stock * (1.5 if self.policy == "cooperative" else 1.0)
+                system_stock = sum(x.stocks[s.output] for x in self.cells.values())
+                desired = max(0.0, total_final_demand[s.output] + buffer - system_stock)
+            else:
+                target = local_need + c.last_external_orders + s.safety_stock
+                desired = max(0.0, target - c.stocks[s.output])
             plans[cid] = min(cap, desired)
+
+        # Intermediate producers receive a forecast derived from the planned
+        # downstream production. Their own inventory is pooled only for the
+        # global planning regimes; local regimes respond to observed shortages.
+        for p in ("materials", "energy"):
+            producer = next(c for c in self.cells.values() if c.spec.output == p)
+            total_need = sum(plans[cid] * c.spec.recipe.get(p, 0.0)
+                             for cid, c in self.cells.items())
+            cap = min(producer.spec.capacity,
+                      producer.spec.labour * producer.spec.productivity) * productivity_mult
+            if self.policy in ("central", "cooperative"):
+                buffer = producer.spec.safety_stock * (
+                    1.5 if self.policy == "cooperative" else 1.0)
+                desired = max(0.0, total_need + buffer
+                              - sum(c.stocks[p] for c in self.cells.values()))
+            else:
+                desired = max(0.0, total_need + producer.last_external_orders
+                              + producer.spec.safety_stock
+                              - producer.stocks[p])
+            plans[producer.spec.cell_id] = min(cap, desired)
+
+        for cid, c in self.cells.items():
             for inp in INPUT_PRODUCTS:
-                input_need[inp][cid] = plans[cid] * s.recipe.get(inp, 0.0)
+                input_need[inp][cid] = plans[cid] * c.spec.recipe.get(inp, 0.0)
 
         # Reserve each cell's own inputs before offering surplus to neighbours.
         input_supply: Dict[str, Dict[str, float]] = {p: {} for p in INPUT_PRODUCTS}
@@ -328,6 +368,13 @@ class DynamicCellularEconomy:
         input_allocations = self._allocate(input_world)
         _, input_seller_deliveries, input_logistics, input_coordination = self._apply_allocations(
             input_allocations, period, "intermediate.input.delivery")
+        input_served = {(p, cid): 0.0 for p in INPUT_PRODUCTS for cid in self.cells}
+        for allocation in input_allocations:
+            input_served[(allocation.product, allocation.buyer)] += allocation.quantity
+        residual_input_orders = {
+            (p, cid): max(0.0, input_demand[p][cid] - input_served[(p, cid)])
+            for p in INPUT_PRODUCTS for cid in self.cells
+        }
 
         # Production is constrained by the inputs actually on hand. No input or
         # output is created by the matching protocol itself.
@@ -397,15 +444,36 @@ class DynamicCellularEconomy:
             served_by_cell[a.buyer] += a.quantity
             priority = buyer.spec.priorities.get(a.product, 1.0)
             weighted_served += a.quantity * priority
+        final_served_by_buyer = {(p, cid): 0.0 for p in FINAL_PRODUCTS for cid in self.cells}
+        for allocation in final_allocations:
+            final_served_by_buyer[(allocation.product, allocation.buyer)] += allocation.quantity
+        residual_final_orders = {
+            (p, cid): max(0.0, final_demand[p][cid]
+                          - final_served_by_buyer[(p, cid)])
+            for p in FINAL_PRODUCTS for cid in self.cells
+        }
         for cid, c in self.cells.items():
             cell_demand = sum(demand_by_cell[cid].values())
             cell_served = served_by_cell[cid]
             unmet_by_cell[cid] = max(0.0, cell_demand - cell_served)
             c.cumulative_unmet_final += unmet_by_cell[cid]
-            c.last_external_orders = (
-                input_seller_deliveries.get((cid, c.spec.output), 0.0)
-                + seller_product_deliveries.get((cid, c.spec.output), 0.0)
-            )
+            product = c.spec.output
+            if product in FINAL_PRODUCTS:
+                residual = residual_final_orders
+                buyers = self.cells
+            elif product in INPUT_PRODUCTS:
+                residual = residual_input_orders
+                buyers = self.cells
+            else:
+                residual, buyers = {}, {}
+            signal = 0.0
+            for buyer_id in buyers:
+                if buyer_id == cid:
+                    continue
+                if self.policy == "cellular" and distances[cid].get(buyer_id, 10**6) > self.cellular_hops:
+                    continue
+                signal += residual.get((product, buyer_id), 0.0)
+            c.last_external_orders = signal
 
         final_consumption = {
             p: own_consumption[p] + sum(a.quantity for a in final_allocations if a.product == p)
