@@ -580,6 +580,35 @@ def main():
     assert deposit_holder_issuer_deltas(e1)
     assert deposit_holder_issuer_deltas(e2_transfer)
 
+    def deposit_asset_delta(event):
+        return sum((line.amount if line.side == "D" else -line.amount)
+                   for line in event.lines if line.account == "deposit_asset")
+
+    assert deposit_asset_delta(e1) == D("19")
+    assert deposit_asset_delta(e2) == D("0")
+    assert deposit_asset_delta(e2_transfer) == D("0")
+
+    # The former mixed event (non-bank loan creation plus deposit transfer)
+    # must no longer pass under the deposit-transfer label.
+    try:
+        EntityJournal(registry).post(JournalEvent(
+            "BAD-MIXED-CREDIT-TRANSFER", "nonbank_deposit_transfer", p,
+            e2.lines + e2_transfer.lines))
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("non-bank loan origination was hidden inside a deposit transfer")
+
+    # A bank loan origination without the matching new deposit is incomplete.
+    try:
+        EntityJournal(registry).post(JournalEvent(
+            "BAD-BANK-ORIGINATION", "bank_loan_origination", p,
+            e1.lines[:2]))
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("bank loan origination without deposit creation accepted")
+
     # Supplier settlement retains distinct payer and supplier entity IDs.
     e3 = JournalEvent("E3", "supplier_settlement", p, (
         make_line(registry, p, "trade_payable_liability", "D", 7, "company-1",
