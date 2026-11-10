@@ -110,6 +110,27 @@ class HouseholdDistributionTests(unittest.TestCase):
         self.assertTrue(validate_household_allocation(
             households, period.final_consumption_by_cell, allocations))
 
+    def test_validator_rejects_duplicate_allocation_records(self):
+        household = Household("h", "cell-a", {"food": 1.0}, {})
+        allocation = allocate_households(
+            (household,), {"cell-a": {"food": 3.0}})[0]
+        with self.assertRaises(HouseholdDistributionError):
+            validate_household_allocation(
+                (household,), {"cell-a": {"food": 3.0}},
+                (allocation, allocation),
+            )
+
+    def test_evaluation_rejects_cross_cell_and_over_need_records(self):
+        household = Household("h", "cell-a", {"food": 1.0}, {})
+        wrong_cell = type(allocate_households(
+            (household,), {"cell-a": {"food": 1.0}})[0])(
+                "h", "cell-b", {"food": 1.0}, {})
+        with self.assertRaises(HouseholdDistributionError):
+            evaluate_households((household,), (wrong_cell,))
+        over_need = type(wrong_cell)("h", "cell-a", {"food": 2.0}, {})
+        with self.assertRaises(HouseholdDistributionError):
+            evaluate_households((household,), (over_need,))
+
     def test_unknown_policy_rejected(self):
         with self.assertRaises(HouseholdDistributionError):
             allocate_households(self.households, self.supply, "central")
