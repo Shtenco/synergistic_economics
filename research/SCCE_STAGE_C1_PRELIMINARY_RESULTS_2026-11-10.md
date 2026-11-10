@@ -1,10 +1,10 @@
 # SCCE Stage-C1 Preliminary Household Distribution Results
 
 **Date:** 10 November 2026  
-**Version:** 0.2  
+**Version:** 0.3  
 **Status:** 20-seed paired synthetic experiment; three rationing policies; post-hoc physical disaggregation only  
 **Engine:** \`prototype/household_distribution.py\`, \`prototype/scc_household_bridge.py\`, \`prototype/scc_household_experiment.py\`  
-**Validation:** unit tests and GitHub Actions run [42803047854](https://github.com/Shtenco/synergistic_economics/actions/runs/42803047854)
+**Validation:** unit tests and paired 20-seed floor sensitivity runs in GitHub Actions [42804288897](https://github.com/Shtenco/synergistic_economics/actions/runs/42804288897)
 
 ---
 
@@ -104,6 +104,31 @@ Required comparisons:
 - baseline, compound and supply-crisis scenarios;
 - lower-decile, minimum-household and worst-period essential fulfilment;
 - exact physical reconciliation and no cross-cell transfer.
+
+## 7. Essential-floor sensitivity: 25%, 50% and 75%
+
+The floor fraction was varied while holding the 20 seeds, 24-period compound shock, household panel, priority dispersion (0.4), production regime and all Stage-B physical quantities fixed. Each alternative is paired against proportional rationing under the same seed. The table reports the change caused by floor-priority allocation relative to proportional allocation; lower-decile changes are percentage points, while Gini changes are absolute index units.
+
+| Production regime | Essential floor | Change in lower-decile fulfilment (95% paired CI) | Change in essential Gini (95% paired CI) |
+|---|---:|---:|---:|
+| Cellular | 25% | −2.54 pp (−2.89 to −2.18) | +0.02048 (+0.01845 to +0.02251) |
+| Cellular | 50% | +0.03 pp (−0.10 to +0.15) | +0.00006 (−0.00022 to +0.00033) |
+| Cellular | 75% | +0.02 pp (−0.04 to +0.07) | +0.00008 (−0.00001 to +0.00018) |
+| Cooperative | 25% | −0.78 pp (−1.02 to −0.55) | +0.00653 (+0.00573 to +0.00732) |
+| Cooperative | 50% | −0.21 pp (−0.39 to −0.03) | +0.00308 (+0.00270 to +0.00345) |
+| Cooperative | 75% | −0.03 pp (−0.11 to +0.05) | +0.00090 (+0.00073 to +0.00106) |
+| Central | 25% | −0.11 pp (−0.28 to +0.06) | +0.00195 (+0.00113 to +0.00277) |
+| Central | 50% | −0.08 pp (−0.19 to +0.03) | +0.00122 (+0.00056 to +0.00188) |
+| Central | 75% | +0.03 pp (−0.01 to +0.08) | +0.00042 (+0.00008 to +0.00075) |
+| Market | 25% | +0.01 pp (−0.05 to +0.06) | −0.00042 (−0.00068 to −0.00017) |
+| Market | 50% | −0.001 pp (−0.043 to +0.041) | −0.00046 (−0.00066 to −0.00027) |
+| Market | 75% | +0.006 pp (−0.009 to +0.021) | −0.00033 (−0.00047 to −0.00018) |
+
+The minimum-household measure reinforces the warning. At a 25% floor, cellular minimum essential fulfilment falls by 4.49 pp (95% CI −4.93 to −4.05) and cooperative minimum falls by 1.70 pp (−2.18 to −1.22). At a 50% floor, the cooperative minimum falls by 0.72 pp (−0.98 to −0.47). At 75%, the cooperative minimum falls by 0.15 pp (−0.23 to −0.07). Cellular minimum changes at 50% and 75% are statistically indistinguishable from zero in this sample.
+
+**Why does a lower floor sometimes perform worse?** In the compound-shock runs, aggregate essential fulfilment is only about 42.5% in the cellular arm and 44.5% in the cooperative arm. With a 75% floor, available supply is below the sum of protected claims, so the floor pool itself is rationed proportionally; there is almost no residual stock for priority allocation. At a 25% floor, the floor claims can be met, leaving more residual stock to be distributed by random synthetic priority weights. Those weights are not calibrated to need severity, and the resulting priority allocation worsens the lower tail. A 50% floor sits between these cases and remains ineffective as a strong safeguard under this scarcity level.
+
+This is not evidence that a 75% floor is intrinsically best, or that proportional allocation is a complete theory of fairness. It shows that a nominal floor does not protect anyone when total physical supply is below the combined floor claims. If a protected minimum is a constitutional commitment, it must be paired with an explicit supply guarantee, emergency procurement/reserve mechanism, or a transparent statement that the guarantee is infeasible under current physical constraints. A rationing formula cannot manufacture the missing goods.
 
 ## 7. Limitations
 
