@@ -54,7 +54,9 @@ unittest wrapper. It covers:
 7. injected failure after the group and event rows have started writing,
    requiring complete rollback of group, event and posting rows;
 8. rejection of in-memory configuration and non-finite lock timeouts;
-9. post-write SQLite and mirror integrity checks.
+9. concurrent identical group delivery (one insert, one replay);
+10. concurrent cross-group event-ID collision (exactly one winner);
+11. post-write SQLite and mirror integrity checks.
 
 The fixture uses a non-bank loan origination and an existing-deposit transfer
 inside one transaction group, with a shared causation ID. This establishes
@@ -65,7 +67,11 @@ every real-world non-bank credit contract must be settled by a deposit transfer.
 
 This is a local, single-database, single-host prototype. SQLite durability
 depends on the underlying filesystem and storage device honoring locking and
-synchronization semantics. It is not a distributed consensus service,
+synchronization semantics. WAL must not be placed on a network filesystem.
+SQLite documents a WAL-reset bug affecting releases through 3.51.2, fixed in
+3.51.3 with backports in 3.50.7 and 3.44.6; the exact runtime SQLite library
+version must be recorded and checked before enabling concurrent production
+writers. It is not a distributed consensus service,
 multi-region ledger, replicated event log, or protection against an attacker
 who can rewrite the database and its hashes.
 
@@ -101,7 +107,9 @@ No exact-head CI result is claimed until GitHub Actions runs and logs complete.
 - [ ] Add crash/restart tests around begin, event insertion, posting insertion,
       commit acknowledgement and projection update.
 - [ ] Test concurrent writers, busy/timeout behavior, backup/restore,
-      integrity recovery and schema migration.
+      integrity recovery and schema migration. The runtime SQLite build must
+      include the WAL-reset fix (SQLite 3.51.3+ or a patched backport such as
+      3.50.7 / 3.44.6) before multi-connection production writes are enabled.
 - [ ] Define operational ownership, access control, encryption, retention,
       audit export, key management and disaster-recovery objectives.
 - [ ] Reconcile entity claims, issuer liabilities and sector accounts from the
