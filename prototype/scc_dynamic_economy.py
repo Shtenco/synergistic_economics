@@ -62,7 +62,7 @@ class CellSpec:
     resource_capacity: float = 18.0
     safety_stock: float = 0.45
     trade_consent: bool = True
-    relay_consent: bool = True
+    relay_consent: bool = False
     allowed_counterparties: frozenset[str] | None = None
 
 
@@ -222,6 +222,7 @@ class DynamicCellularEconomy:
                 demand_jitter, priorities, stocks,
                 resource_regeneration=.32, resource_capacity=18.0,
                 safety_stock=.35,
+                relay_consent=True,
             ))
         return tuple(specs)
 
