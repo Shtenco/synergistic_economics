@@ -268,7 +268,7 @@ The current fixed-price output and consumption indices are diagnostic model metr
 
 The current "service value" is a diagnostic allocation metric, not GDP, profit, income, utility or measured social welfare. It must not be reported as empirical prosperity.
 
-The Stage-A market comparator is deliberately thin: bids are synthetic priority-linked willingness-to-pay values, and it does not yet impose cash budgets, strategic bidding, market power, entry/exit, inventory finance or bargaining. The central comparator is a deterministic full-information greedy priority allocator, not a mathematically solved social-planner optimum. These labels describe four prototype coordination rules, not fully specified real-world institutional systems. Stronger market, cooperative and optimization baselines are required before any substantive institutional conclusion.
+The Stage-A market comparator is deliberately thin: bids are synthetic priority-linked willingness-to-pay values, and it does not yet impose cash budgets, strategic bidding, market power, entry/exit, inventory finance or bargaining. The central comparator is a deterministic full-information min-cost-flow allocator for a linear service-value-minus-route-cost objective; it does not optimize the entire economy or a complete social-welfare function. These labels describe four prototype coordination rules, not fully specified real-world institutional systems. Stronger market, cooperative and optimization baselines are required before any substantive institutional conclusion.
 
 The existing seven-cell and general input-output prototypes remain intact. The cellular engine is an additional coordination layer intended to be integrated only after its local protocol and comparative design have been validated.
 
@@ -281,7 +281,7 @@ The first controlled comparison includes four regimes:
 | Regime | Coordination rule | Information assumption |
 |---|---|---|
 | Market | Bilateral price/bid matching; buyers ranked by bid, sellers by delivered ask | Global market discovery in Stage A |
-| Central benchmark | Global allocation by need priority and route cost | Full verified information; computational upper-bound reference |
+| Central benchmark | Global min-cost-flow allocation maximizing priority-weighted service less route cost | Full verified supply, demand, priority and route information; upper bound for this linear allocation objective |
 | Cooperative | Common pool with priority-weighted max-min rationing | Collective pool sees declared needs and supply |
 | Cellular SCCE | Repeated local request/offer and supplier response rounds | Only suppliers within the configured local hop radius |
 
