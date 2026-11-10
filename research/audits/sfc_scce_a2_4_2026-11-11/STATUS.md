@@ -581,3 +581,45 @@ Exact-code-head PR CI:
 
 Neither job has completed or produced logs. No PASS is claimed. The entity
 journal remains a synthetic fixture and A2.4.4 remains OPEN.
+
+
+## 11 November continuation — durable cohort replay barrier
+
+A code-level audit found that a partial `physical_loss` event was not represented
+by a child cohort or persistent tombstone. Since the adapter only rejected
+duplicate event IDs within one invocation, replaying the same partial loss in
+a later period could subtract the same units again. The period function also
+had no durable marker preventing a repeated or skipped period transition.
+
+The cohort adapter now uses an immutable `CohortLedgerState` containing the
+closing cohorts, last processed period and previously processed event IDs.
+Every transition returns the next state; subsequent calls must consume that
+state rather than a bare cohort tuple. Event IDs are unique across the retained
+ledger history, and periods must advance exactly one step. Cohort vintages may
+not lie after the current period, and additions must enter with the current
+period as vintage and age zero. The synthetic integration fixture now checks
+partial-loss replay, same-period replay, skipped-period rejection and a
+consistent 2021 vintage/period example.
+
+Code commits:
+- `62a1873e8ebf062771879169c28462a49cf8b6c4` — durable ledger state and
+  cross-period event-ID replay barrier;
+- `bafa0f553f3a360f0f7c4fb5b8751d0a0602f007` — period chronology and vintage
+  ordering validation;
+- `0618d5f2d568313424920d9f796f861e867041a0` — replay and calendar-period
+  integration controls;
+- `9a5f54050653ab03c1ad68344c9c4c5532db19c0` — repeated/skipped-period
+  negative controls.
+
+The returned ledger state must be persisted in full. Saving only cohort rows
+would discard the replay barrier. The in-memory state is a prototype contract,
+not a crash-safe database or distributed idempotency service; production must
+back event uniqueness with the authoritative append-only event store.
+
+**Execution status:** implementation and negative-control source are committed,
+but exact-head CI execution is still pending. The current branch's recent
+GitHub Actions runs have remained queued without runner assignment or logs.
+No PASS is claimed. The cohort adapter remains opt-in; the normal SCCE period
+loop does not yet own or persist the ledger. Zero-service capital remains
+unsupported by the current SCCE scalar-capital validator. A2.4.2 remains OPEN;
+A2.4.8 remains BLOCKED. PR #4 remains Draft and unmerged; `main` is untouched.
