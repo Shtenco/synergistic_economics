@@ -389,11 +389,10 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                             trace: List[dict] | None = None) -> List[Allocation]:
     """Local request propagation with explicit neighbour-by-neighbour relaying.
 
-    A buyer does not inspect a global supplier list. It floods a time-to-live
-    request through adjacent cells, discovers the nearest responding supplier,
-    and retries another supplier in later rounds if its request remains unmet.
-    The optional trace records forwarded requests, offers, reservations and
-    acceptances so communication effort can be measured separately from goods.
+    Buyers do not inspect a global supplier list. Requests travel one edge at a
+    time with a TTL; offers, reservations and acceptances travel back along the
+    discovered relay path. Unfilled buyers can retry another supplier in later
+    rounds. The trace counts actual hop messages, including failed searches.
     """
     if max_hops < 1 or max_rounds < 1:
         raise CoordinationError("max_hops and max_rounds must be positive")
@@ -405,6 +404,20 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
     cells = {c.cell_id: c for c in world.cells}
     allocations: List[Allocation] = []
     message_trace = trace if trace is not None else []
+
+    def relay_message(message_type, product, round_index, path, quantity):
+        # path is origin -> ... -> destination. Return messages reverse it.
+        if message_type in ("offer_forward", "reservation_forward"):
+            hops = zip(reversed(path[1:]), reversed(path[:-1]))
+        else:
+            hops = zip(path[:-1], path[1:])
+        for sender, receiver in hops:
+            message_trace.append({
+                "type": message_type, "product": product,
+                "round": round_index, "sender": sender,
+                "receiver": receiver, "quantity": quantity,
+                "hops": len(path) - 1,
+            })
 
     for product in _products(world):
         remaining = dict(demand[product])
@@ -418,26 +431,27 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                 if remaining[buyer] <= EPS:
                     continue
                 visited = {buyer}
-                frontier = [buyer]
+                frontier = [(buyer, [buyer])]
                 offers = []
                 for depth in range(1, max_hops + 1):
                     next_frontier = []
-                    for node in sorted(frontier):
+                    for node, path in sorted(frontier, key=lambda item: item[0]):
                         for neighbour in sorted(graph[node]):
                             if neighbour in visited:
                                 continue
                             visited.add(neighbour)
-                            next_frontier.append(neighbour)
+                            next_path = path + [neighbour]
+                            next_frontier.append((neighbour, next_path))
                             message_trace.append({
                                 "type": "request_forward", "product": product,
                                 "round": round_index, "origin": buyer,
                                 "sender": node, "receiver": neighbour,
-                                "ttl": max_hops - depth,
+                                "quantity": remaining[buyer], "ttl": max_hops - depth,
                             })
                             if (neighbour != buyer
                                     and available[neighbour] > EPS
                                     and neighbour not in tried[buyer]):
-                                offers.append((depth, neighbour))
+                                offers.append((depth, neighbour, next_path))
                     if offers:
                         break
                     frontier = next_frontier
@@ -446,15 +460,13 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
 
                 if not offers:
                     continue
-                distance, seller = min(offers, key=lambda item: (item[0], item[1]))
+                distance, seller, path = min(
+                    offers, key=lambda item: (item[0], item[1], tuple(item[2])))
                 tried[buyer].add(seller)
                 requests[seller][buyer] = remaining[buyer]
-                request_paths[(seller, buyer)] = distance
-                message_trace.append({
-                    "type": "offer", "product": product, "round": round_index,
-                    "origin": buyer, "sender": seller, "receiver": buyer,
-                    "quantity_available": available[seller], "hops": distance,
-                })
+                request_paths[(seller, buyer)] = (distance, path)
+                relay_message("offer_forward", product, round_index,
+                              path, available[seller])
 
             if not requests:
                 break
@@ -471,22 +483,16 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                     quantity = granted[buyer]
                     if quantity <= EPS:
                         continue
-                    distance = request_paths[(seller, buyer)]
+                    distance, path = request_paths[(seller, buyer)]
                     allocations.append(Allocation(
                         product, seller, buyer, quantity, distance))
                     available[seller] -= quantity
                     remaining[buyer] -= quantity
                     moved += quantity
-                    message_trace.append({
-                        "type": "reservation", "product": product,
-                        "round": round_index, "sender": seller,
-                        "receiver": buyer, "quantity": quantity,
-                    })
-                    message_trace.append({
-                        "type": "acceptance", "product": product,
-                        "round": round_index, "sender": buyer,
-                        "receiver": seller, "quantity": quantity,
-                    })
+                    relay_message("reservation_forward", product, round_index,
+                                  path, quantity)
+                    relay_message("acceptance_forward", product, round_index,
+                                  path, quantity)
             if moved <= EPS:
                 break
     return allocations
