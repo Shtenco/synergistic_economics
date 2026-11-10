@@ -287,7 +287,11 @@ class DynamicCellularEconomy:
                   for p in PRODUCTS}
             bid = {p: BASE_PRICES[p] * (1.0 + .10 * pr[p]) for p in PRODUCTS}
             # Stage-B synthetic cells explicitly consent to act as relay nodes.
-            cells.append(MatchCell(cid, s, d, pr, bid, relay_consent=True))
+            cells.append(MatchCell(
+                cid, s, d, pr, bid,
+                relay_consent=self.cells[cid].spec.relay_consent,
+                allowed_counterparties=self.cells[cid].spec.allowed_counterparties,
+            ))
         return MatchWorld(tuple(cells), self.edges, BASE_PRICES,
                           self.transport_cost_per_hop, self.transaction_cost,
                           self.communication_edges)
