@@ -123,3 +123,12 @@ All three files are committed component fixtures. Their execution in a recorded 
 - Independent Decimal arithmetic verification passed for all ten roll-forwards, all seven mirror groups and zero aggregate net lending. This is an independent check of the example values, not execution of the committed script.
 - The audit CI workflow was extended to execute this fixture. The workflow now contains eleven audit-script commands. A completed run and exact-head logs remain unverified.
 - A2.4.4 remains open: no general-purpose instrument ledger, full legal/account taxonomy, or live SFC runtime integration has been implemented.
+
+
+## A2.4.6 source-code audit of actual comparative experiments
+
+- Added `A2_4_6_EXISTING_EXPERIMENT_PROTOCOL_AUDIT.md` (commit `6cd5c1c64bee7aecabc4707dc567054a0bc892e1`), based on actual SCCE source and workflow configuration.
+- Confirmed four economic regimes: market, central, cooperative, cellular; market is the paired benchmark. Confirmed three household allocation policies: proportional, priority_weighted, floor_priority.
+- Recovered existing Stage-B Monte Carlo defaults (100 seeds, 24 periods, 2 hops) and Stage-C2-A2 CI configuration (20 seeds, 24 periods, compound shock, 2 hops, 10 households/cell, priority dispersion 0.4, floor 0.5, backlog retention 0.5, backlog capacity 1 period, queue age 3 periods, backlog-first; all default policy arms).
+- Identified 21 existing C2-A2 metrics and the current interval calculation (mean ± 1.96 × sample SD / sqrt(n)); no primary/secondary endpoint hierarchy, minimum practically important effect, explicit exclusions, confirmatory seed set or complete incremental-input accounting is frozen.
+- Decision: existing runs remain exploratory synthetic comparisons. No retrospective preregistration or empirical net-synergy claim. A2.4.6 remains open.
