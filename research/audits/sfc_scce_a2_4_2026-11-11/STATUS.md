@@ -870,3 +870,10 @@ successive periods, derive the positions from the durable event store, or
 integrate with the SFC runtime. It is a synthetic fixture hardening only.
 No exact-head execution PASS is claimed. A2.4.4 remains OPEN and A2.4.8
 remains BLOCKED; PR #4 remains Draft/unmerged and canonical `main` untouched.
+
+
+The dedicated A2.4 branch-push workflow has also been extended to execute
+`audit_financial_event_store.py` and `audit_financial_journal_adapter.py`
+directly. Previously those two new A2.4.4 controls were included in the
+prototype PR wrapper but omitted from the dedicated branch-push audit job.
+This is workflow wiring only; no execution result is inferred from the edit.
