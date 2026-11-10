@@ -37,9 +37,9 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_central_flow_optimizer_prioritizes_higher_service_value(self):
         world = World(
             cells=(
-                Cell("seller", {"food": 1.0}, {}, {"food": 1.0}, {"food": 1.0}),
-                Cell("buyer-a", {}, {"food": 1.0}, {"food": 1.0}, {"food": 1.0}),
-                Cell("buyer-b", {}, {"food": 1.0}, {"food": 2.0}, {"food": 1.0}),
+                Cell("seller", {"food": 1.0}, {}, {"food": 1.0}, {"food": 1.0}, trade_consent=True),
+                Cell("buyer-a", {}, {"food": 1.0}, {"food": 1.0}, {"food": 1.0}, trade_consent=True),
+                Cell("buyer-b", {}, {"food": 1.0}, {"food": 2.0}, {"food": 1.0}, trade_consent=True),
             ),
             edges=(("seller", "buyer-a"), ("seller", "buyer-b")),
             prices={"food": 1.0},
@@ -52,10 +52,10 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_relay_protocol_discovers_supplier_through_neighbour_messages(self):
         world = World(
             cells=(
-                Cell("buyer", {}, {"food": 4.0}, {"food": 2.0}, {"food": 10.0}),
+                Cell("buyer", {}, {"food": 4.0}, {"food": 2.0}, {"food": 10.0}, trade_consent=True),
                 Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0},
                      relay_consent=True),
-                Cell("supplier", {"food": 5.0}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("supplier", {"food": 5.0}, {}, {"food": 1.0}, {"food": 10.0}, trade_consent=True),
             ),
             edges=(("buyer", "relay"), ("relay", "supplier")),
             prices={"food": 4.0},
@@ -74,7 +74,7 @@ class CellularCoordinationTests(unittest.TestCase):
 
     def test_every_allocation_regime_requires_bilateral_consent(self):
         cells = (
-            Cell("buyer", {}, {"food": 3.0}, {"food": 2.0}, {"food": 10.0}),
+            Cell("buyer", {}, {"food": 3.0}, {"food": 2.0}, {"food": 10.0}, trade_consent=True),
             Cell("seller", {"food": 3.0}, {}, {"food": 1.0}, {"food": 10.0},
                  trade_consent=False),
         )
@@ -110,7 +110,7 @@ class CellularCoordinationTests(unittest.TestCase):
             "buyer", {}, {"food": 2.0}, {"food": 2.0}, {"food": 10.0},
             allowed_counterparties=frozenset(),
         )
-        seller = Cell("seller", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0})
+        seller = Cell("seller", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}, trade_consent=True)
         world = World((buyer, seller), edges=(("buyer", "seller"),),
                       prices={"food": 4.0})
         for allocator in (
@@ -133,10 +133,10 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_message_relay_and_physical_delivery_use_separate_graphs(self):
         world = World(
             cells=(
-                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}),
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}, trade_consent=True),
                 Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0},
                      relay_consent=True),
-                Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}, trade_consent=True),
             ),
             edges=(("buyer", "supplier"),),
             prices={"food": 4.0},
@@ -151,12 +151,12 @@ class CellularCoordinationTests(unittest.TestCase):
         world = World(
             cells=(
                 Cell("buyer-a", {}, {"food": 2.0}, {"food": 2.0}, {"food": 5.0},
-                     relay_consent=False),
+                     trade_consent=True, relay_consent=False),
                 Cell("buyer-b", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0},
-                     relay_consent=False),
+                     trade_consent=True, relay_consent=False),
                 Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0},
                      relay_consent=True),
-                Cell("supplier", {"food": 4.0}, {}, {"food": 1.0}, {"food": 5.0}),
+                Cell("supplier", {"food": 4.0}, {}, {"food": 1.0}, {"food": 5.0}, trade_consent=True),
             ),
             edges=(("buyer-a", "relay"), ("buyer-b", "relay"), ("relay", "supplier")),
             prices={"food": 2.0},
