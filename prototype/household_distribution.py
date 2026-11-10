@@ -7,6 +7,7 @@ cells, or claim to measure utility or welfare.
 from __future__ import annotations
 
 import math
+import random
 import statistics
 from dataclasses import dataclass
 from typing import Dict, Mapping, Sequence
@@ -176,6 +177,41 @@ def allocate_households(
     )
 
 
+def generate_synthetic_households(
+    cell_demand: Mapping[str, Mapping[str, float]],
+    households_per_cell: int = 10,
+    seed: int = 1,
+    essential_products: Sequence[str] = ("food", "care"),
+) -> tuple[Household, ...]:
+    """Split cell demand into reproducible heterogeneous synthetic households."""
+    if households_per_cell < 1:
+        raise HouseholdDistributionError("households_per_cell must be positive")
+    rng = random.Random(seed)
+    essential_set = set(essential_products)
+    households = []
+    for cid in sorted(cell_demand):
+        shares = [rng.expovariate(1.0) for _ in range(households_per_cell)]
+        total_share = sum(shares)
+        shares = [x / total_share for x in shares]
+        essential = [{} for _ in range(households_per_cell)]
+        discretionary = [{} for _ in range(households_per_cell)]
+        for product, total in sorted(cell_demand[cid].items()):
+            quantity = float(total)
+            if not math.isfinite(quantity) or quantity < 0:
+                raise HouseholdDistributionError("invalid synthetic cell demand")
+            target = essential if product in essential_set else discretionary
+            for index, share in enumerate(shares):
+                target[index][product] = quantity * share
+        for index in range(households_per_cell):
+            households.append(Household(
+                f"{cid}-hh-{index + 1:03d}", cid,
+                essential[index], discretionary[index],
+                essential_priority=rng.uniform(0.8, 2.0),
+                discretionary_priority=rng.uniform(0.8, 1.2),
+            ))
+    return tuple(households)
+
+
 def allocate_period_households(
     households: Sequence[Household],
     period_result,
@@ -281,6 +317,33 @@ def evaluate_households(
             p: {**v, "fulfilment": v["served"] / v["demand"] if v["demand"] > EPS else 1.0}
             for p, v in per_product.items()
         },
+    }
+
+
+def compare_household_distribution_policies(
+    period_result,
+    households_per_cell: int = 10,
+    seed: int = 1,
+) -> Dict[str, object]:
+    """Compare both rules on the same Stage-B supplies and household needs."""
+    demand = getattr(period_result, "final_demand_by_cell", None)
+    supply = getattr(period_result, "final_consumption_by_cell", None)
+    if not isinstance(demand, Mapping) or not isinstance(supply, Mapping):
+        raise HouseholdDistributionError(
+            "period result must expose final_demand_by_cell and final_consumption_by_cell"
+        )
+    households = generate_synthetic_households(
+        demand, households_per_cell=households_per_cell, seed=seed)
+    results = {}
+    for policy in POLICIES:
+        allocations = allocate_period_households(households, period_result, policy)
+        validate_household_allocation(households, supply, allocations)
+        results[policy] = evaluate_households(households, allocations)
+    return {
+        "seed": seed,
+        "households_per_cell": households_per_cell,
+        "household_count": len(households),
+        "policies": results,
     }
 
 
