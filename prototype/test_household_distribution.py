@@ -183,6 +183,24 @@ class HouseholdDistributionTests(unittest.TestCase):
         with self.assertRaises(HouseholdDistributionError):
             allocate_households(self.households, self.supply, "central")
 
+    def test_non_finite_needs_priorities_and_supply_rejected(self):
+        with self.assertRaises(HouseholdDistributionError):
+            allocate_households(
+                (Household("nan", "cell", {"food": float("nan")}, {}),),
+                {"cell": {"food": 1.0}},
+            )
+        with self.assertRaises(HouseholdDistributionError):
+            allocate_households(
+                (Household("inf", "cell", {"food": 1.0}, {},
+                           essential_priority=float("inf")),),
+                {"cell": {"food": 1.0}},
+            )
+        with self.assertRaises(HouseholdDistributionError):
+            allocate_households(
+                (Household("ok", "cell", {"food": 1.0}, {}),),
+                {"cell": {"food": float("nan")}},
+            )
+
     def test_negative_needs_and_unknown_cells_rejected(self):
         with self.assertRaises(HouseholdDistributionError):
             allocate_households(
