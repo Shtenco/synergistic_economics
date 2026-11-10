@@ -52,6 +52,22 @@ Scenarios: baseline, demand_collapse, energy_import_shock, metals_shortage, comp
 
 Prototype 2 currently uses immediate cash settlement. Trade credit, maturity schedules, defaults, capital accumulation and ecological constraints are explicitly deferred to separately testable modules; they are not simulated by this version.
 
+## Prototype 3 — SCCE Cellular Coordination Kernel
+
+- [cellular_coordination.py](cellular_coordination.py) — Stage-A local-neighbour matching protocol with market, central benchmark, cooperative-pool and cellular regimes.
+- [test_cellular_coordination.py](test_cellular_coordination.py) — invariants for supply/demand bounds, local hop limits, disconnected components, determinism, stress cases and paired Monte Carlo structure.
+- [Model and experiment specification](../research/SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md) — cellular state transition, local messages, reservations, consent, fair comparison, outcome vector and research roadmap.
+
+Run from the repository root:
+
+```bash
+python prototype/cellular_coordination.py --seed 1 --shock none --hops 1
+python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 2
+python -m unittest discover -s prototype -p 'test_*.py' -v
+```
+
+This is a local allocation/coordination kernel, not yet a complete dynamic economy. Its service-value metrics are diagnostic and must not be interpreted as GDP or empirical welfare.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
