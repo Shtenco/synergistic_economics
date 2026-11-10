@@ -153,6 +153,22 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         self.assertAlmostEqual(view.neighbour_input_demand, 0.66)
         self.assertNotIn("cell-4", view.neighbour_ids)
 
+    def test_cellular_transition_is_invariant_to_cell_iteration_order(self):
+        specs = DynamicCellularEconomy.default_specs(51)
+        forward = DynamicCellularEconomy(
+            "cellular", seed=51, specs=specs, cellular_hops=2)
+        reverse = DynamicCellularEconomy(
+            "cellular", seed=51, specs=tuple(reversed(specs)), cellular_hops=2)
+        a = forward.step(1)
+        b = reverse.step(1)
+        for product in a.output_by_product:
+            self.assertAlmostEqual(
+                a.output_by_product[product], b.output_by_product[product], places=8)
+        for product in a.final_consumption_by_product:
+            self.assertAlmostEqual(
+                a.final_consumption_by_product[product],
+                b.final_consumption_by_product[product], places=8)
+
     def test_cellular_output_rule_uses_local_need_or_neighbour_input_signal(self):
         base = dict(
             cell_id="test", inventory=0.0, local_final_need=2.0,
