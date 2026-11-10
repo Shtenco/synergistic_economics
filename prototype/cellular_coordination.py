@@ -460,7 +460,9 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
     delivery_distances = shortest_paths(world)
     cells = {c.cell_id: c for c in world.cells}
     allocations: List[Allocation] = []
-    message_trace = trace if trace is not None else []
+    # Raw request records are bundled into one packet per directed edge,
+    # product, round and message type before being exposed to the simulator.
+    raw_message_trace: List[dict] = []
 
     def relay_message(message_type, product, round_index, path, quantity):
         # path is origin -> ... -> destination. Return messages reverse it.
@@ -469,7 +471,7 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
         else:
             hops = zip(path[:-1], path[1:])
         for sender, receiver in hops:
-            message_trace.append({
+            raw_message_trace.append({
                 "type": message_type, "product": product,
                 "round": round_index, "sender": sender,
                 "receiver": receiver, "quantity": quantity,
@@ -556,6 +558,37 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                                   path, quantity)
             if moved <= EPS:
                 break
+    # Batch records sharing the same directed edge and protocol phase.
+    # The payload retains record count so packet overhead and payload work can
+    # be priced separately by the dynamic economy.
+    batches = {}
+    for event in raw_message_trace:
+        key = (
+            event["type"], event["product"], event["round"],
+            event["sender"], event["receiver"], event.get("ttl"),
+            event.get("hops"),
+        )
+        if key not in batches:
+            batches[key] = {
+                k: v for k, v in event.items() if k not in ("origin", "quantity")
+            }
+            batches[key]["records"] = 0
+            batches[key]["origins"] = []
+            batches[key]["quantity"] = 0.0
+        batch = batches[key]
+        batch["records"] += 1
+        if "origin" in event:
+            batch["origins"].append(event["origin"])
+        if event["type"] == "offer_forward":
+            batch["quantity"] = max(batch["quantity"], event.get("quantity", 0.0))
+        else:
+            batch["quantity"] += event.get("quantity", 0.0)
+    message_trace = [
+        {**event, "origins": sorted(event["origins"])}
+        for _, event in sorted(batches.items(), key=lambda item: item[0])
+    ]
+    if trace is not None:
+        trace.extend(message_trace)
     return allocations
 
 POLICIES = {
