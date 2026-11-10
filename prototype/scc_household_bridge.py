@@ -26,6 +26,7 @@ def households_from_cell_demand(
     households_per_cell: int = 5,
     seed: int = 1,
     essential_products: Sequence[str] = ("food", "care"),
+    priority_dispersion: float = 0.0,
 ) -> tuple[Household, ...]:
     """Split each cell's declared product demand into reproducible households.
 
@@ -35,13 +36,21 @@ def households_from_cell_demand(
     """
     if households_per_cell < 1:
         raise HouseholdBridgeError("households_per_cell must be positive")
+    if not 0.0 <= priority_dispersion < 1.0:
+        raise HouseholdBridgeError("priority_dispersion must be in [0, 1)")
     rng = random.Random(seed)
     essential_set = set(essential_products)
     households: dict[str, dict[str, dict[str, float]]] = {}
     for cell_id in sorted(cell_demand):
         for index in range(households_per_cell):
             household_id = f"{cell_id}:h{index + 1:03d}"
-            households[household_id] = {"essential": {}, "discretionary": {}}
+            households[household_id] = {
+                "essential": {}, "discretionary": {},
+                "essential_priority": rng.uniform(
+                    1.0 - priority_dispersion, 1.0 + priority_dispersion),
+                "discretionary_priority": rng.uniform(
+                    1.0 - priority_dispersion, 1.0 + priority_dispersion),
+            }
 
         for product, total in sorted(cell_demand[cell_id].items()):
             total = float(total)
@@ -64,6 +73,8 @@ def households_from_cell_demand(
             cell_id=household_id.rsplit(":h", 1)[0],
             essential_needs=values["essential"],
             discretionary_needs=values["discretionary"],
+            essential_priority=values["essential_priority"],
+            discretionary_priority=values["discretionary_priority"],
         )
         for household_id, values in sorted(households.items())
     )
@@ -75,6 +86,7 @@ def distribute_period_to_households(
     policy: str = "proportional",
     seed: int = 1,
     essential_products: Sequence[str] = ("food", "care"),
+    priority_dispersion: float = 0.0,
 ) -> dict:
     """Disaggregate one Stage-B period's cell consumption among households.
 
@@ -91,7 +103,8 @@ def distribute_period_to_households(
         ) from exc
 
     households = households_from_cell_demand(
-        cell_demand, households_per_cell, seed, essential_products)
+        cell_demand, households_per_cell, seed, essential_products,
+        priority_dispersion)
     allocations = allocate_households(households, cell_supply, policy)
     validate_household_allocation(households, cell_supply, allocations)
     metrics = evaluate_households(households, allocations)
@@ -128,6 +141,7 @@ def distribute_period_to_households(
         "policy": policy,
         "seed": seed,
         "households_per_cell": households_per_cell,
+        "priority_dispersion": priority_dispersion,
         "households": households,
         "allocations": allocations,
         "metrics": metrics,
