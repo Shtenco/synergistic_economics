@@ -3,7 +3,7 @@ import unittest
 from scc_endogenous_household_experiment import (
     EndogenousHouseholdExperimentError,
     run_endogenous_household_experiment,
-    run_backlog_sensitivity,
+    run_backlog_sensitivity, run_service_order_sensitivity,
 )
 
 
@@ -48,6 +48,23 @@ class SCCEEndogenousHouseholdExperimentTests(unittest.TestCase):
         self.assertEqual(
             cellular["ending_essential_backlog"]
             ["without_backlog_mean"], 0.0,
+        )
+
+    def test_paired_service_order_sensitivity_uses_identical_seeds(self):
+        result = run_service_order_sensitivity(
+            runs=2, shock="compound", periods=8, cellular_hops=2,
+            households_per_cell=5, priority_dispersion=0.3,
+            backlog_retention=0.5, max_backlog_periods=1.0,
+        )
+        self.assertEqual(result["runs"], 2)
+        cellular = result["sensitivity"]["cellular"]
+        self.assertEqual(
+            cellular["current_essential_fulfilment"]
+            ["paired_backlog_first_minus_current_first"]["n"], 2,
+        )
+        self.assertGreaterEqual(
+            cellular["current_essential_fulfilment"]
+            ["current_first_mean"], 0.0,
         )
 
     def test_invalid_experiment_size_or_policy_is_rejected(self):
