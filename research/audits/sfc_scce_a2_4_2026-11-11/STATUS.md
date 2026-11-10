@@ -190,3 +190,29 @@ At the first poll after adding the wrapper, the connector had not yet surfaced
 new PR run IDs for the new head. The earlier Prototype and Stage-C2 runs
 `42904160933` and `42904160781` remained queued. No execution result is
 claimed until new exact-head runs complete and their job logs are inspected.
+
+
+## 11 November continuation — per-holder deposit mirror defect and correction
+
+A code review of the then-current `audit_financial_journal.py` found that
+non-bank deposit transfer (E2) and supplier payment (E3) moved holder-side
+deposit assets but omitted the corresponding bank-liability holder movements.
+The aggregate bank-deposit-liability change was still asserted to be zero
+because no liability lines were present. Thus the old check could pass an
+incomplete journal.
+
+The journal now records the bank liability reduction for the outgoing holder
+and increase for the incoming holder. Every deposit liability line identifies
+its holder in an explicit counterparty field. A per-event validator compares
+the signed deposit asset movement and issuer-liability movement for each
+holder, not merely the system aggregate.
+
+A deliberately adversarial E2 removes both bank liability-holder postings.
+The remaining journal is still globally debit/credit balanced and aggregate
+deposit assets still net to zero; the per-holder mirror validator must reject
+it. The corrected fixture is committed at
+`3d3706b1816aa8379e0ae7f48a34955af668fbd4`.
+
+This is still a synthetic component journal. It does not yet validate all
+financial instrument mirrors, legal claims, full sector ledgers or multi-period
+SFC closure.
