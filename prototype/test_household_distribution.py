@@ -79,6 +79,23 @@ class HouseholdDistributionTests(unittest.TestCase):
         self.assertTrue(validate_household_allocation(
             households, {"cell": {"food": 6.0}}, surplus))
 
+    def test_floor_priority_endpoints_match_weighted_and_proportional_rules(self):
+        households = (
+            Household("priority", "cell", {"food": 4.0}, {}, 3.0),
+            Household("standard", "cell", {"food": 4.0}, {}, 1.0),
+        )
+        supply = {"cell": {"food": 4.0}}
+        weighted = allocate_households(
+            households, supply, "floor_priority", essential_floor_fraction=0.0)
+        proportional = allocate_households(
+            households, supply, "floor_priority", essential_floor_fraction=1.0)
+        w = {a.household_id: a.essential_served["food"] for a in weighted}
+        p = {a.household_id: a.essential_served["food"] for a in proportional}
+        self.assertAlmostEqual(w["priority"], 3.0)
+        self.assertAlmostEqual(w["standard"], 1.0)
+        self.assertAlmostEqual(p["priority"], 2.0)
+        self.assertAlmostEqual(p["standard"], 2.0)
+
     def test_floor_priority_shares_insufficient_floor_supply_proportionally(self):
         households = (
             Household("priority", "cell", {"food": 4.0}, {}, 3.0),
