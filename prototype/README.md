@@ -86,7 +86,7 @@ python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock none --periods
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 1 --summary-only
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 2 --summary-only
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 3 --summary-only
-python prototype/scc_dynamic_economy.py --monte-carlo 20 --shock compound --periods 24 --hops 2 --coordination-hours-per-message 0.05 --summary-only
+python prototype/scc_dynamic_economy.py --coordination-sensitivity --monte-carlo 20 --shock compound --periods 24 --hops 2
 ```
 
 Stage B is a physical production-and-consumption layer. Cellular requests are now relayed neighbour by neighbour, and the simulator records forwarded requests, offers, reservations, acceptances and a synthetic per-message cost. The current model also deducts a configurable labour-time cost per message from productive capacity (including delayed effects from final-goods coordination). This parameter is synthetic and requires sensitivity analysis; governance, failed bargaining beyond the recorded relay requests, enforcement and dispute resolution remain incomplete. Stage B does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
