@@ -94,7 +94,7 @@ Stage B is a physical production-and-consumption layer. Cellular production plan
 
 ## Prototype 5 — Stage-C1 Household Physical Distribution
 
-- [household_distribution.py](household_distribution.py) — distributes goods already available inside each cell among that cell's households; supports proportional and priority-weighted max-min rationing, essential-first sequencing and household-level distribution metrics.
+- [household_distribution.py](household_distribution.py) — distributes goods already available inside each cell among that cell's households; supports proportional and priority-weighted max-min rationing, essential-first sequencing and household-level distribution metrics; essential-first sequencing does not guarantee that scarce essential needs can all be met.
 - [scc_household_bridge.py](scc_household_bridge.py) — creates reproducible synthetic household profiles from each Stage-B cell's declared demand and disaggregates the period's already-consumed physical quantities; it is explicitly post-hoc and does not create a second goods flow.
 - [scc_household_experiment.py](scc_household_experiment.py) — period-by-period paired comparison of proportional and priority-weighted household rationing, preserving the timing of shortages.
 The experiment uses a persistent synthetic household panel across all periods. It reports both cumulative-horizon household fulfilment and period-level lower-tail/worst-period metrics, so temporal shortages are not hidden by the cumulative totals.
