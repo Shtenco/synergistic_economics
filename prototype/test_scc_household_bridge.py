@@ -60,6 +60,12 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
             period.essential_fulfilment,
             places=9,
         )
+        stage_b_total = sum(
+            quantity
+            for products in period.final_consumption_by_cell.values()
+            for quantity in products.values()
+        )
+        self.assertAlmostEqual(result["metrics"]["overall_served"], stage_b_total, places=9)
         for cell_id, products in period.final_consumption_by_cell.items():
             for product, quantity in products.items():
                 unassigned = result["unassigned_consumption_by_cell"][cell_id][product]
