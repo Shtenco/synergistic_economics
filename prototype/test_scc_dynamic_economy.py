@@ -6,7 +6,7 @@ from cellular_coordination import (
     allocate_cooperative, allocate_market, communication_paths,
 )
 from scc_dynamic_economy import (
-    DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
+    CellSpec, DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
     coordination_sensitivity, coordination_frontier, coordination_curve,
     CellLocalView, propose_cellular_output,
 )
@@ -295,6 +295,19 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         )
         with self.assertRaises(DynamicEconomyError):
             coordination_frontier(runs=3, hours_levels=(0.01, 0.05))
+
+    def test_new_cell_specs_default_to_no_trade_or_relay(self):
+        spec = CellSpec(
+            "new-cell", "test", "food", 1.0, 1.0, 1.0,
+            {}, {}, {}, {},
+        )
+        self.assertFalse(spec.trade_consent)
+        self.assertFalse(spec.relay_consent)
+
+    def test_synthetic_default_specs_explicitly_opt_in(self):
+        specs = DynamicCellularEconomy.default_specs(19)
+        self.assertTrue(all(spec.trade_consent for spec in specs))
+        self.assertTrue(all(spec.relay_consent for spec in specs))
 
     def test_stage_b_trade_consent_blocks_external_delivery(self):
         specs = list(DynamicCellularEconomy.default_specs(31))
