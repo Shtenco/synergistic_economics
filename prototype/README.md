@@ -114,9 +114,11 @@ The Stage-C1 kernel remains separate from Stage B's production and matching deci
 
 - [scc_household_signals.py](scc_household_signals.py) — builds a persistent synthetic household panel from cell demand and publishes only aggregated cell/product request signals; individual identifiers and priority weights are not exposed to the production engine. Small groups are suppressed by a minimum-contributor rule.
 - [test_scc_household_signals.py](test_scc_household_signals.py) — checks demand reconciliation, privacy-scoped payloads, fail-closed suppression and exact equivalence with the Stage-B physical baseline.
+- [scc_endogenous_household_economy.py](scc_endogenous_household_economy.py) — C2-A2 in-loop household delivery: current household needs plus a bounded essential backlog feed into each household's own cell demand in the next period; physical deliveries are allocated to households and reconciled product-by-product.
+- [test_scc_endogenous_household_economy.py](test_scc_endogenous_household_economy.py) — checks zero-backlog equivalence to Stage B, household delivery reconciliation, backlog caps and the effect of allocation rules on household outcomes.
 - [Stage-C2 research design](../research/SCCE_STAGE_C2_ENDOGENOUS_HOUSEHOLD_ECONOMY_V0_1.md) — specifies the remaining endogenous household–cell feedback, voluntary time, income/ownership interfaces and comparative welfare experiments.
 
-C2-A1 is deliberately a controlled bridge: it makes household profiles the explicit source of cell demand but preserves aggregate demand and Stage-B physical outcomes exactly. It is not yet an in-loop household delivery or behavioural-feedback model.
+C2-A1 is deliberately a controlled bridge: it makes household profiles the explicit source of cell demand but preserves aggregate demand and Stage-B physical outcomes exactly. C2-A2 adds an in-loop household delivery and bounded essential-backlog feedback into the next period's own-cell demand. This is still a synthetic physical model; household labour, income, ownership, money and credit remain unimplemented.
 
 ## Validation
 
