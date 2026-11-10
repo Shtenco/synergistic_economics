@@ -388,3 +388,40 @@ This is a documented audit finding, not an implemented correction. A2.4.4 remain
 - Draft PR #4 remains open and unmerged; canonical `main` remains unchanged.
 - Before the finding-document commit, the exact code-head workflow runs were all queued: A2.4 audit controls `42906220504`, Prototype validation `42906225088`, SCCE Stage-C2 `42906225115`. These runs target parent code HEAD `f14488b6a895d49425bc6be248e505ca757fc837`, not the new documentation HEAD.
 - The finding document does not alter executable code. No exact-head CI PASS is claimed; current code still requires completed workflow evidence.
+
+
+## 11 November continuation — cohort service adapter into SCCE
+
+A2.4.2 now has a narrow runtime adapter, not merely a detached cohort
+contract fixture:
+
+- `prototype/capital_cohort_bridge.py` validates immutable cohort records,
+  stable IDs, cell assignment, vintage/age, physical quantity, service
+  capacity, operating state, availability, utilization and service quality.
+- It separately aggregates non-retired physical units, operating units and
+  capital-service flow for each SCCE cell.
+- It maps service flow to the engine's existing dimensionless
+  `CellState.capital` multiplier using an explicit per-cell positive baseline.
+  It computes and validates every cell before mutating any engine state.
+- It rejects zero-service cells because the present SCCE `validate()` requires
+  `capital > 0`; it does not silently replace zero by an epsilon.
+- `research/audits/.../audit_scce_capital_cohort_bridge.py` constructs
+  synthetic cohorts, applies the adapter to an actual
+  `DynamicCellularEconomy` instance, checks the production proposal response,
+  and executes one real engine period.
+- `prototype/test_a2_4_audit_controls.py` now includes this new audit script
+  as a thirteenth subprocess test.
+
+The adapter is explicitly a compatibility bridge. The engine still does not
+own or evolve asset cohorts; acquisition, ageing, repair completion, component
+replacement, retirement and physical-loss transitions are not yet persisted by
+the SCCE runtime. The per-cell baseline is synthetic/declared, not empirically
+calibrated. A2.4.2 therefore advances from specification-only to
+**synthetic runtime-adapter integration**, but remains open.
+
+The exact branch head after these changes is
+`b2a3154fec713aa65139cabd813ea6e53926caee`, 98 commits ahead of `main`,
+0 behind, with 25 changed files. The new exact-head CI run IDs have not yet
+been surfaced by the commit-run query. The preceding exact-head PR runs
+`42906225088` (Prototype) and `42906225115` (SCCE Stage-C2) were queued for
+the prior code state; they do not verify this adapter. No PASS is claimed.
