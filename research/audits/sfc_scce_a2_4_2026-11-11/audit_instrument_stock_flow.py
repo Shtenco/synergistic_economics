@@ -2,7 +2,9 @@
 
 The fixture transcribes the opening/closing positions and sectoral financial
 net lending from FULL_SIX_SECTOR_SFC_NUMERICAL_CLOSURE.md. It remains a
-synthetic example, not a general production ledger.
+synthetic example, not a general production ledger. Financial net lending is
+computed from transaction flows only; revaluation and other-volume changes
+belong exclusively to the stock-flow bridge.
 """
 from dataclasses import dataclass
 from decimal import Decimal as D
@@ -60,10 +62,15 @@ def validate_mirrors(positions, issuer_liabilities):
 
 
 def sector_financial_net_lending(positions):
+    """Financial NL uses transactions, never total stock changes.
+
+    For a position held by H and issued by I, transaction T increases H's
+    financial assets and I's financial liabilities by T. V and O are excluded.
+    """
     assets = {}
     liabilities = {}
     for p in positions:
-        delta = p.closing - p.opening
+        delta = p.transactions
         assets[p.holder] = assets.get(p.holder, D("0")) + delta
         liabilities[p.issuer] = liabilities.get(p.issuer, D("0")) + delta
     sectors = set(assets) | set(liabilities)
@@ -126,11 +133,33 @@ def main():
     else:
         raise AssertionError("unmatched issuer liability accepted")
 
+    # Negative control: a valuation-only movement changes the closing stock,
+    # but must not create sectoral financial net lending.
+    valuation_only = [
+        position("fx_deposit", "H", "CB", 100, 0, 113,
+                 revaluation=10, other_volume=3)
+    ]
+    validate_stock_flow(valuation_only)
+    valuation_nl = sector_financial_net_lending(valuation_only)
+    assert valuation_nl == {"H": D("0"), "CB": D("0")}
+
+    # Mixed transaction, revaluation and OVC: only T enters financial NL.
+    mixed = [
+        position("fx_deposit", "H", "CB", 100, 7, 120,
+                 revaluation=10, other_volume=3)
+    ]
+    validate_stock_flow(mixed)
+    mixed_nl = sector_financial_net_lending(mixed)
+    assert mixed_nl == {"H": D("7"), "CB": D("-7")}
+    assert sum(mixed_nl.values(), D("0")) == 0
+
     print("A2.4.4 instrument stock-flow reconciliation: PASS")
     print("10 holder/issuer positions; all stock-flow identities and mirrors close")
     print("sector financial net lending: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23")
     print("sum of sector financial net lending=0")
-    print("broken position roll-forward and unmatched liability rejected")
+    print("valuation-only V=10/O=3 changes stocks but produces zero financial NL")
+    print("mixed T=7/V=10/O=3 produces financial NL H=+7, CB=-7")
+    print("broken roll-forward and unmatched issuer liability rejected")
 
 
 if __name__ == "__main__":
