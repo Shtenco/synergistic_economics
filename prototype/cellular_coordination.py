@@ -12,7 +12,6 @@ import json
 import math
 import random
 import statistics
-import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -112,8 +111,13 @@ def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
 
 
 def communication_paths(world: World) -> Dict[str, Dict[str, int]]:
-    """Shortest hop counts on the message-relay graph, not the delivery graph."""
+    """Reachable hop counts when intermediate cells must consent to relay.
+
+    An origin may always publish its own message. A non-consenting cell may
+    receive a message, but it is a terminal node for other origins' paths.
+    """
     graph = {c.cell_id: set() for c in world.cells}
+    cells = {c.cell_id: c for c in world.cells}
     for a, b in (world.communication_edges or world.edges):
         graph[a].add(b)
         graph[b].add(a)
@@ -123,6 +127,8 @@ def communication_paths(world: World) -> Dict[str, Dict[str, int]]:
         queue = deque([origin])
         while queue:
             node = queue.popleft()
+            if node != origin and not cells[node].relay_consent:
+                continue
             for nxt in sorted(graph[node]):
                 if nxt not in dist:
                     dist[nxt] = dist[node] + 1
