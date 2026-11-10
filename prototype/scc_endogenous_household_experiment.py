@@ -305,6 +305,8 @@ def run_service_order_sensitivity(
     }
     metrics = (
         "current_essential_fulfilment",
+        "current_food_fulfilment",
+        "current_care_fulfilment",
         "current_overall_fulfilment",
         "cumulative_lower_decile_current_essential_fulfilment",
         "cumulative_minimum_current_essential_fulfilment",
