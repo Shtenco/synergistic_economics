@@ -112,7 +112,7 @@ def main():
         policy="cellular", seed=23, shock="compound", cellular_hops=2)
     original = {cid: cell.capital for cid, cell in untouched.cells.items()}
     zero_service = tuple(
-        replace(row, operating_status="retired", retirement_reason="planned")
+        replace(row, operating_status="repair")
         if row.cell_id == "cell-1" else row
         for row in cohorts
     )
@@ -124,6 +124,20 @@ def main():
         raise AssertionError("zero operating service was silently mapped")
     if {cid: cell.capital for cid, cell in untouched.cells.items()} != original:
         raise AssertionError("failed cohort mapping partially mutated engine capital")
+
+    # B8.1 does not retain a final "retired" state in the active cohort
+    # register. Retirement is a quantity-removal transition; reject attempts
+    # to smuggle a retired asset back into the physical stock snapshot.
+    try:
+        aggregate_capital_services(
+            tuple(model.cells),
+            (replace(cohorts[0], operating_status="retired",
+                     retirement_reason="planned"),),
+            baseline)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("retired pseudo-state accepted as an active cohort")
 
     # Malformed numeric and lifecycle fields are rejected explicitly.
     for malformed in (
@@ -156,10 +170,11 @@ def main():
 
     print("A2.4.2/B8.1 cohort-to-SCCE runtime adapter: PASS")
     print("physical units remain distinct from operating units and service flow")
+    print("B8.1 active-state vocabulary enforced; final retirement is a separate stock-removal event")
     print("repair downtime reduces service, not physical stock; utilization scales service")
     print("service index maps atomically to CellState.capital before a real SCCE step")
     print("local production proposal responds proportionally to the applied capital multiplier")
-    print("negative controls: zero service, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
+    print("negative controls: zero service, retired pseudo-state, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
 
 
 if __name__ == "__main__":
