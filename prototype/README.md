@@ -110,6 +110,10 @@ python prototype/scc_household_experiment.py --runs 20 --shock compound --period
 
 The Stage-C1 kernel remains separate from Stage B's production and matching decisions. A tested post-hoc bridge reads Stage-B per-cell demand and consumption snapshots and decomposes the already-consumed quantities among synthetic household profiles. A paired experiment compares proportional, priority-weighted and floor-priority rationing using the same persistent households and physical quantities. It does not feed back into production or create a second delivery. A future endogenous integration must preserve the same no-double-counting boundary. Household income, wages, ownership, money and credit are not yet implemented.
 
+### Next stage — Stage C2 endogenous household–cell economy
+
+- [Stage-C2 research design](../research/SCCE_STAGE_C2_ENDOGENOUS_HOUSEHOLD_ECONOMY_V0_1.md) — defines the next physical and institutional feedback layer: household needs versus budget-backed demand, local privacy-scoped signals, voluntary time allocation, income/ownership interfaces, essential-service feasibility, matched institutional comparisons and invariants. This is a design specification; no C2 implementation is claimed yet.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
