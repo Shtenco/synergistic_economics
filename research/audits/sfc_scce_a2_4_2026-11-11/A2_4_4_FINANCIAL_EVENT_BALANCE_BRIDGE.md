@@ -135,4 +135,23 @@ Transaction postings must reconcile with the event journal. Revaluation cannot b
 13. Every physical delivery has one product/asset flow ID and quantity/unit; money events cannot fabricate delivery.
 14. Opening/closing financial positions reconcile with transactions, revaluation and other-volume changes.
 
-**Current status:** event categories and core controls are specified; six-sector synthetic arithmetic is independently closed. The full event-by-event posting ledger, accrual/settlement timing and legal instrument registry are not yet implemented. A2.4.4 remains open.
+**Current status:** event categories are specified. Component fixtures now cover balanced journal event families and the exact six-sector example's ten holder/issuer positions, stock-flow roll-forward, seven issuer-mirror groups and sector financial net lending. These remain synthetic controls: they do not yet provide a general event-sourced ledger, complete account taxonomy, legal instrument registry, or integrated runtime. A2.4.4 remains open.
+
+## 6. Executable instrument stock-flow fixture
+
+`audit_instrument_stock_flow.py` transcribes the opening and closing positions
+in `FULL_SIX_SECTOR_SFC_NUMERICAL_CLOSURE.md` and checks, position by position:
+
+`closing = opening + transactions + revaluation + other_volume_changes`.
+
+It then checks holder/issuer mirrors by instrument and issuer, and derives
+sector financial net lending from changes in financial assets less changes in
+liabilities. The expected vector is H +7, NFC −19, CB +4, CBank 0, GOV −15,
+ROW +23; the complete sum is zero. Negative controls reject a broken deposit
+roll-forward and a missing issuer liability.
+
+An independent Decimal arithmetic check of the ten positions, seven mirror
+groups and six-sector net-lending vector returned PASS. This is a separate
+arithmetic verification of the fixture's data, **not** execution evidence for
+the committed script and not proof of a full general-ledger implementation.
+
