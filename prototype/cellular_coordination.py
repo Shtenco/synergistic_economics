@@ -416,7 +416,7 @@ def allocate_cellular(world: World, max_hops: int = 1,
         for _ in range(max_rounds):
             requests = defaultdict(dict)
             for buyer in sorted(remaining):
-                if remaining[buyer] <= EPS:
+                if remaining[buyer] <= EPS or not cells[buyer].trade_consent:
                     continue
                 candidates = [
                     s for s, q in available.items()
@@ -499,7 +499,7 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
             requests = defaultdict(dict)
             request_paths = {}
             for buyer in sorted(remaining):
-                if remaining[buyer] <= EPS:
+                if remaining[buyer] <= EPS or not cells[buyer].trade_consent:
                     continue
                 visited = {buyer}
                 frontier = [(buyer, [buyer])]
