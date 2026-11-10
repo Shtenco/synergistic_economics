@@ -244,3 +244,27 @@ validator must reject the incomplete event.
 This is a component-level control only. It does not replace the full
 instrument-by-instrument holder/issuer register, and the script remains
 subject to exact-head CI execution.
+
+
+### Independent issuer-side T/V/O reconciliation
+
+The instrument stock-flow fixture was strengthened again. Previously, holder
+positions were rolled forward independently, but issuer-side liabilities were
+provided only as closing totals. The new fixture defines seven separate
+issuer-liability records and validates their own opening + T + V + O = closing
+identities.
+
+It then aggregates the ten holder records by instrument and issuer and
+compares **all five components** — opening, transactions, revaluation,
+other-volume changes and closing — with the issuer record. This rejects a
+classification error that preserves the closing balance, such as holder-side
+T=15/V=0 versus issuer-side T=14/V=1.
+
+Negative controls also reject a missing issuer record and a broken holder
+roll-forward. Financial net lending continues to use T only. The revised
+fixture is committed at
+`b41d6a7ecd9a8d2506835aed662ce834081b2ab6`.
+
+A separate local Decimal verification of the component logic passed for all
+seven issuer records, ten holder positions and both adversarial controls.
+This is not yet execution of the committed file by exact-head CI.
