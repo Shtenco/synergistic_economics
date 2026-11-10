@@ -5,6 +5,7 @@ validation workflow discovers it on PRs. It executes the exact committed
 script files as subprocesses; it does not duplicate their assertions.
 """
 from pathlib import Path
+import os
 import subprocess
 import sys
 import unittest
@@ -18,9 +19,12 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def _run_script(self, script_name):
         script = AUDIT_DIR / script_name
         self.assertTrue(script.is_file(), f"missing audit control script: {script}")
+        env = os.environ.copy()
+        env["PYTHONHASHSEED"] = "0"
         result = subprocess.run(
             [sys.executable, str(script)],
             cwd=ROOT,
+            env=env,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
