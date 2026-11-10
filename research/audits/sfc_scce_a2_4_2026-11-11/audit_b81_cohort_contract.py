@@ -122,8 +122,9 @@ def validate_cohort(cohort):
 
 
 def validate_component(component):
-    if not component.host_asset_type or not component.component_type:
-        raise CohortError("component and host asset identity are required")
+    if not all((component.component_cohort_id, component.host_cohort_id,
+                component.host_asset_type, component.component_type)):
+        raise CohortError("component, component-cohort and host-cohort identities are required")
     if (not isinstance(component.vintage, int) or isinstance(component.vintage, bool)
             or not isinstance(component.age, int) or isinstance(component.age, bool)
             or component.vintage < 0 or component.age < 0):
@@ -292,6 +293,27 @@ def main():
         pass
     else:
         raise AssertionError("component with mismatched host type accepted")
+    blank_component_id = ComponentCohort(
+        "machine", "motor", 2026, 0, D("1"),
+        (Material("copper", D("12"), "kg"),),
+        component_cohort_id="", host_cohort_id=cohort.cohort_id)
+    try:
+        validate_portfolio((cohort,), (blank_component_id,))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("component with blank cohort ID accepted")
+    duplicate_component = ComponentCohort(
+        "machine", "gearbox", 2026, 0, D("1"),
+        (Material("steel", D("4"), "kg"),),
+        component_cohort_id=replacement.component_cohort_id,
+        host_cohort_id=cohort.cohort_id)
+    try:
+        validate_portfolio((cohort,), (replacement, duplicate_component))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("duplicate component cohort ID accepted")
     try:
         validate_cohort(AssetCohort(
             **{**cohort.__dict__, "owner_id": ""}))
@@ -347,6 +369,7 @@ def main():
     print("capital_services=684.000; steel_in_cohort=20 t")
     print("repair transitions preserve physical stock; retirement reduces it once")
     print("host vintage/age preserved; replacement component receives own vintage")
+    print("negative controls: duplicate asset/component IDs, orphan/mismatched host, blank IDs and missing owner rejected")
     print("negative controls: duplicate material, unknown condition, NaN availability/state and incomplete component rejected")
 
 
