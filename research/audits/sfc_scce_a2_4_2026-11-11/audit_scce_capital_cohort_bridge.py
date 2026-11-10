@@ -155,26 +155,20 @@ def main():
     # A malformed later target cell must not leave earlier cells mutated.
     class RejectingCell:
         def __init__(self):
-            self._capital = 1.0
+            object.__setattr__(self, "capital", 1.0)
 
-        @property
-        def capital(self):
-            return self._capital
-
-        @capital.setter
-        def capital(self, value):
-            if value != 1.0:
+        def __setattr__(self, name, value):
+            if name == "capital" and value != 1.0:
                 raise RuntimeError("synthetic write rejection")
-            self._capital = value
+            object.__setattr__(self, name, value)
 
     class FakeModel:
         pass
 
     fake = FakeModel()
-    fake.cells = {
-        "a": type("Cell", (), {"capital": 1.0})(),
-        "b": RejectingCell(),
-    }
+    first_cell = type("Cell", (), {})()
+    first_cell.capital = 1.0
+    fake.cells = {"a": first_cell, "b": RejectingCell()}
     fake_cohorts = (
         CapitalCohort("a-1", "a", "machine", 2020, 6, 10, 10,
                       "operating", .9, .8, .95),
