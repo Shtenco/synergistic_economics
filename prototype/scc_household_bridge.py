@@ -11,6 +11,7 @@ from typing import Mapping, Sequence
 
 from household_distribution import (
     Household,
+    HouseholdAllocation,
     allocate_households,
     evaluate_households,
     validate_household_allocation,
@@ -161,4 +162,128 @@ def distribute_period_to_households(
         "metrics": metrics,
         "unallocated_supply_by_cell": unallocated,
         "is_posthoc_decomposition": True,
+    }
+
+
+
+def summarize_periods_to_households(
+    period_results,
+    households_per_cell: int = 5,
+    policy: str = "proportional",
+    seed: int = 1,
+    essential_products: Sequence[str] = ("food", "care"),
+    priority_dispersion: float = 0.0,
+) -> dict:
+    """Aggregate stable synthetic households over a Stage-B simulation horizon.
+
+    The same household shares and priority draws are reused each period, so
+    household identities represent persistent synthetic households rather
+    than newly sampled people. This is a post-hoc decomposition of already
+    consumed quantities and does not feed back into production.
+    """
+    periods = tuple(period_results)
+    if not periods:
+        raise HouseholdBridgeError("at least one Stage-B period is required")
+
+    demand_by_household = {}
+    served_by_household = {}
+    aggregate_cell_supply = {}
+    period_metrics = []
+
+    for period in periods:
+        result = distribute_period_to_households(
+            period, households_per_cell, policy, seed, essential_products,
+            priority_dispersion)
+        period_metrics.append(result["metrics"])
+
+        for household in result["households"]:
+            state = demand_by_household.setdefault(
+                household.household_id,
+                {
+                    "cell_id": household.cell_id,
+                    "essential": {},
+                    "discretionary": {},
+                    "essential_priority": household.essential_priority,
+                    "discretionary_priority": household.discretionary_priority,
+                },
+            )
+            for product, quantity in household.essential_needs.items():
+                state["essential"][product] = (
+                    state["essential"].get(product, 0.0) + float(quantity))
+            for product, quantity in household.discretionary_needs.items():
+                state["discretionary"][product] = (
+                    state["discretionary"].get(product, 0.0) + float(quantity))
+            served_by_household.setdefault(
+                household.household_id,
+                {"essential": {}, "discretionary": {}},
+            )
+
+        for allocation in result["allocations"]:
+            state = served_by_household[allocation.household_id]
+            for product, quantity in allocation.essential_served.items():
+                state["essential"][product] = (
+                    state["essential"].get(product, 0.0) + float(quantity))
+            for product, quantity in allocation.discretionary_served.items():
+                state["discretionary"][product] = (
+                    state["discretionary"].get(product, 0.0) + float(quantity))
+
+        for cell_id, products in period.final_consumption_by_cell.items():
+            target = aggregate_cell_supply.setdefault(cell_id, {})
+            for product, quantity in products.items():
+                target[product] = target.get(product, 0.0) + float(quantity)
+
+    households = tuple(
+        Household(
+            household_id=household_id,
+            cell_id=state["cell_id"],
+            essential_needs=state["essential"],
+            discretionary_needs=state["discretionary"],
+            essential_priority=state["essential_priority"],
+            discretionary_priority=state["discretionary_priority"],
+        )
+        for household_id, state in sorted(demand_by_household.items())
+    )
+    allocations = tuple(
+        HouseholdAllocation(
+            household_id=household_id,
+            cell_id=demand_by_household[household_id]["cell_id"],
+            essential_served=served_by_household[household_id]["essential"],
+            discretionary_served=served_by_household[household_id]["discretionary"],
+        )
+        for household_id in sorted(demand_by_household)
+    )
+    validate_household_allocation(households, aggregate_cell_supply, allocations)
+    aggregate = evaluate_households(households, allocations)
+
+    expected_essential = sum(
+        float(period.final_consumption_by_product.get(product, 0.0))
+        for period in periods for product in essential_products
+    )
+    if abs(aggregate["essential_served"] - expected_essential) > 1e-7:
+        raise HouseholdBridgeError(
+            "horizon household essential service does not reconcile to Stage-B"
+        )
+
+    return {
+        **aggregate,
+        "policy": policy,
+        "households_per_cell": households_per_cell,
+        "priority_dispersion": priority_dispersion,
+        "periods": len(periods),
+        "mean_period_lower_decile_household_essential_fulfilment": (
+            sum(m["lower_decile_household_essential_fulfilment"]
+                for m in period_metrics) / len(period_metrics)
+        ),
+        "mean_period_minimum_household_essential_fulfilment": (
+            sum(m["minimum_household_essential_fulfilment"]
+                for m in period_metrics) / len(period_metrics)
+        ),
+        "mean_period_household_essential_fulfilment_gini": (
+            sum(m["essential_fulfilment_gini"]
+                for m in period_metrics) / len(period_metrics)
+        ),
+        "worst_period_minimum_household_essential_fulfilment": min(
+            m["minimum_household_essential_fulfilment"]
+            for m in period_metrics
+        ),
     }
