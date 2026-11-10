@@ -19,11 +19,12 @@ class CapitalBridgeError(ValueError):
     """Invalid cohort state or an unsafe mapping into the SCCE engine."""
 
 
-# Match the B8.1 active-cohort operating-state vocabulary exactly.
-# Final retirement is a stock-removal event, not a persistent operating state.
-OPERATING_STATES = {
+# B8.1 active operating states. "retired" is a terminal audit state, not an
+# active operating state; it is retained only to preserve lifecycle provenance.
+NON_RETIRED_STATES = {
     "operating", "reserve", "diagnostics", "repair", "remanufacturing", "storage"
 }
+COHORT_STATES = NON_RETIRED_STATES | {"retired"}
 RETIREMENT_REASONS = {"none", "planned", "failure", "obsolescence", "accident", "other"}
 
 
@@ -111,18 +112,19 @@ def validate_cohort(cohort: CapitalCohort) -> None:
     if capacity <= 0:
         raise CapitalBridgeError("service capacity per asset must be positive")
     if (not isinstance(cohort.operating_status, str)
-            or cohort.operating_status not in OPERATING_STATES):
-        raise CapitalBridgeError("unknown operating status")
+            or cohort.operating_status not in COHORT_STATES):
+        raise CapitalBridgeError("unknown cohort lifecycle state")
     _factor(cohort.availability, "availability")
     _factor(cohort.utilization, "utilization")
     _factor(cohort.service_quality, "service_quality")
     if (not isinstance(cohort.retirement_reason, str)
             or cohort.retirement_reason not in RETIREMENT_REASONS):
         raise CapitalBridgeError("unknown retirement reason")
-    if cohort.retirement_reason != "none":
-        raise CapitalBridgeError(
-            "active cohort records must use retirement_reason='none'; "
-            "final retirement removes quantity through a separate transition event")
+    if cohort.operating_status == "retired":
+        if cohort.retirement_reason == "none":
+            raise CapitalBridgeError("retired cohort requires an explicit retirement reason")
+    elif cohort.retirement_reason != "none":
+        raise CapitalBridgeError("active cohort cannot carry a final retirement reason")
 
 
 def advance_cohort_period(
@@ -175,6 +177,8 @@ def advance_cohort_period(
         if event.cohort_id not in records:
             raise CapitalBridgeError(f"event references unknown cohort: {event.cohort_id}")
         source = records[event.cohort_id]
+        if source.operating_status == "retired":
+            raise CapitalBridgeError("terminally retired cohort cannot receive further events")
         if event.from_status != source.operating_status:
             raise CapitalBridgeError("event source state does not match current cohort state")
         quantity = _finite_nonnegative(event.quantity, "event quantity")
@@ -244,7 +248,8 @@ def advance_cohort_period(
     # Age each surviving opening cohort and any split child exactly once;
     # additions are already at age zero and must not age in their entry period.
     for cohort_id in tuple(records):
-        if cohort_id not in addition_ids:
+        if (cohort_id not in addition_ids
+                and records[cohort_id].operating_status != "retired"):
             records[cohort_id] = replace(records[cohort_id], age=records[cohort_id].age + 1)
 
     closing = tuple(sorted(records.values(), key=lambda row: row.cohort_id))
@@ -291,11 +296,10 @@ def aggregate_capital_services(
             raise CapitalBridgeError(f"cohort references unknown cell: {cohort.cell_id}")
 
         quantity = float(cohort.quantity)
-        # Every record in this adapter is an extant physical cohort. A final
-        # retirement is represented by removing quantity in the B8.1 state
-        # transition and recording its retirement event, not by retaining a
-        # pseudo-state that is absent from the canonical B8.1 state vocabulary.
-        physical[cohort.cell_id] += quantity
+        # Retired records remain as terminal audit tombstones, but do not
+        # contribute to current physical stock or capital services.
+        if cohort.operating_status != "retired":
+            physical[cohort.cell_id] += quantity
         if cohort.operating_status == "operating":
             operating[cohort.cell_id] += quantity
             services[cohort.cell_id] += (
