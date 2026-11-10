@@ -325,6 +325,48 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         self.assertTrue(all(spec.trade_consent for spec in specs))
         self.assertTrue(all(spec.relay_consent for spec in specs))
 
+    def test_stage_b_summary_exposes_household_lower_tail_distribution(self):
+        model = DynamicCellularEconomy(
+            "cellular", seed=27, shock="compound", cellular_hops=2,
+        )
+        model.run(8)
+        summary = model.summary()
+        self.assertEqual(summary["household_count"], 35)
+        essential_demand = sum(
+            period.final_demand_by_product.get("food", 0.0)
+            + period.final_demand_by_product.get("care", 0.0)
+            for period in model.periods
+        )
+        essential_served = sum(
+            period.final_consumption_by_product.get("food", 0.0)
+            + period.final_consumption_by_product.get("care", 0.0)
+            for period in model.periods
+        )
+        self.assertAlmostEqual(
+            summary["household_essential_fulfilment"],
+            essential_served / essential_demand,
+            places=9,
+        )
+        self.assertGreaterEqual(
+            summary["household_lower_decile_essential_fulfilment"], 0.0)
+        self.assertLessEqual(
+            summary["household_lower_decile_essential_fulfilment"], 1.0)
+        self.assertGreaterEqual(summary["household_essential_fulfilment_gini"], 0.0)
+        self.assertLessEqual(summary["household_essential_fulfilment_gini"], 1.0)
+        self.assertLessEqual(
+            summary["household_worst_period_minimum_essential_fulfilment"], 1.0)
+
+    def test_paired_monte_carlo_includes_household_distribution_metrics(self):
+        result = monte_carlo(runs=2, shock="compound", periods=6, cellular_hops=2)
+        self.assertIn(
+            "household_lower_decile_essential_fulfilment",
+            result["summary"]["cellular"],
+        )
+        self.assertIn(
+            "household_lower_decile_essential_fulfilment",
+            result["paired_differences_vs_market"]["cellular"],
+        )
+
     def test_stage_b_trade_consent_blocks_external_delivery(self):
         specs = list(DynamicCellularEconomy.default_specs(31))
         specs = [
