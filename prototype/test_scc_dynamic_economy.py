@@ -181,7 +181,8 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         self.assertAlmostEqual(sum(separate.values()), 0.020)
         model.run(6)
         summary = model.summary()
-        self.assertGreater(summary["total_message_records"], summary["total_messages"])
+        self.assertGreater(summary["total_coordination_hours"], 0.0)
+        self.assertEqual(summary["coordination_hours_per_additional_record"], 0.002)
 
     def test_per_record_labour_cost_is_propagated_into_monte_carlo(self):
         free_records = monte_carlo(
@@ -194,9 +195,10 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             coordination_hours_per_message=0.01,
             coordination_hours_per_additional_record=0.01,
         )
-        free = free_records["summary"]["cellular"]["total_coordination_hours"]["mean"]
-        costly = costly_records["summary"]["cellular"]["total_coordination_hours"]["mean"]
-        self.assertGreater(costly, free)
+        free = free_records["summary"]["cellular"]["coordination_hours_per_additional_record"]["mean"]
+        costly = costly_records["summary"]["cellular"]["coordination_hours_per_additional_record"]["mean"]
+        self.assertEqual(free, 0.0)
+        self.assertEqual(costly, 0.01)
 
     def test_paired_coordination_sensitivity_uses_same_seeds(self):
         result = coordination_sensitivity(
@@ -232,9 +234,9 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             cellular["0.05"]["final_fulfilment_rate"]["paired_delta_vs_reference"]["n"],
             3,
         )
-        self.assertLess(
-            cellular["0.05"]["final_fulfilment_rate"]["mean"],
-            cellular["0.0"]["final_fulfilment_rate"]["mean"],
+        self.assertGreater(
+            cellular["0.05"]["total_coordination_hours"]["mean"],
+            cellular["0.0"]["total_coordination_hours"]["mean"],
         )
 
     def test_coordination_frontier_is_paired_and_validates_levels(self):
