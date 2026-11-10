@@ -8,6 +8,7 @@ from cellular_coordination import (
 from scc_dynamic_economy import (
     DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
     coordination_sensitivity, coordination_frontier, coordination_curve,
+    CellLocalView, propose_cellular_output,
 )
 
 
@@ -132,6 +133,38 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             costly.summary()["fixed_price_gross_output_index"],
             zero_cost.summary()["fixed_price_gross_output_index"],
         )
+
+    def test_cellular_local_view_excludes_unreachable_cells(self):
+        model = DynamicCellularEconomy(
+            "cellular", seed=31, shock="none", cellular_hops=1,
+            communication_edges=(
+                ("cell-1", "cell-2"),
+                ("cell-2", "cell-3"),
+                ("cell-3", "cell-4"),
+            ),
+        )
+        plans = {"cell-1": 2.0, "cell-3": 3.0, "cell-4": 99.0}
+        labour = {cid: 100.0 for cid in model.cells}
+        planning_world = model._matching_world({}, {})
+        distances = communication_paths(planning_world)
+        view = model._cell_local_view(
+            "cell-2", 1.0, 1.0, labour, plans, distances)
+        self.assertEqual(view.neighbour_ids, ("cell-1", "cell-3"))
+        self.assertAlmostEqual(view.neighbour_input_demand, 0.66)
+        self.assertNotIn("cell-4", view.neighbour_ids)
+
+    def test_cellular_output_rule_uses_local_need_or_neighbour_input_signal(self):
+        base = dict(
+            cell_id="test", inventory=0.0, local_final_need=2.0,
+            previous_external_orders=0.0, safety_stock=0.0,
+            capacity=10.0, labour_hours=10.0, productivity=1.0,
+            capital=1.0, productivity_multiplier=1.0,
+            neighbour_ids=("neighbour",), neighbour_input_demand=4.0,
+        )
+        final_view = CellLocalView(output="food", **base)
+        input_view = CellLocalView(output="materials", **base)
+        self.assertEqual(propose_cellular_output(final_view), 2.0)
+        self.assertEqual(propose_cellular_output(input_view), 4.0)
 
     def test_stage_b_preserves_cell_trade_and_relay_permissions(self):
         specs = list(DynamicCellularEconomy.default_specs(17))
