@@ -139,3 +139,24 @@ All three files are committed component fixtures. Their execution in a recorded 
 - Updated `audit_labour_consent.py` (commit `0df3d2b488cf21523c38db85b846fa5ab5d39c65`) to reject unknown consent states, non-positive time-budget horizons, negative closing capability stock, and delivery without an active consent state, in addition to overlap, schedule, safety and wage-settlement checks.
 - An independent local execution of the fixture logic passed the 154/168-hour time example, 30-hour delivery, capability value 5.75, wage accrual 600, settlement 400 and closing payable 200; seven adversarial cases were rejected.
 - This is component-level verification only. The committed script remains pending execution in the branch CI workflow; person-level privacy, consent revocation chronology, jurisdiction-specific legal basis and SCCE runtime integration remain open.
+
+
+## CI observability correction — 11 November 2026
+
+The dedicated `.github/workflows/a2-4-audit-controls.yml` trigger was changed
+in commit `d50215669baca7f86323f16380f8b8c14812aa92` to include both:
+- `push` to the audit branch with audit-directory/workflow path filters;
+- `pull_request` targeting `main` with the same path filters.
+
+This makes the audit suite eligible for PR-triggered validation and avoids
+depending on manual `workflow_dispatch` from a workflow file that exists only
+on a non-default branch. GitHub's documented `workflow_dispatch` behavior
+requires the workflow file to exist on the default branch for the UI/manual
+trigger path; the branch-push and PR triggers are distinct alternatives.
+
+At the last poll after the trigger change, the GitHub connector had not yet
+surfaced a dedicated audit-workflow run ID. The connector's
+`fetch_commit_workflow_runs` wrapper reports only PR-triggered runs and may
+not expose branch-push runs. The two existing PR validation runs
+`42904160933` (Prototype) and `42904160781` (Stage-C2) remained queued,
+without job conclusions or logs. No CI PASS is claimed.
