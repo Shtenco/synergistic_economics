@@ -122,3 +122,18 @@ No weighted average may compensate for a hard rights violation or an ecological 
 ## 7. Current status
 
 Volume II §24 already contains the conceptual estimand and causal-identification cautions. Existing SCCE reports contain paired synthetic comparisons but are not empirical estimates. This document makes the protocol operational; A2.4.6 remains open until a preregistered run and independent reproduction pass.
+
+
+## 8. Source-code audit of existing experiments
+
+See `A2_4_6_EXISTING_EXPERIMENT_PROTOCOL_AUDIT.md` for the exact regime list,
+market comparator, paired seed loop, existing Stage-B and Stage-C2-A2
+configuration, emitted outcome metrics and statistical helper recovered from
+the repository's actual Python implementations and CI commands.
+
+This inspection closes the uncertainty about which regimes and settings
+already exist. It does **not** retroactively preregister prior runs. The current
+experiments remain exploratory synthetic comparisons: they do not declare
+primary endpoints, a minimum practically important effect, complete
+incremental-input accounting, missingness/exclusion rules or a confirmatory
+held-out seed design. A2.4.6 remains open.
