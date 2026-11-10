@@ -1,7 +1,7 @@
 import unittest
 
 from cellular_coordination import (
-    Allocation, CoordinationError, allocate_cellular, allocate_central,
+    Allocation, Cell, World, CoordinationError, allocate_cellular, allocate_central,
     allocate_cooperative, allocate_market, default_world, evaluate,
     monte_carlo, run_comparison, shortest_paths,
 )
