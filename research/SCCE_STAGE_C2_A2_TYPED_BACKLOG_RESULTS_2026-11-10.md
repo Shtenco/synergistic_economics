@@ -5,7 +5,7 @@
 **Status:** 20-seed paired synthetic experiment; typed unmet-need semantics  
 **Implementation:** `prototype/scc_endogenous_household_economy.py`  
 **Experiment:** `prototype/scc_endogenous_household_experiment.py`  
-**Validation workflow:** [SCCE Stage-C2 validation](https://github.com/Shtenco/synergistic_economics/actions/runs/42808337962)
+**Validation workflow:** [SCCE Stage-C2 validation — successful](https://github.com/Shtenco/synergistic_economics/actions/runs/42808337962)
 
 ---
 
@@ -102,7 +102,16 @@ Changing within-household care attribution from current-first to backlog-first l
 | Cooperative | 98.20% | 98.19% | approximately 0 |
 | Market | 48.87% | 46.19% | −2.68 pp (−2.89 to −2.47) |
 
-This sensitivity is deliberately visible because it changes current-care fulfilment without changing actual deliveries. FIFO/backlog-first is the default for the current prototype because it is the natural rule for an aged service queue, but it is not a neutral convention. The next implementation must record queue age and explicit service priority so that "which claim is cleared" is an auditable event rather than an implicit accounting choice.
+This sensitivity is deliberately visible because it changes current-care fulfilment without changing actual deliveries. The paired care-queue clearance metric makes the transfer explicit:
+
+| Regime | Total care delivered (both rules) | Care backlog cleared: current-first | Care backlog cleared: FIFO/backlog-first | Additional backlog cleared under FIFO (95% paired CI) |
+|---|---:|---:|---:|---:|
+| Cellular | 46.26 | 0.39 | 15.11 | +14.72 (+14.52 to +14.92) |
+| Central | 44.93 | 9.99 | 10.26 | +0.27 (+0.16 to +0.38) |
+| Cooperative | 62.45 | 0.55 | 0.55 | +0.002 (−0.002 to +0.005) |
+| Market | 39.27 | 8.46 | 10.15 | +1.69 (+1.56 to +1.82) |
+
+Food fulfilment is exactly unchanged by this service-order switch. Total care deliveries, gross output, final consumption and ending queue quantity are also unchanged; only the attribution between current care requests and old queued claims changes. FIFO/backlog-first is the default for the current prototype because it is the natural rule for an aged service queue, but it is not a neutral convention. The next implementation must record queue age and explicit service priority so that "which claim is cleared" is an auditable event rather than an implicit accounting choice.
 
 ## 7. Limitations
 
