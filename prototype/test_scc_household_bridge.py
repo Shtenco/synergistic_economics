@@ -106,7 +106,7 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
             households_per_cell=4, priority_dispersion=0.4,
             economic_policies=("cellular",),
         )
-        paired = result["paired_priority_weighted_minus_proportional"]["cellular"]
+        paired = result["paired_alternative_minus_proportional"]["cellular"]
         for rule in ("priority_weighted", "floor_priority"):
             self.assertEqual(paired[rule]["overall_fulfilment"]["n"], 3)
             self.assertAlmostEqual(
