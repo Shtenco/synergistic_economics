@@ -281,3 +281,48 @@ pending the GitHub Actions run; no PASS is claimed before CI logs are available.
 This closes an important source-to-test interface for the existing SCCE
 physical engine, but does not integrate B8.1 cohorts or SFC financial stocks
 into that engine.
+
+
+## 11 November continuation — instrument identity and SCCE event integrity
+
+Two further review findings were converted into executable controls:
+
+1. **Financial mirror identity.** The SFC holder/issuer mirror key now includes
+   instrument ID, instrument class, issuer, currency, maturity, denomination
+   and valuation basis. A negative control changes only the issuer-side
+   currency while preserving all nominal amounts and closing totals; the
+   mirror validator must reject it. The existing six-sector example still
+   uses coarse fixture defaults (LCU, unspecified maturity, nominal basis).
+   Therefore this is identity-key hardening, not proof that the repository
+   contains a complete currency/maturity-resolved instrument register.
+
+2. **SCCE physical event integrity.** The eight-period real-engine transition
+   audit now rejects non-finite quantities/distances and requires delivery
+   event keys to match the complete payload identity
+   (event type, period, product, seller and buyer), rather than checking only
+   the event-type prefix. The inventory reconstruction remains independent
+   of the engine's aggregate validation for each cell/product stock.
+
+The changes are committed on the audit branch:
+- `24b34cc7e3f38939696e4a7a30394761dbb5e803` — full financial instrument
+  identity in holder/issuer T/V/O mirrors;
+- `4a8a8e472db0dae42bff2c66f13b393ac13bcba6` — SCCE event key/payload and
+  finite-value checks.
+
+The audit workflow for the financial identity commit was surfaced as run
+`42905574430`, but remained **queued** at the last poll. The earlier
+Prototype and Stage-C2 workflows also remained queued. These changes have
+not been declared CI-verified. The exact latest HEAD must be tested, not an
+earlier ancestor.
+
+### Newly explicit limits
+
+- The instrument identity fixture does not yet model principal schedules,
+  contractual maturity ladders, coupon conventions, currency conversion
+  dates, accrued interest, market-price versus nominal valuation, collateral
+  IDs, guarantees, legal enforceability or ownership shares.
+- The SCCE physical audit does not cover money, wages, ownership, finance,
+  capital cohorts, water, emissions or a full environmental compartment
+  ledger. It is a real-engine physical inventory transition check only.
+- Neither component fixture establishes the A2.4.8 cross-register numerical
+  closure or permits construction of the unified economic engine.
