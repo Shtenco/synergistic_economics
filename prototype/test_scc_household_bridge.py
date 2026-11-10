@@ -6,6 +6,7 @@ from scc_household_bridge import (
     distribute_period_to_households,
     households_from_cell_demand,
 )
+from scc_household_experiment import run_household_distribution_experiment
 
 
 class SCCHouseholdBridgeTests(unittest.TestCase):
@@ -48,6 +49,17 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
                 unallocated = result["unallocated_supply_by_cell"][cell_id][product]
                 self.assertGreaterEqual(unallocated, -1e-10)
                 self.assertLessEqual(unallocated, quantity + 1e-10)
+
+    def test_paired_distribution_experiment_preserves_aggregate_physical_service(self):
+        result = run_household_distribution_experiment(
+            runs=3, shock="compound", periods=6, cellular_hops=2,
+            households_per_cell=4, priority_dispersion=0.4,
+            economic_policies=("cellular",),
+        )
+        paired = result["paired_priority_weighted_minus_proportional"]["cellular"]
+        self.assertEqual(paired["overall_fulfilment"]["n"], 3)
+        self.assertAlmostEqual(paired["overall_fulfilment"]["mean"], 0.0, places=10)
+        self.assertAlmostEqual(paired["essential_fulfilment"]["mean"], 0.0, places=10)
 
     def test_invalid_household_count_rejected(self):
         with self.assertRaises(HouseholdBridgeError):
