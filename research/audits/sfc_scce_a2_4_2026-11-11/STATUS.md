@@ -728,3 +728,60 @@ not be represented as a production financial ledger.
 Actions execution and logs remain pending; no PASS is claimed. A2.4.4 remains
 OPEN, A2.4.7 remains OPEN, and A2.4.8 remains BLOCKED. PR #4 remains Draft and
 unmerged; `main` remains untouched.
+
+
+## 11 November continuation — validated journal-to-store adapter
+
+The durable event store previously accepted canonical-looking dictionaries but
+did not provide a typed boundary from the validated synthetic entity journal.
+That left a critical trust question: could a caller serialize a balanced-looking
+payload without first passing the entity/sector/issuer and event-type rules?
+
+Added `prototype/financial_journal_adapter.py`. Its
+`append_validated_group()` accepts event objects and an
+`EntityJournal`-compatible journal, invokes `journal.post(event)` for every
+event before serialization, checks that the journal registered the exact
+event and returned equal debit/credit totals, then converts every journal line
+to a canonical decimal-string payload. The adapter preserves account, side,
+amount, entity ID, institutional sector, counterparty ID/sector, issuer
+ID/sector, instrument ID/class, currency, maturity, denomination and
+valuation basis.
+
+The adapter treats the batch as one storage group. If validation of a later
+event fails, or the SQLite append fails, it removes only the exact event
+entries newly added by this adapter call. It does not erase pre-existing
+journal entries. The durable store remains responsible for atomic persistence
+of the group, events and posting rows.
+
+Added `audit_financial_journal_adapter.py` and a sixteenth case in the
+prototype CI wrapper. The adversarial fixture covers:
+- valid two-event non-bank credit + deposit-transfer group;
+- preservation of entity/sector/issuer/instrument metadata;
+- restart replay through a fresh journal object with no duplicate rows;
+- rollback of the first in-memory event when the second event fails
+  accounting validation;
+- rollback of in-memory journal entries when durable posting insertion fails;
+- rejection of untyped event dictionaries.
+
+Commits:
+- `18607ea5ba82c95b56516d63cdfda5ecfde093a2` — typed adapter;
+- `03cdb9708484657930f7de7cd050bca1d6801697` — adversarial adapter fixture;
+- `e510b6e57808c4a058041958a864530f848babfe` — add adapter fixture to CI;
+- `6b6d84dee888e12a936d62e86f0b8ac5fd78a2bd` — restrict rollback to exact
+  adapter-owned event entries;
+- `ed3c0dd20db1d41bafbb9466735ba59e7dd508de` — document adapter scope and
+  limitations.
+
+**Important limitation:** the adapter invokes the supplied journal's
+`post()` method; the prototype test binds it to the canonical synthetic
+`EntityJournal`. The adapter does not independently prove the identity of an
+arbitrary caller-supplied validator. Production must move the validator and
+adapter into a shared runtime module with a non-bypassable call path. The
+in-memory journal is not thread-safe; access to one instance must be
+serialized. This adapter still does not update SFC instrument positions or
+sector balance sheets.
+
+**Execution status:** code and sixteenth CI wrapper case are committed. The
+latest exact-head CI has not produced runner steps or logs; no PASS is claimed.
+A2.4.4 remains OPEN, A2.4.7 remains OPEN and A2.4.8 remains BLOCKED. PR #4
+remains Draft/unmerged; `main` remains untouched.
