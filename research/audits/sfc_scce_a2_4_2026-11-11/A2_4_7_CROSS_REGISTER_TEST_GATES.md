@@ -308,3 +308,13 @@ between T and V; Gate 0-D rejects this classification mismatch. A missing
 issuer-side record must also fail. The current fixture implements seven issuer
 records against ten holder positions, but remains a synthetic component
 fixture pending exact-head CI and broader instrument coverage.
+
+
+### 6.11 Real SCCE multi-period state-transition reconciliation
+
+`audit_scce_physical_transition.py` now executes the repository's actual
+`DynamicCellularEconomy` for eight periods and reconstructs cell-by-product
+stock-flow identities from actual event records and period results. It is
+included in the standalone branch-push workflow and the PR-observable
+unittest wrapper, bringing the wrapper to twelve tests. Exact execution is
+pending; this is an implemented integration test, not a completed gate.
