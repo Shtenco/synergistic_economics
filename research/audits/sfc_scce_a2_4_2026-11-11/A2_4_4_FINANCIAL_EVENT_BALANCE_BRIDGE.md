@@ -209,3 +209,20 @@ provide:
 
 Therefore the transaction-only formula is now corrected in the fixture, but
 A2.4.4 and full SFC-A…G remain open.
+
+
+### Journal-derived deposit stock control
+
+The journal fixture now derives signed deposit-asset and deposit-liability
+changes directly from its own posting lines and accounting-side conventions.
+It checks bank origination (+19), non-bank transfer (0 system-wide change),
+supplier payment (0 system-wide change), principal repayment (−5) and interest
+settlement (−2), including the mirrored bank liability changes. This replaces
+the earlier constant-only assertions; the control now fails if the journal
+postings themselves are altered inconsistently.
+
+The stock-flow fixture separately computes financial net lending from
+transaction flows (T), not total changes in stocks. Revaluation (V) and
+other-volume changes (O) affect closing positions but must not create
+financial net lending. Negative controls cover valuation-only and mixed
+(T/V/O) changes.
