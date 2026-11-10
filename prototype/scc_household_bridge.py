@@ -103,6 +103,22 @@ def distribute_period_to_households(
             "period result lacks per-cell demand/consumption snapshots"
         ) from exc
 
+    def clamp_physical_map(values, label):
+        normalized = {}
+        for cell_id, products in values.items():
+            normalized[cell_id] = {}
+            for product, quantity in products.items():
+                quantity = float(quantity)
+                if quantity < -1e-8:
+                    raise HouseholdBridgeError(
+                        f"negative {label} quantity {cell_id}:{product}={quantity}")
+                normalized[cell_id][product] = max(0.0, quantity)
+        return normalized
+
+    # Stage-B permits sub-EPS floating-point residue in physical balances.
+    # Normalize only tiny negative residue at this accounting boundary.
+    cell_demand = clamp_physical_map(cell_demand, "household demand")
+    cell_supply = clamp_physical_map(cell_supply, "household supply")
     households = households_from_cell_demand(
         cell_demand, households_per_cell, seed, essential_products,
         priority_dispersion)
