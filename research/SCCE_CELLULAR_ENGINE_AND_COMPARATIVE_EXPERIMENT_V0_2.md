@@ -245,7 +245,9 @@ The cellular protocol uses repeated local request rounds. A buyer contacts its n
 
 ## 12. What this kernel does not yet model
 
-It is not yet a full dynamic economy. It currently omits:
+It is not yet a full dynamic economy or a distributed runtime. It currently omits:
+- independent cell processes, real message transport, concurrency control across machines, node failures and adversarial network behavior;
+- a legally and institutionally specified federation layer (the hop-radius parameter is not federation governance);
 - endogenous production from labour, capital and intermediate inputs;
 - inventory carry-over and production planning across periods;
 - household agents and heterogeneous income;
