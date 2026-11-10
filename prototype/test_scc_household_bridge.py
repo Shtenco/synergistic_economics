@@ -5,6 +5,7 @@ from scc_household_bridge import (
     HouseholdBridgeError,
     distribute_period_to_households,
     households_from_cell_demand,
+    summarize_periods_to_households,
 )
 from scc_household_experiment import run_household_distribution_experiment
 
@@ -71,6 +72,27 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
                     ),
                     places=9,
                 )
+
+    def test_horizon_summary_preserves_persistent_households_and_physical_totals(self):
+        model = DynamicCellularEconomy(
+            "cellular", seed=18, shock="compound", cellular_hops=2)
+        model.run(5)
+        result = summarize_periods_to_households(
+            model.periods, households_per_cell=4, policy="priority_weighted",
+            seed=1800, priority_dispersion=0.4,
+        )
+        self.assertEqual(result["periods"], 5)
+        self.assertEqual(result["households"], 28)
+        expected_essential = sum(
+            period.final_consumption_by_product.get("food", 0.0)
+            + period.final_consumption_by_product.get("care", 0.0)
+            for period in model.periods
+        )
+        self.assertAlmostEqual(result["essential_served"], expected_essential)
+        self.assertGreaterEqual(
+            result["worst_period_minimum_household_essential_fulfilment"], 0.0)
+        self.assertLessEqual(
+            result["worst_period_minimum_household_essential_fulfilment"], 1.0)
 
     def test_paired_distribution_experiment_preserves_aggregate_physical_service(self):
         result = run_household_distribution_experiment(
