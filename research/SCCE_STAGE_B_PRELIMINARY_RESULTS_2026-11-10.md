@@ -121,7 +121,28 @@ Paired differences against zero packet overhead:
 
 **Interpretation:** the current default packet-overhead assumption of 0.01 hours is below the point at which this particular seven-cell simulation becomes labour-constrained. At 0.02 hours, the first measurable output loss appears; at 0.05 hours, the coordination burden materially damages production and essential consumption. This is not a universal economic threshold: it depends on the synthetic labour coefficients, topology, demand, production recipes and protocol. The frontier must be recalibrated and repeated on larger networks.
 
-## 8. What these results do and do not show
+## 8. Household lower-tail outcomes
+
+Stage-B Monte Carlo summaries now pass the already-consumed per-cell physical quantities through the Stage-C1 post-hoc bridge. The default reporting panel contains five synthetic households in each of the seven cells, with stable product-need shares, proportional rationing and zero priority dispersion. The bridge does not change production, matching or total consumption. It reveals how cell-level flows translate into a synthetic household distribution.
+
+| Scenario / regime | Household lower-decile essential fulfilment | Minimum household essential fulfilment | Household essential-fulfilment Gini |
+|---|---:|---:|---:|
+| **Baseline — market** | 15.93% | 9.21% | 0.3250 |
+| Baseline — central | 15.56% | 10.84% | 0.1742 |
+| Baseline — cooperative | 41.15% | 38.87% | 0.1538 |
+| Baseline — cellular, 2 hops | 39.52% | 38.41% | 0.1408 |
+| **Compound shock — market** | 5.96% | 4.91% | 0.4123 |
+| Compound shock — central | 14.07% | 9.55% | 0.3020 |
+| Compound shock — cooperative | 31.14% | 28.72% | 0.2048 |
+| Compound shock — cellular, 2 hops | 31.91% | 30.72% | 0.1837 |
+
+The compound-shock result exposes a major difference between aggregate and lower-tail outcomes. The market arm has the highest aggregate essential fulfilment in the Stage-B table (46.67%), yet its synthetic household lower decile is only 5.96%. The cooperative arm's aggregate essential fulfilment is slightly lower (45.60%), but its household lower decile is 31.14%. Two-hop cellular has a lower aggregate essential fulfilment (42.77%) but a similar lower-tail result (31.91%) and the lowest household Gini among the four arms in this scenario.
+
+Local reach matters at household level too. Under the compound shock, one-hop cellular has a zero lower-decile and minimum household essential fulfilment with a household Gini of 0.4965. Three-hop cellular reaches a lower decile of 31.38%, minimum of 30.18% and Gini of 0.1840; this is slightly worse on these household-distribution measures than two-hop cellular, despite a small increase in aggregate consumption.
+
+These are 100-seed Stage-B comparisons using a five-household-per-cell synthetic panel. The lower-decile and minimum metrics are cumulative-horizon household fulfilment, while the separate Stage-C1 report contains per-period rationing experiments. The profiles are not calibrated to household survey data. This is a post-hoc decomposition: it does not model household income, purchasing power, time use, health outcomes or endogenous feedback from household deprivation into production. It must not be called measured human welfare.
+
+## 9. What these results do and do not show
 
 ### Supported by the present model
 1. The dynamic physical prototype executes four distinct coordination rules on matched initial worlds.
@@ -143,7 +164,7 @@ The results do not establish that:
 
 The current model excludes money, credit, wages, ownership, investment, household income, employment, working-time choice, public goods, technology diffusion and most ecological externalities. Cellular message forwarding is counted hop by hop, batched into packets with record-level payload accounting, and its synthetic labour requirement is deducted from production capacity. Relay consent defaults off for new cells; the synthetic benchmark opts in explicitly. Non-cellular message counts remain estimates rather than full protocol traces; governance and enforcement effort remain incomplete. No conclusion about positive-sum prosperity is justified until these are modelled and calibrated.
 
-## 9. Immediate research implications
+## 10. Immediate research implications
 
 1. **Do not treat one-hop locality as the canonical SCCE design.** Cells need bounded multi-hop relay, explicit consent to forward traffic, and voluntary federation rules.
 2. **Separate communication topology from logistics topology.** A request can propagate through several cells while the physical shipment follows a different route.
@@ -155,7 +176,7 @@ The current model excludes money, credit, wages, ownership, investment, househol
 8. **Integrate financial and ownership layers only after the physical layer is stable.** Cash conservation is necessary but not evidence of additional real output.
 9. **Add independent-cell execution and larger networks.** Test 20, 50, 100 and 500 cells, network-density variation, edge failures and communication delays.
 
-## 10. Decision
+## 11. Decision
 
 The first dynamic comparison does **not** show that SCCE is already superior. The strongest result so far is diagnostic: local economic cells need a carefully designed multi-hop/federation layer and explicit essential-service protection. The cooperative-pool control currently leads the stylized model on aggregate consumption; the market control retains an advantage on essential fulfilment during the compound shock; the cellular model improves its aggregate performance as its reach expands, but still does not win.
 
