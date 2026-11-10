@@ -527,30 +527,39 @@ class DynamicCellularEconomy:
             plans[cid] = min(cap, desired)
 
         # Intermediate producers receive a forecast derived from downstream
-        # production. A short fixed-point pass handles the materials-energy loop.
-        for _ in range(6):
-            for p in ("materials", "energy"):
-                producer = next(c for c in self.cells.values() if c.spec.output == p)
-                total_need = sum(plans[cid] * c.spec.recipe.get(p, 0.0)
-                                 for cid, c in self.cells.items())
-                cap = min(producer.spec.capacity,
-                          labour_budget[producer.spec.cell_id] * producer.spec.productivity) * productivity_mult
-                if self.policy in ("central", "cooperative"):
-                    buffer = producer.spec.safety_stock * (
-                        1.5 if self.policy == "cooperative" else 1.0)
-                    desired = max(0.0, total_need + buffer
-                                  - sum(c.stocks[p] for c in self.cells.values()))
-                elif self.policy == "market":
-                    desired = max(0.0, total_need + producer.last_external_orders
-                                  + producer.spec.safety_stock
-                                  - producer.stocks[p])
-                else:
+        # production. Global regimes use a global fixed-point update. Cellular
+        # cells use synchronous Jacobi-style local transitions: every proposal
+        # in an iteration reads the same immutable plan snapshot, then all
+        # proposals are committed together.
+        if self.policy == "cellular":
+            for _ in range(6):
+                snapshot = dict(plans)
+                proposed = {}
+                for p in ("materials", "energy"):
+                    producer = next(c for c in self.cells.values() if c.spec.output == p)
                     local_view = self._cell_local_view(
                         producer.spec.cell_id, demand_mult, productivity_mult,
-                        labour_budget, plans, distances)
-                    plans[producer.spec.cell_id] = propose_cellular_output(local_view)
-                    continue
-                plans[producer.spec.cell_id] = min(cap, desired)
+                        labour_budget, snapshot, distances)
+                    proposed[producer.spec.cell_id] = propose_cellular_output(local_view)
+                plans.update(proposed)
+        else:
+            for _ in range(6):
+                for p in ("materials", "energy"):
+                    producer = next(c for c in self.cells.values() if c.spec.output == p)
+                    total_need = sum(plans[cid] * c.spec.recipe.get(p, 0.0)
+                                     for cid, c in self.cells.items())
+                    cap = min(producer.spec.capacity,
+                              labour_budget[producer.spec.cell_id] * producer.spec.productivity) * productivity_mult
+                    if self.policy in ("central", "cooperative"):
+                        buffer = producer.spec.safety_stock * (
+                            1.5 if self.policy == "cooperative" else 1.0)
+                        desired = max(0.0, total_need + buffer
+                                      - sum(c.stocks[p] for c in self.cells.values()))
+                    else:  # market
+                        desired = max(0.0, total_need + producer.last_external_orders
+                                      + producer.spec.safety_stock
+                                      - producer.stocks[p])
+                    plans[producer.spec.cell_id] = min(cap, desired)
 
         for cid, c in self.cells.items():
             for inp in INPUT_PRODUCTS:
