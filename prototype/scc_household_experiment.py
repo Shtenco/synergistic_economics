@@ -8,7 +8,7 @@ import statistics
 from typing import Sequence
 
 from scc_dynamic_economy import DynamicCellularEconomy, POLICIES
-from scc_household_bridge import distribute_period_to_households
+from scc_household_bridge import summarize_periods_to_households
 
 
 HOUSEHOLD_POLICIES = ("proportional", "priority_weighted")
@@ -19,6 +19,10 @@ METRICS = (
     "minimum_household_essential_fulfilment",
     "essential_fulfilment_gini",
     "overall_fulfilment_gini",
+    "mean_period_lower_decile_household_essential_fulfilment",
+    "mean_period_minimum_household_essential_fulfilment",
+    "mean_period_household_essential_fulfilment_gini",
+    "worst_period_minimum_household_essential_fulfilment",
 )
 
 
@@ -71,26 +75,17 @@ def run_household_distribution_experiment(
                 cellular_hops=cellular_hops,
             )
             model.run(periods)
-            period_values = {policy: {metric: [] for metric in METRICS}
-                             for policy in HOUSEHOLD_POLICIES}
-            for period_result in model.periods:
-                # Keep a stable synthetic household panel across all periods.
-                # The same seed preserves identities, within-cell need shares
-                # and priorities; only the period's total demand scales needs.
-                # Both rationing policies therefore face identical households.
-                profile_seed = seed * 100_000
-                for household_policy in HOUSEHOLD_POLICIES:
-                    distribution = distribute_period_to_households(
-                        period_result,
-                        households_per_cell=households_per_cell,
-                        policy=household_policy,
-                        seed=profile_seed,
-                        priority_dispersion=priority_dispersion,
-                    )
-                    for metric in METRICS:
-                        period_values[household_policy][metric].append(
-                            distribution["metrics"][metric]
-                        )
+            distributions = {}
+            for household_policy in HOUSEHOLD_POLICIES:
+                # The same seed preserves a stable household panel across all
+                # periods and across both rationing policies.
+                distributions[household_policy] = summarize_periods_to_households(
+                    model.periods,
+                    households_per_cell=households_per_cell,
+                    policy=household_policy,
+                    seed=seed * 100_000,
+                    priority_dispersion=priority_dispersion,
+                )
 
             for household_policy in HOUSEHOLD_POLICIES:
                 row = {
@@ -99,8 +94,8 @@ def run_household_distribution_experiment(
                     "seed": seed,
                 }
                 row.update({
-                    metric: statistics.mean(values)
-                    for metric, values in period_values[household_policy].items()
+                    metric: distributions[household_policy][metric]
+                    for metric in METRICS
                 })
                 rows.append(row)
 
