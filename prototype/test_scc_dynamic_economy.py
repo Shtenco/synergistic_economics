@@ -245,6 +245,8 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             hours_levels=(0.0, 0.01, 0.05),
         )
         self.assertEqual(result["runs"], 3)
+        self.assertEqual(result["coordination_hours_per_additional_record"], 0.002)
+        self.assertIn("per-additional-record labour remains charged", result["reference"])
         cellular = result["frontier"]["cellular"]
         self.assertEqual(
             cellular["0.05"]["paired_difference_vs_zero_hours"]
