@@ -150,6 +150,7 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         view = model._cell_local_view(
             "cell-2", 1.0, 1.0, labour, plans, distances)
         self.assertEqual(view.neighbour_ids, ("cell-1", "cell-3"))
+        self.assertEqual(view.tradeable_neighbour_ids, ("cell-1", "cell-3"))
         self.assertAlmostEqual(view.neighbour_input_demand, 0.66)
         self.assertNotIn("cell-4", view.neighbour_ids)
 
@@ -169,13 +170,33 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
                 a.final_consumption_by_product[product],
                 b.final_consumption_by_product[product], places=8)
 
+    def test_local_input_signal_excludes_nonconsenting_counterparties(self):
+        specs = list(DynamicCellularEconomy.default_specs(32))
+        specs[2] = replace(specs[2], trade_consent=False)
+        model = DynamicCellularEconomy(
+            "cellular", seed=32, shock="none", cellular_hops=1,
+            specs=tuple(specs),
+            communication_edges=(
+                ("cell-1", "cell-2"), ("cell-2", "cell-3"),
+            ),
+        )
+        plans = {"cell-1": 2.0, "cell-3": 3.0}
+        labour = {cid: 100.0 for cid in model.cells}
+        world = model._matching_world({}, {})
+        view = model._cell_local_view(
+            "cell-2", 1.0, 1.0, labour, plans, communication_paths(world))
+        self.assertEqual(view.neighbour_ids, ("cell-1", "cell-3"))
+        self.assertEqual(view.tradeable_neighbour_ids, ("cell-1",))
+        self.assertAlmostEqual(view.neighbour_input_demand, 0.36)
+
     def test_cellular_output_rule_uses_local_need_or_neighbour_input_signal(self):
         base = dict(
             cell_id="test", inventory=0.0, local_final_need=2.0,
             previous_external_orders=0.0, safety_stock=0.0,
             capacity=10.0, labour_hours=10.0, productivity=1.0,
             capital=1.0, productivity_multiplier=1.0,
-            neighbour_ids=("neighbour",), neighbour_input_demand=4.0,
+            neighbour_ids=("neighbour",), tradeable_neighbour_ids=("neighbour",),
+            neighbour_input_demand=4.0,
         )
         final_view = CellLocalView(output="food", **base)
         input_view = CellLocalView(output="materials", **base)
