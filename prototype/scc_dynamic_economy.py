@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import statistics
+import math
 from dataclasses import dataclass, field
 from typing import Dict, Mapping, Sequence
 
@@ -629,6 +631,22 @@ def compare(seed: int = 1, shock: str = "none", periods: int = 24,
     return results
 
 
+def _confidence_summary(values: Sequence[float]):
+    values = [float(v) for v in values]
+    n = len(values)
+    avg = statistics.mean(values) if n else 0.0
+    sd = statistics.stdev(values) if n > 1 else 0.0
+    half = 1.96 * sd / math.sqrt(n) if n > 1 else 0.0
+    return {
+        "n": n,
+        "mean": avg,
+        "median": statistics.median(values) if n else 0.0,
+        "sd": sd,
+        "ci95_low": avg - half,
+        "ci95_high": avg + half,
+    }
+
+
 def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
                 cellular_hops: int = 2):
     if runs < 1:
@@ -638,16 +656,43 @@ def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
         result = compare(seed, shock, periods, cellular_hops)
         for policy, metrics in result.items():
             paired.append({"seed": seed, **metrics})
-    grouped = {}
+
+    numeric_keys = [
+        k for k, v in paired[0].items()
+        if isinstance(v, (int, float)) and k not in
+        ("seed", "periods", "cellular_hops", "events")
+    ]
+    summary = {}
+    by_policy = {}
     for policy in POLICIES:
         rows = [r for r in paired if r["policy"] == policy]
-        keys = [k for k, v in rows[0].items() if isinstance(v, (int, float))
-                and k not in ("seed", "periods", "cellular_hops", "events")]
-        grouped[policy] = {
-            key: sum(float(r[key]) for r in rows) / len(rows) for key in keys
+        by_policy[policy] = {r["seed"]: r for r in rows}
+        summary[policy] = {
+            key: _confidence_summary([r[key] for r in rows])
+            for key in numeric_keys
         }
-    return {"runs": runs, "shock": shock, "periods": periods,
-            "cellular_hops": cellular_hops, "summary": grouped, "paired_runs": paired}
+
+    # Paired differences use the same seed, world and shock in both regimes.
+    baseline = by_policy["market"]
+    paired_differences = {}
+    for policy in POLICIES:
+        if policy == "market":
+            continue
+        paired_differences[policy] = {}
+        for key in numeric_keys:
+            differences = [
+                by_policy[policy][seed][key] - baseline[seed][key]
+                for seed in sorted(baseline)
+            ]
+            paired_differences[policy][key] = _confidence_summary(differences)
+
+    return {
+        "runs": runs, "shock": shock, "periods": periods,
+        "cellular_hops": cellular_hops,
+        "summary": summary,
+        "paired_differences_vs_market": paired_differences,
+        "paired_runs": paired,
+    }
 
 
 def main():
