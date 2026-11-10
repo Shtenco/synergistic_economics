@@ -54,3 +54,5 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 1 --summary-only
       - name: Run paired Stage-B coordination-labour sensitivity (20 seeds)
         run: python prototype/scc_dynamic_economy.py --coordination-sensitivity --monte-carlo 20 --shock compound --periods 24 --hops 2
+      - name: Run Stage-B paired coordination-labour response curve (20 seeds)
+        run: python prototype/scc_dynamic_economy.py --coordination-curve --monte-carlo 20 --shock compound --periods 24 --hops 2
