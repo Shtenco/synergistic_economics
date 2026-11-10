@@ -133,6 +133,23 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             zero_cost.summary()["fixed_price_gross_output_index"],
         )
 
+    def test_stage_b_preserves_cell_trade_and_relay_permissions(self):
+        specs = list(DynamicCellularEconomy.default_specs(17))
+        specs[0] = replace(
+            specs[0], trade_consent=False, relay_consent=False,
+            allowed_counterparties=frozenset({"cell-2"}),
+        )
+        model = DynamicCellularEconomy(
+            "cellular", seed=17, shock="none", specs=tuple(specs))
+        world = model._matching_world(
+            {"food": {"cell-1": 3.0}},
+            {"food": {"cell-2": 2.0}},
+        )
+        seller = next(c for c in world.cells if c.cell_id == "cell-1")
+        self.assertFalse(seller.trade_consent)
+        self.assertFalse(seller.relay_consent)
+        self.assertEqual(seller.allowed_counterparties, frozenset({"cell-2"}))
+
     def test_dynamic_model_accepts_distinct_sparse_communication_network(self):
         sparse_messages = (
             ("cell-1", "cell-2"),
