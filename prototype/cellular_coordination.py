@@ -11,6 +11,8 @@ import argparse
 import json
 import math
 import random
+import statistics
+import math
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Dict, Iterable, List, Mapping, Sequence, Tuple
@@ -508,6 +510,19 @@ def run_comparison(seed: int = 1, shock: str = "none",
     return results
 
 
+def _confidence_summary(values):
+    values = [float(v) for v in values]
+    n = len(values)
+    avg = statistics.mean(values) if n else 0.0
+    sd = statistics.stdev(values) if n > 1 else 0.0
+    half = 1.96 * sd / math.sqrt(n) if n > 1 else 0.0
+    return {
+        "n": n, "mean": avg,
+        "median": statistics.median(values) if n else 0.0,
+        "sd": sd, "ci95_low": avg - half, "ci95_high": avg + half,
+    }
+
+
 def monte_carlo(seeds: Iterable[int] = range(1, 101),
                 shock: str = "none", cellular_hops: int = 1):
     seeds = tuple(seeds)
@@ -516,18 +531,39 @@ def monte_carlo(seeds: Iterable[int] = range(1, 101),
         result = run_comparison(seed, shock, cellular_hops)
         for regime, metrics in result.items():
             rows.append({"seed": seed, "shock": shock, "regime": regime, **metrics})
-    grouped = defaultdict(list)
-    for row in rows:
-        for key, value in row.items():
-            if key not in ("seed", "shock", "regime"):
-                grouped[(row["regime"], key)].append(value)
-    summary = {}
-    for (regime, metric), values in grouped.items():
-        summary.setdefault(regime, {})[metric] = sum(values) / len(values)
-    return {"runs": len(seeds),
-            "shock": shock, "cellular_hops": cellular_hops,
-            "summary": summary, "rows": rows}
 
+    numeric_keys = [
+        k for k, v in rows[0].items()
+        if isinstance(v, (int, float)) and k not in ("seed",)
+    ]
+    by_regime = {}
+    summary = {}
+    for regime in ("market", "central", "cooperative", "cellular"):
+        regime_rows = [r for r in rows if r["regime"] == regime]
+        by_regime[regime] = {r["seed"]: r for r in regime_rows}
+        summary[regime] = {
+            metric: _confidence_summary([r[metric] for r in regime_rows])
+            for metric in numeric_keys
+        }
+
+    baseline = by_regime["market"]
+    paired_differences = {}
+    for regime in ("central", "cooperative", "cellular"):
+        paired_differences[regime] = {}
+        for metric in numeric_keys:
+            differences = [
+                by_regime[regime][seed][metric] - baseline[seed][metric]
+                for seed in sorted(baseline)
+            ]
+            paired_differences[regime][metric] = _confidence_summary(differences)
+
+    return {
+        "runs": len(seeds), "shock": shock,
+        "cellular_hops": cellular_hops,
+        "summary": summary,
+        "paired_differences_vs_market": paired_differences,
+        "rows": rows,
+    }
 
 def main():
     parser = argparse.ArgumentParser()
