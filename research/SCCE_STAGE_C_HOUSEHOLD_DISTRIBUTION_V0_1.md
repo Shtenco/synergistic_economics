@@ -2,7 +2,7 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Initial executable research module; money-free and not yet integrated into the Stage-B period engine  
+**Status:** Executable money-free distribution kernel with a tested post-hoc Stage-B bridge; household decisions do not yet feed back into production planning  
 **Implementation:** \`prototype/household_distribution.py\`  
 **Tests:** \`prototype/test_household_distribution.py\`
 
@@ -32,7 +32,7 @@ A household is represented by:
 
 Essential and discretionary claims are separate even when they concern the same product. This allows the rule to protect a minimum food requirement before distributing additional food as discretionary consumption.
 
-The current model does not infer household need from protected personal attributes. Priority is an explicit synthetic model parameter and must not be interpreted as a measure of a person's worth.
+The current model does not infer household need from protected personal attributes. Priority is an explicit synthetic model parameter and must not be interpreted as a measure of a person's worth. The experiment uses a reproducible synthetic household panel; the default priority dispersion is 0.4 around a common baseline, not an empirical estimate.
 
 ## 3. Distribution boundary
 
@@ -118,7 +118,7 @@ The executable validator checks:
 5. the allocation set contains each household exactly once;
 6. negative supply and negative need are rejected.
 
-The test suite also checks that priority-weighted allocation changes the distribution while conserving the same physical stock.
+The test suite also checks that priority-weighted allocation changes the distribution while conserving the same physical stock, that the same household panel persists when period demand scales, and that the Stage-B bridge reconciles aggregate household demand and consumption to the cell-level physical records.
 
 ## 7. Integration with Stage B
 
