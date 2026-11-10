@@ -613,7 +613,7 @@ def run_comparison(seed: int = 1, shock: str = "none",
         "market": evaluate(world, allocate_market(world)),
         "central": evaluate(world, allocate_central(world)),
         "cooperative": evaluate(world, allocate_cooperative(world)),
-        "cellular": evaluate(world, allocate_cellular(world, cellular_hops)),
+        "cellular": evaluate(world, allocate_relay_cellular(world, cellular_hops)),
     }
     return results
 
