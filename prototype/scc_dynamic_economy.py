@@ -766,12 +766,14 @@ class DynamicCellularEconomy:
 
 def compare(seed: int = 1, shock: str = "none", periods: int = 24,
             cellular_hops: int = 2,
-            coordination_hours_per_message: float = 0.01):
+            coordination_hours_per_message: float = 0.01,
+            coordination_hours_per_additional_record: float = 0.002):
     results = {}
     for policy in POLICIES:
         model = DynamicCellularEconomy(
             policy, seed, shock, cellular_hops,
-            coordination_hours_per_message=coordination_hours_per_message)
+            coordination_hours_per_message=coordination_hours_per_message,
+            coordination_hours_per_additional_record=coordination_hours_per_additional_record)
         model.run(periods)
         model.validate()
         results[policy] = model.summary()
@@ -796,13 +798,15 @@ def _confidence_summary(values: Sequence[float]):
 
 def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
                 cellular_hops: int = 2,
-                coordination_hours_per_message: float = 0.01):
+                coordination_hours_per_message: float = 0.01,
+                coordination_hours_per_additional_record: float = 0.002):
     if runs < 1:
         raise DynamicEconomyError("runs must be positive")
     paired = []
     for seed in range(1, runs + 1):
         result = compare(seed, shock, periods, cellular_hops,
-                         coordination_hours_per_message)
+                         coordination_hours_per_message,
+                         coordination_hours_per_additional_record)
         for policy, metrics in result.items():
             paired.append({"seed": seed, **metrics})
 
@@ -839,6 +843,7 @@ def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
         "runs": runs, "shock": shock, "periods": periods,
         "cellular_hops": cellular_hops,
         "coordination_hours_per_message": coordination_hours_per_message,
+        "coordination_hours_per_additional_record": coordination_hours_per_additional_record,
         "summary": summary,
         "paired_differences_vs_market": paired_differences,
         "paired_runs": paired,
@@ -852,8 +857,10 @@ def coordination_sensitivity(runs: int = 20, shock: str = "compound",
                              stress_hours: float = 0.05,
                              additional_record_hours: float = 0.002):
     """Paired same-seed comparison of two coordination-time assumptions."""
-    base = monte_carlo(runs, shock, periods, cellular_hops, base_hours)
-    stress = monte_carlo(runs, shock, periods, cellular_hops, stress_hours)
+    base = monte_carlo(runs, shock, periods, cellular_hops, base_hours,
+                       additional_record_hours)
+    stress = monte_carlo(runs, shock, periods, cellular_hops, stress_hours,
+                         additional_record_hours)
     base_rows = {(r["seed"], r["policy"]): r for r in base["paired_runs"]}
     stress_rows = {(r["seed"], r["policy"]): r for r in stress["paired_runs"]}
     metrics = (
@@ -881,6 +888,7 @@ def coordination_sensitivity(runs: int = 20, shock: str = "compound",
         "cellular_hops": cellular_hops,
         "base_hours_per_message": base_hours,
         "stress_hours_per_message": stress_hours,
+        "additional_record_hours": additional_record_hours,
         "sensitivity": result,
     }
 
@@ -889,7 +897,8 @@ def coordination_sensitivity(runs: int = 20, shock: str = "compound",
 def coordination_curve(runs: int = 20, shock: str = "compound",
                        periods: int = 24, cellular_hops: int = 2,
                        hours_per_message: Sequence[float] = (
-                           0.0, 0.0025, 0.005, 0.01, 0.02, 0.05)):
+                           0.0, 0.0025, 0.005, 0.01, 0.02, 0.05),
+                       coordination_hours_per_additional_record: float = 0.002):
     """Paired same-seed response curve for the opportunity cost of messages."""
     levels = tuple(float(x) for x in hours_per_message)
     if not levels or any(x < 0 for x in levels):
@@ -897,7 +906,9 @@ def coordination_curve(runs: int = 20, shock: str = "compound",
     if len(set(levels)) != len(levels):
         raise DynamicEconomyError("coordination curve levels must be unique")
     runs_by_level = {
-        level: monte_carlo(runs, shock, periods, cellular_hops, level)["paired_runs"]
+        level: monte_carlo(
+            runs, shock, periods, cellular_hops, level,
+            coordination_hours_per_additional_record)["paired_runs"]
         for level in levels
     }
     rows = {
@@ -939,7 +950,8 @@ def coordination_curve(runs: int = 20, shock: str = "compound",
 def coordination_frontier(runs: int = 20, shock: str = "compound",
                           periods: int = 24, cellular_hops: int = 2,
                           hours_levels: Sequence[float] = (
-                              0.0, 0.0025, 0.005, 0.01, 0.02, 0.05)):
+                              0.0, 0.0025, 0.005, 0.01, 0.02, 0.05),
+                          coordination_hours_per_additional_record: float = 0.002):
     """Paired same-seed response curve over coordination labour intensity."""
     levels = tuple(float(x) for x in hours_levels)
     if not levels or any(x < 0 for x in levels) or len(set(levels)) != len(levels):
@@ -956,7 +968,8 @@ def coordination_frontier(runs: int = 20, shock: str = "compound",
     )
     observations = {}
     for level in levels:
-        result = monte_carlo(runs, shock, periods, cellular_hops, level)
+        result = monte_carlo(runs, shock, periods, cellular_hops, level,
+                             coordination_hours_per_additional_record)
         observations[level] = {
             (row["seed"], row["policy"]): row for row in result["paired_runs"]
         }
@@ -999,6 +1012,7 @@ def main():
     parser.add_argument("--periods", type=int, default=24)
     parser.add_argument("--hops", type=int, default=2)
     parser.add_argument("--coordination-hours-per-message", type=float, default=0.01)
+    parser.add_argument("--coordination-hours-per-additional-record", type=float, default=0.002)
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--monte-carlo", type=int, default=0)
     parser.add_argument("--coordination-sensitivity", action="store_true")
@@ -1012,7 +1026,8 @@ def main():
     if args.coordination_frontier:
         levels = tuple(float(x.strip()) for x in args.coordination_levels.split(","))
         result = coordination_frontier(
-            args.monte_carlo or 20, args.shock, args.periods, args.hops, levels)
+            args.monte_carlo or 20, args.shock, args.periods, args.hops, levels,
+            args.coordination_hours_per_additional_record)
     elif args.coordination_curve:
         levels = tuple(float(x) for x in args.coordination_levels.split(","))
         result = coordination_curve(
@@ -1020,19 +1035,23 @@ def main():
     elif args.coordination_sensitivity:
         result = coordination_sensitivity(
             args.monte_carlo or 20, args.shock, args.periods, args.hops,
-            args.base_coordination_hours, args.stress_coordination_hours)
+            args.base_coordination_hours, args.stress_coordination_hours,
+            args.coordination_hours_per_additional_record)
     elif args.monte_carlo:
         result = monte_carlo(args.monte_carlo, args.shock, args.periods, args.hops,
-                             args.coordination_hours_per_message)
+                             args.coordination_hours_per_message,
+                             args.coordination_hours_per_additional_record)
         if args.summary_only:
             result.pop("paired_runs", None)
     elif args.compare:
         result = compare(args.seed, args.shock, args.periods, args.hops,
-                         args.coordination_hours_per_message)
+                         args.coordination_hours_per_message,
+                         args.coordination_hours_per_additional_record)
     else:
         model = DynamicCellularEconomy(
             args.policy, args.seed, args.shock, args.hops,
-            coordination_hours_per_message=args.coordination_hours_per_message)
+            coordination_hours_per_message=args.coordination_hours_per_message,
+            coordination_hours_per_additional_record=args.coordination_hours_per_additional_record)
         model.run(args.periods)
         model.validate()
         result = model.summary()
