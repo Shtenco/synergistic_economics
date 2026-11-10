@@ -13,7 +13,7 @@ A2.4.2 does not create a second capital theory. The repository already contains 
 2. **Integrated physical-financial framework §8** distinguishes physical/technical quantity, capital-service flow and value/CFC.
 3. **B4** demonstrates a three-period physical reproduction case with a constant machine count, changing service quality, material recovery and an explicit price revaluation example.
 
-The gap is the *typed bridge*: no single frozen control currently demonstrates, on the same cohort records, physical count, service flow, gross stock, net stock, CFC, retirement value, GFCF and revaluation with all conventions explicit. B8.1's material model and B4's service model are valid separate controls; neither alone supplies this complete physical-to-SFC valuation bridge.
+The gap is the *typed bridge*: no single frozen control currently demonstrates, on the same cohort records, physical count, service flow, gross stock, net stock, CFC, retirement value, GrossAcquisitions and revaluation with all conventions explicit. B8.1's material model and B4's service model are valid separate controls; neither alone supplies this complete physical-to-SFC valuation bridge.
 
 ## 2. Canonical objects — do not collapse
 
@@ -25,10 +25,10 @@ The gap is the *typed bridge*: no single frozen control currently demonstrates, 
 | Utilization | (U_{j,v,a,t}) | fraction of available capacity used | demand, operating schedule, constraints |
 | Service quality/efficiency | (Q_{j,v,a,t}) | dimensionless measured coefficient | condition, reliability, quality and efficiency |
 | Capital services | (KS_{j,t}) | functional units per period | available quantity × capacity × utilization × quality |
-| Gross capital stock | (K^G_t) | currency at stated replacement-price basis | GFCF, gross disposals, price revaluation, OVC |
-| Net capital stock | (K^N_t) | currency at stated net replacement-cost basis | GFCF, CFC, net disposals, revaluation, OVC |
+| Gross capital stock | (K^G_t) | currency at stated replacement-price basis | GrossAcquisitions, gross disposals, price revaluation, OVC |
+| Net capital stock | (K^N_t) | currency at stated net replacement-cost basis | GrossAcquisitions, CFC, net disposals, revaluation, OVC |
 | CFC | (CFC_t) | currency per period | age-price/condition profile under declared valuation convention |
-| Repair/maintenance | (MNT_t) | event/flow; currency and material inputs separately | repair and service events; normally current intermediate use unless major improvement qualifies as GFCF |
+| Repair/maintenance | (MNT_t) | event/flow; currency and material inputs separately | repair and service events; normally current intermediate use unless major improvement qualifies as GrossAcquisitions |
 
 A financial asset (share, bond, loan or deposit) is not a productive asset. A monetary value is not a physical quantity. Capital services are a flow, not a balance-sheet stock.
 
@@ -89,15 +89,15 @@ For a transparent control, use a perpetual-inventory cohort valuation at current
 For opening cohorts (i), let (n_i) be quantity, (p_0) the opening replacement price, (w_i) the opening net-value age factor, and (w'_i) the factor after one period's CFC. Additions are capitalized at the acquisition-period price (p_1). Retirement occurs at period end, after the period's CFC; therefore the retired asset is removed at its *post-CFC* net book value. Revaluation is applied to surviving opening assets after age consumption and retirement. No event may appear in more than one adjustment category.
 
 [
-K^G_1=K^G_0+GFCF-GrossDisposals+Revaluation^G+OVC^G,
+K^G_1=K^G_0+GrossAcquisitions-GrossDisposals+Revaluation^G+OVC^G,
 ]
 
 [
-K^N_1=K^N_0+GFCF-CFC-NetBookValueDisposals
+K^N_1=K^N_0+GrossAcquisitions-CFC-NetBookValueDisposals
 +Revaluation^N+OVC^N.
 ]
 
-Here gross disposals remove the current replacement value of the retired asset; net-book-value disposals remove its value after the period's CFC. CFC is calculated once from the opening asset's age/condition profile through the period. Revaluation is the price change on surviving opening assets only. New additions are already measured at (p_1), so do not revalue them a second time in the same period.
+Here gross acquisitions are recorded before disposals. Gross disposals remove the current replacement value of the retired asset; net-book-value disposals remove its value after the period's CFC. CFC is calculated once from the opening asset's age/condition profile through the period. Revaluation is the price change on surviving opening assets only. New additions are already measured at (p_1), so do not revalue them a second time in the same period. **This is a cohort replacement-cost stock bridge, not the national-accounts GFCF transaction flow.** In national accounts, GFCF is normally acquisitions less disposals under the applicable transaction-price convention. It must be derived once from acquisition/disposal events and then reconciled to the replacement-cost cohort stock through valuation/other adjustments; do not use net GFCF and subtract disposals again.
 
 If an adopted national-accounts/valuation standard embeds ordinary retirements in its CFC convention, the separate disposal term must be adjusted accordingly. The two conventions cannot be mixed. The test below explicitly uses end-period retirement and separate NBV disposal.
 
@@ -107,8 +107,8 @@ CFC is a current-price value of the consumption of fixed capital during the peri
 
 ### 5.2 Repair versus capital formation
 
-- Routine maintenance and repair that restore the asset to its expected operating condition are normally current costs; record their labour, parts, materials and payment, but do not automatically add them to GFCF.
-- A major improvement that demonstrably increases capacity, extends service potential beyond the originally expected level, or creates a separately identifiable component may qualify as GFCF under the selected standard. Record the new component/vintage and its own service/age profile.
+- Routine maintenance and repair that restore the asset to its expected operating condition are normally current costs; record their labour, parts, materials and payment, but do not automatically add them to GrossAcquisitions.
+- A major improvement that demonstrably increases capacity, extends service potential beyond the originally expected level, or creates a separately identifiable component may qualify as GrossAcquisitions under the selected standard. Record the new component/vintage and its own service/age profile.
 - Spare parts held in inventory remain inventory until used; usage is then classified according to the repair/improvement event.
 - Remanufacturing must declare whether it restores an existing asset, creates a distinct new fixed asset, or produces a component. Do not book a full new asset and retain the old one as fully productive unless two physical assets actually exist.
 
@@ -147,7 +147,7 @@ K^N_0=(10cdot1+8cdot0.9+6cdot0.8)100=2200.
 Acquisitions and CFC:
 
 [
-GFCF=2cdot105=210,quad
+GrossAcquisitions=2cdot105=210,quad
 CFC=(10+8+6)cdot0.1cdot100=240.
 ]
 
@@ -193,7 +193,9 @@ The example deliberately shows that physical quantity can rise from 24 to 25 whi
 
 ## 7. Compatibility with SFC capital accounts
 
-For a sector (s), using gross concepts:
+For a sector (s), the capital account uses national-accounts GCF/GFCF under the selected transaction-price convention; GFCF already reflects acquisitions less disposals. The cohort stock bridge above instead uses gross acquisitions and separate gross/NBV disposals at replacement cost. A valuation reconciliation is required between the two. Never substitute net GFCF into a cohort equation that also subtracts disposals.
+
+Using gross saving and gross capital formation:
 
 [
 NL_s=S^G_s+KTr_s-GCF_s-NPNA_s.
@@ -224,7 +226,7 @@ Each capital event should minimally carry:
 - gross value, net value, price basis, currency, CFC method and counterpart account where applicable;
 - source, evidence quality, model version and correction lineage.
 
-A repair event can alter availability and condition without creating a financial asset. A payment event can settle the repair invoice without changing physical capital quantity. An upgrade event may change service capacity and create GFCF, but only when recognition criteria and physical evidence are met.
+A repair event can alter availability and condition without creating a financial asset. A payment event can settle the repair invoice without changing physical capital quantity. An upgrade event may change service capacity and create GrossAcquisitions, but only when recognition criteria and physical evidence are met.
 
 ## 9. A2.4.2 pass/fail checklist
 
@@ -236,8 +238,8 @@ A repair event can alter availability and condition without creating a financial
 6. Capital services use measured available hours/quantity, utilization and non-duplicative quality.
 7. Gross and net stocks are independently reproducible from cohorts and valuation profiles.
 8. CFC, disposals, revaluation and other-volume changes are mutually exclusive adjustments.
-9. Routine repair does not become GFCF merely because money was spent.
-10. GFCF/CFC are assigned to institutional sectors and reconciled to gross/net capital accounts.
+9. Routine repair does not become GrossAcquisitions merely because money was spent.
+10. GrossAcquisitions/CFC are assigned to institutional sectors and reconciled to gross/net capital accounts.
 11. Financial payment/credit events do not directly change physical quantity or service absent a corresponding asset/repair event.
 12. The same cohort dataset reproduces physical count, service flow, gross stock, net stock and all adjustment terms.
 
