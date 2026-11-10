@@ -92,6 +92,14 @@ python prototype/scc_dynamic_economy.py --coordination-frontier --monte-carlo 20
 
 Stage B is a physical production-and-consumption layer. Cellular production planning is isolated as a pure local transition over an immutable observation containing the cell's own state and only reachable neighbours' declared input demand; the local rule does not receive the global cell-state dictionary. Cellular requests are relayed neighbour by neighbour; forwarding consent is opt-in at the cell level and is distinct from consent to trade. Repeated request/offer/reservation/acceptance records on the same directed edge are bundled into packets, while packet count and payload-record count remain separately visible. A paired sensitivity comparison and six-level paired response frontier vary packet overhead and per-additional-record labour cost. The default synthetic cost is 0.01 labour-hours per packet plus 0.002 hours per additional payload record. Input-procurement coordination reduces current-period productive labour; final-goods coordination reduces next-period labour. The assumptions require calibration and sensitivity analysis; governance, failed bargaining beyond recorded relay requests, enforcement and dispute resolution remain incomplete. Stage B does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
 
+## Prototype 5 — Stage-C1 Household Physical Distribution
+
+- [household_distribution.py](household_distribution.py) — distributes goods already available inside each cell among that cell's households; supports proportional and priority-weighted max-min rationing, essential-first sequencing and household-level distribution metrics.
+- [test_household_distribution.py](test_household_distribution.py) — tests physical stock conservation, household need bounds, no cross-cell pooling, lower-tail metrics and priority rules.
+- [Stage-C1 design and limitations](../research/SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md) — money-free household layer and integration boundary with Stage B.
+
+The Stage-C1 kernel is deliberately separate from Stage B for now. Stage B determines physical goods delivered to a cell; Stage C1 distributes cell-held goods among its own households. The two layers must not double-count deliveries or create physical quantities. Household income, wages, ownership, money and credit are not yet implemented.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
