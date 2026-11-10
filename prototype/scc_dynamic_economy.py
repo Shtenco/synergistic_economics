@@ -343,8 +343,19 @@ class DynamicCellularEconomy:
                     1.5 if self.policy == "cooperative" else 1.0)
                 desired = max(0.0, total_need + buffer
                               - sum(c.stocks[p] for c in self.cells.values()))
-            else:
+            elif self.policy == "market":
                 desired = max(0.0, total_need + producer.last_external_orders
+                              + producer.spec.safety_stock
+                              - producer.stocks[p])
+            else:
+                local_input_need = sum(
+                    input_need[p].get(buyer_id, 0.0)
+                    for buyer_id in self.cells
+                    if buyer_id != producer.spec.cell_id
+                    and distances[producer.spec.cell_id].get(buyer_id, 10**6)
+                        <= self.cellular_hops
+                )
+                desired = max(0.0, local_input_need + producer.last_external_orders
                               + producer.spec.safety_stock
                               - producer.stocks[p])
             plans[producer.spec.cell_id] = min(cap, desired)
