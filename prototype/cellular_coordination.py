@@ -383,6 +383,114 @@ def allocate_cellular(world: World, max_hops: int = 1,
     return allocations
 
 
+
+def allocate_relay_cellular(world: World, max_hops: int = 1,
+                            max_rounds: int = 8,
+                            trace: List[dict] | None = None) -> List[Allocation]:
+    """Local request propagation with explicit neighbour-by-neighbour relaying.
+
+    A buyer does not inspect a global supplier list. It floods a time-to-live
+    request through adjacent cells, discovers the nearest responding supplier,
+    and retries another supplier in later rounds if its request remains unmet.
+    The optional trace records forwarded requests, offers, reservations and
+    acceptances so communication effort can be measured separately from goods.
+    """
+    if max_hops < 1 or max_rounds < 1:
+        raise CoordinationError("max_hops and max_rounds must be positive")
+    supply, demand = _state(world)
+    graph = {c.cell_id: set() for c in world.cells}
+    for a, b in world.edges:
+        graph[a].add(b)
+        graph[b].add(a)
+    cells = {c.cell_id: c for c in world.cells}
+    allocations: List[Allocation] = []
+    message_trace = trace if trace is not None else []
+
+    for product in _products(world):
+        remaining = dict(demand[product])
+        available = dict(supply[product])
+        tried = {buyer: set() for buyer in remaining}
+
+        for round_index in range(max_rounds):
+            requests = defaultdict(dict)
+            request_paths = {}
+            for buyer in sorted(remaining):
+                if remaining[buyer] <= EPS:
+                    continue
+                visited = {buyer}
+                frontier = [buyer]
+                offers = []
+                for depth in range(1, max_hops + 1):
+                    next_frontier = []
+                    for node in sorted(frontier):
+                        for neighbour in sorted(graph[node]):
+                            if neighbour in visited:
+                                continue
+                            visited.add(neighbour)
+                            next_frontier.append(neighbour)
+                            message_trace.append({
+                                "type": "request_forward", "product": product,
+                                "round": round_index, "origin": buyer,
+                                "sender": node, "receiver": neighbour,
+                                "ttl": max_hops - depth,
+                            })
+                            if (neighbour != buyer
+                                    and available[neighbour] > EPS
+                                    and neighbour not in tried[buyer]):
+                                offers.append((depth, neighbour))
+                    if offers:
+                        break
+                    frontier = next_frontier
+                    if not frontier:
+                        break
+
+                if not offers:
+                    continue
+                distance, seller = min(offers, key=lambda item: (item[0], item[1]))
+                tried[buyer].add(seller)
+                requests[seller][buyer] = remaining[buyer]
+                request_paths[(seller, buyer)] = distance
+                message_trace.append({
+                    "type": "offer", "product": product, "round": round_index,
+                    "origin": buyer, "sender": seller, "receiver": buyer,
+                    "quantity_available": available[seller], "hops": distance,
+                })
+
+            if not requests:
+                break
+
+            moved = 0.0
+            for seller in sorted(requests):
+                weights = {
+                    buyer: cells[buyer].priority.get(product, 1.0)
+                    for buyer in requests[seller]
+                }
+                granted = _weighted_waterfill(
+                    requests[seller], weights, available[seller])
+                for buyer in sorted(granted):
+                    quantity = granted[buyer]
+                    if quantity <= EPS:
+                        continue
+                    distance = request_paths[(seller, buyer)]
+                    allocations.append(Allocation(
+                        product, seller, buyer, quantity, distance))
+                    available[seller] -= quantity
+                    remaining[buyer] -= quantity
+                    moved += quantity
+                    message_trace.append({
+                        "type": "reservation", "product": product,
+                        "round": round_index, "sender": seller,
+                        "receiver": buyer, "quantity": quantity,
+                    })
+                    message_trace.append({
+                        "type": "acceptance", "product": product,
+                        "round": round_index, "sender": buyer,
+                        "receiver": seller, "quantity": quantity,
+                    })
+            if moved <= EPS:
+                break
+    return allocations
+
 POLICIES = {
     "market": allocate_market,
     "central": allocate_central,
