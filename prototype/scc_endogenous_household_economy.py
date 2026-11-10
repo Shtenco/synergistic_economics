@@ -76,7 +76,7 @@ class EndogenousHouseholdEconomy:
         priority_dispersion: float = 0.4,
         household_policy: str = "proportional",
         essential_floor_fraction: float = 0.5,
-        backlog_retention: float = 0.5,
+        backlog_retention: float = 1.0,
         max_backlog_periods: float = 1.0,
         backlog_service_order: str = "backlog_first",
         max_care_queue_age_periods: int = 3,
