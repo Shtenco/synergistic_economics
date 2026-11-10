@@ -210,7 +210,8 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_cell_without_relay_consent_does_not_forward_requests(self):
         world = World(
             cells=(
-                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0}),
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0},
+                     trade_consent=True),
                 Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0},
                      relay_consent=False),
                 Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 5.0}),
