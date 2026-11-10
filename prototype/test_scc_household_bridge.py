@@ -31,6 +31,21 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
             for product, quantity in products.items():
                 self.assertAlmostEqual(reconstructed[cid][product], quantity)
 
+    def test_household_panel_is_stable_when_period_demand_scales(self):
+        base = {"cell-a": {"food": 10.0, "care": 2.0}}
+        doubled = {"cell-a": {"food": 20.0, "care": 4.0}}
+        first = households_from_cell_demand(
+            base, households_per_cell=5, seed=123, priority_dispersion=0.4)
+        second = households_from_cell_demand(
+            doubled, households_per_cell=5, seed=123, priority_dispersion=0.4)
+        self.assertEqual([h.household_id for h in first],
+                         [h.household_id for h in second])
+        for a, b in zip(first, second):
+            self.assertAlmostEqual(a.essential_priority, b.essential_priority)
+            self.assertAlmostEqual(a.discretionary_priority, b.discretionary_priority)
+            for product, quantity in a.essential_needs.items():
+                self.assertAlmostEqual(b.essential_needs[product], 2.0 * quantity)
+
     def test_stage_b_consumption_is_disaggregated_without_new_goods(self):
         model = DynamicCellularEconomy(
             "cellular", seed=12, shock="compound", cellular_hops=2)
