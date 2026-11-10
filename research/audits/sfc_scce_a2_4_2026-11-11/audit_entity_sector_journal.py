@@ -170,6 +170,34 @@ def validate_journal_line(line, registry, period):
     return True
 
 
+def claim_holder_issuer_deltas(event):
+    """Mirror all recognized claim assets/liabilities by full entity-level key."""
+    assets, liabilities = {}, {}
+    for line in event.lines:
+        if line.account.endswith("_asset"):
+            delta = line.amount if line.side == "D" else -line.amount
+            holder, issuer = line.entity_id, line.issuer_entity_id
+            target = assets
+        elif line.account.endswith("_liability"):
+            delta = line.amount if line.side == "C" else -line.amount
+            holder, issuer = line.counterparty_entity_id, line.entity_id
+            target = liabilities
+        else:
+            continue
+        key = (
+            line.instrument_id, line.instrument_class, holder, issuer,
+            line.currency, line.maturity, line.denomination, line.valuation_basis,
+        )
+        target[key] = target.get(key, D("0")) + delta
+    assets = {key: value for key, value in assets.items() if value}
+    liabilities = {key: value for key, value in liabilities.items() if value}
+    if assets != liabilities:
+        raise IdentityError(
+            f"entity-level claim asset/liability mismatch: "
+            f"assets={assets}, liabilities={liabilities}")
+    return assets
+
+
 def deposit_holder_issuer_deltas(event):
     assets, liabilities = {}, {}
     for line in event.lines:
@@ -232,6 +260,11 @@ class EntityJournal:
 
         if debit != credit:
             raise IdentityError(f"unbalanced event {event.event_id}: {debit} != {credit}")
+        # A unilateral creditor write-off is an accounting recognition event:
+        # it does not extinguish the debtor's legal claim. All other recognized
+        # claim movements must have an entity-level asset/liability mirror.
+        if event.event_type != "creditor_writeoff":
+            claim_holder_issuer_deltas(event)
         if any(line.account in {"deposit_asset", "deposit_liability"}
                for line in event.lines):
             deposit_holder_issuer_deltas(event)
