@@ -129,6 +129,33 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(allocations[0].communication_hops, 2)
         self.assertEqual(allocations[0].distance, 1)
 
+    def test_relay_batches_multiple_buyers_on_shared_edges(self):
+        world = World(
+            cells=(
+                Cell("buyer-a", {}, {"food": 2.0}, {"food": 2.0}, {"food": 5.0}),
+                Cell("buyer-b", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0}),
+                Cell("supplier", {"food": 4.0}, {}, {"food": 1.0}, {"food": 5.0}),
+            ),
+            edges=(("buyer-a", "relay"), ("buyer-b", "relay"), ("relay", "supplier")),
+            prices={"food": 2.0},
+        )
+        trace = []
+        allocations = allocate_relay_cellular(world, max_hops=2, trace=trace)
+        self.assertAlmostEqual(sum(a.quantity for a in allocations), 4.0)
+        records = sum(event.get("records", 1) for event in trace)
+        self.assertGreater(records, len(trace))
+        self.assertEqual(records, 16)
+        self.assertEqual(len(trace), 12)
+        shared = [
+            event for event in trace
+            if event["type"] == "request_forward"
+            and event["sender"] == "relay" and event["receiver"] == "supplier"
+        ]
+        self.assertEqual(len(shared), 1)
+        self.assertEqual(shared[0]["records"], 2)
+        self.assertEqual(set(shared[0]["origins"]), {"buyer-a", "buyer-b"})
+
     def test_relay_protocol_respects_ttl_and_disconnected_networks(self):
         world = World(
             cells=(
