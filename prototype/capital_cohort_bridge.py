@@ -10,7 +10,7 @@ model period whose production should use the cohort-derived service index.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import Mapping, Sequence
 
@@ -41,6 +41,29 @@ class CapitalCohort:
     utilization: float
     service_quality: float
     retirement_reason: str = "none"
+
+
+@dataclass(frozen=True)
+class CohortEvent:
+    event_id: str
+    cohort_id: str
+    event_type: str
+    quantity: float
+    from_status: str
+    to_status: str | None = None
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class CohortPeriodResult:
+    period: int
+    opening_physical_units: float
+    additions: float
+    final_retirements: float
+    physical_losses: float
+    closing_physical_units: float
+    closing_cohorts: tuple[CapitalCohort, ...]
+    events: tuple[CohortEvent, ...]
 
 
 @dataclass(frozen=True)
@@ -100,6 +123,132 @@ def validate_cohort(cohort: CapitalCohort) -> None:
         raise CapitalBridgeError(
             "active cohort records must use retirement_reason='none'; "
             "final retirement removes quantity through a separate transition event")
+
+
+def advance_cohort_period(
+    opening_cohorts: Sequence[CapitalCohort],
+    events: Sequence[CohortEvent],
+    additions: Sequence[CapitalCohort],
+    period: int,
+) -> CohortPeriodResult:
+    """Apply identity-preserving asset events and advance cohort ages once.
+
+    Partial state transitions/retirements split a cohort into a deterministic
+    event-derived child ID. Physical loss removes quantity; final retirement
+    remains as a retired record. Repair/reserve/storage transitions preserve
+    physical quantity and vintage. New additions enter at age zero.
+    """
+    if not isinstance(period, int) or isinstance(period, bool) or period < 0:
+        raise CapitalBridgeError("period must be a non-negative integer")
+    if not isinstance(opening_cohorts, tuple) or not isinstance(events, tuple) or not isinstance(additions, tuple):
+        raise CapitalBridgeError("opening cohorts, events and additions must be immutable tuples")
+
+    records = {}
+    for cohort in opening_cohorts:
+        validate_cohort(cohort)
+        if cohort.cohort_id in records:
+            raise CapitalBridgeError(f"duplicate opening cohort ID: {cohort.cohort_id}")
+        records[cohort.cohort_id] = cohort
+
+    opening_units = sum(
+        float(row.quantity) for row in records.values()
+        if row.operating_status != "retired"
+    )
+    seen_event_ids = set()
+    retired_quantity = 0.0
+    lost_quantity = 0.0
+
+    for event in events:
+        if not isinstance(event, CohortEvent):
+            raise CapitalBridgeError("cohort events must be CohortEvent values")
+        if (not isinstance(event.event_id, str) or not event.event_id.strip()
+                or not isinstance(event.cohort_id, str) or not event.cohort_id.strip()):
+            raise CapitalBridgeError("event and cohort IDs must be non-empty strings")
+        if event.event_id in seen_event_ids:
+            raise CapitalBridgeError(f"duplicate cohort event ID: {event.event_id}")
+        seen_event_ids.add(event.event_id)
+        if event.cohort_id not in records:
+            raise CapitalBridgeError(f"event references unknown cohort: {event.cohort_id}")
+        source = records[event.cohort_id]
+        if event.from_status != source.operating_status:
+            raise CapitalBridgeError("event source state does not match current cohort state")
+        quantity = _finite_nonnegative(event.quantity, "event quantity")
+        if quantity <= 0 or quantity > float(source.quantity):
+            raise CapitalBridgeError("event quantity must be positive and not exceed cohort quantity")
+
+        if event.event_type == "state_transition":
+            if (event.to_status not in NON_RETIRED_STATES
+                    or event.to_status == source.operating_status
+                    or event.reason):
+                raise CapitalBridgeError("invalid non-retirement state transition")
+            retirement_reason = "none"
+        elif event.event_type == "final_retirement":
+            if (event.to_status != "retired"
+                    or event.reason not in RETIREMENT_REASONS - {"none"}):
+                raise CapitalBridgeError("final retirement requires retired state and explicit reason")
+            retirement_reason = event.reason
+            retired_quantity += quantity
+        elif event.event_type == "physical_loss":
+            if (event.to_status is not None
+                    or event.reason not in {"accident", "catastrophe", "disaster", "other"}):
+                raise CapitalBridgeError("physical loss requires an explicit loss reason and no destination")
+            lost_quantity += quantity
+            remaining = float(source.quantity) - quantity
+            if remaining <= 0:
+                del records[source.cohort_id]
+            else:
+                records[source.cohort_id] = replace(source, quantity=remaining)
+            continue
+        else:
+            raise CapitalBridgeError(f"unknown cohort event type: {event.event_type}")
+
+        remaining = float(source.quantity) - quantity
+        if remaining > 0:
+            records[source.cohort_id] = replace(source, quantity=remaining)
+            child_id = f"{source.cohort_id}::event::{event.event_id}"
+            if child_id in records:
+                raise CapitalBridgeError(f"derived cohort ID collision: {child_id}")
+            records[child_id] = replace(
+                source, cohort_id=child_id, quantity=quantity,
+                operating_status=event.to_status,
+                retirement_reason=retirement_reason)
+        else:
+            records[source.cohort_id] = replace(
+                source, quantity=quantity, operating_status=event.to_status,
+                retirement_reason=retirement_reason)
+
+    addition_ids = set()
+    addition_quantity = 0.0
+    for cohort in additions:
+        validate_cohort(cohort)
+        if cohort.cohort_id in records or cohort.cohort_id in addition_ids:
+            raise CapitalBridgeError(f"duplicate addition cohort ID: {cohort.cohort_id}")
+        if cohort.vintage != period or cohort.age != 0:
+            raise CapitalBridgeError("new additions must use current-period vintage and age zero")
+        if cohort.operating_status == "retired":
+            raise CapitalBridgeError("new additions cannot enter already retired")
+        addition_ids.add(cohort.cohort_id)
+        addition_quantity += float(cohort.quantity)
+        records[cohort.cohort_id] = cohort
+
+    # Age each surviving opening cohort and any split child exactly once;
+    # additions are already at age zero and must not age in their entry period.
+    for cohort_id in tuple(records):
+        if cohort_id not in addition_ids:
+            records[cohort_id] = replace(records[cohort_id], age=records[cohort_id].age + 1)
+
+    closing = tuple(sorted(records.values(), key=lambda row: row.cohort_id))
+    closing_units = sum(
+        float(row.quantity) for row in closing
+        if row.operating_status != "retired"
+    )
+    expected = opening_units + addition_quantity - retired_quantity - lost_quantity
+    if not math.isclose(closing_units, expected, rel_tol=1e-12, abs_tol=1e-12):
+        raise CapitalBridgeError(
+            f"physical cohort stock-flow mismatch: closing={closing_units}, expected={expected}")
+    return CohortPeriodResult(
+        period, opening_units, addition_quantity, retired_quantity, lost_quantity,
+        closing_units, closing, events)
 
 
 def aggregate_capital_services(
