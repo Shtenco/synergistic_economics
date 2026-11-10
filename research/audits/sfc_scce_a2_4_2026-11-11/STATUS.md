@@ -842,3 +842,31 @@ table columns and routes that database through the v1-to-v2 migration. The
 audit fixture exercises both explicitly stamped v1 and unstamped v1-layout
 databases. This prevents a partial old initialization from being mislabeled
 as a fresh v2 database.
+
+
+## 11 November continuation — period-scoped financial claim identity
+
+A2.4.4 source review found that the synthetic entity-level claim key omitted
+`effective_period`. That made repeated instrument positions across periods
+ambiguous and could allow a holder record from one period to be compared with
+an issuer record from another.
+
+The claim key now includes the effective period. The entity-sector journal
+fixture adds controls proving that:
+- one instrument can have separate mirrored positions in successive periods;
+- cross-period holder/issuer records do not match;
+- sector financial net lending cannot silently sum transactions across
+  multiple periods and requires an explicit period selector;
+- period-scoped aggregation remains correct for one-pass iterables.
+
+Code commits:
+- `e541162c55c4bb15df1b4984164e644290118b1c` — add effective period to
+  claim identity and add multi-period mirror controls;
+- `3bf45c8fa446a086bc104a63ea27d1897da677ac` — make period-scoped net-lending
+  aggregation safe for iterables and add a generator control.
+
+**Limit:** this does not yet enforce closing-to-opening continuity between
+successive periods, derive the positions from the durable event store, or
+integrate with the SFC runtime. It is a synthetic fixture hardening only.
+No exact-head execution PASS is claimed. A2.4.4 remains OPEN and A2.4.8
+remains BLOCKED; PR #4 remains Draft/unmerged and canonical `main` untouched.
