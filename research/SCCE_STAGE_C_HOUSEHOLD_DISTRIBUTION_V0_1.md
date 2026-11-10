@@ -134,7 +134,7 @@ The module remains separate from Stage-B production and matching, but a tested d
 
 The Stage-B Monte Carlo summary now calls the horizon bridge and reports household-level cumulative essential/overall fulfilment, lower-decile and minimum household essential fulfilment, household fulfilment Gini, mean period lower-tail metrics and the worst-period household minimum. Its default reporting panel uses five synthetic households per cell, proportional rationing and zero priority dispersion. This adds distributional observability to the four economic-regime comparisons without changing their physical production or trade decisions.
 
-The separate Stage-C1 rationing experiment uses ten synthetic households per cell and a declared priority dispersion of 0.4. For each seed and economic regime, it simulates the Stage-B world once, then applies proportional and priority-weighted allocation to the exact same per-cell consumed quantities and the same persistent household panel. The paired difference therefore isolates the post-hoc rationing rule; it does not measure a production response to household distribution.
+The separate Stage-C1 rationing experiment uses ten synthetic households per cell and a declared priority dispersion of 0.4. For each seed and economic regime, it simulates the Stage-B world once, then applies proportional, priority-weighted and essential-floor-first allocation to the exact same per-cell consumed quantities and the same persistent household panel. Paired differences therefore isolate the post-hoc rationing rule; they do not measure a production response to household distribution.
 
 The integration preserves the boundary:
 - Stage B determines what goods reach each cell and records cell-level consumption;
@@ -146,7 +146,8 @@ The integration preserves the boundary:
 `prototype/scc_household_experiment.py` compares proportional and priority-weighted rationing using a persistent synthetic household panel across all periods. It reports cumulative-horizon household fulfilment alongside mean-period lower-decile fulfilment, mean-period minimum fulfilment, inequality and worst-period minimum fulfilment. Thus the cumulative measure does not conceal the timing of shortages; period-level tail metrics remain visible. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
 
 Experiments should compare:
-- proportional versus priority-weighted distribution;
+- proportional versus priority-weighted versus essential-floor-first distribution;
+- sensitivity to the 50% essential floor and priority dispersion;
 - different essential floors;
 - homogeneous versus heterogeneous household needs;
 - cell-level versus household-level inequality;
