@@ -258,3 +258,26 @@ script still requires execution through the exact-head CI wrapper; no CI PASS
 is claimed. Full SFC-A…G remains open because currency, maturity, legal
 instrument subtypes, equity, trade credit and multi-period event linkage are
 not yet fully represented.
+
+
+## A2.4.1/B4 — real SCCE physical transition fixture
+
+Added `audit_scce_physical_transition.py` and integrated it into both the
+standalone audit workflow and the existing Prototype unittest wrapper. It
+executes the actual `DynamicCellularEconomy` for eight periods under the
+existing cellular/compound-shock regime, rather than a synthetic replacement.
+
+For every period it reconstructs each of the seven cells' inventory change for
+every product from opening stocks, bounded raw-resource regeneration,
+production events, intermediate/final delivery transfers, recipe input use
+and final consumption. It also checks unique event keys, contiguous event
+sequence, event-period consistency, production-event coverage, production
+totals against `PeriodResult.output_by_product`, and the engine's own
+raw-resource stock-flow identity after each period.
+
+The fixture is now included as a twelfth audit-script test in
+`prototype/test_a2_4_audit_controls.py`. Its first exact test execution is
+pending the GitHub Actions run; no PASS is claimed before CI logs are available.
+This closes an important source-to-test interface for the existing SCCE
+physical engine, but does not integrate B8.1 cohorts or SFC financial stocks
+into that engine.
