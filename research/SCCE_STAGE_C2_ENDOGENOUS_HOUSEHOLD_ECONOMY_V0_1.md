@@ -2,10 +2,11 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Research design; implementation not yet claimed  
+**Status:** Research design with the first C2-A1 household-demand-signal bridge implemented; persistent household feedback, time, income and endogenous production response remain unimplemented  
 **Parent:** [SCCE cellular engine and comparative experiment](SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md)  
 **Predecessor:** [Stage C1 household physical distribution](SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md)  
-**Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)
+**Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)  
+**C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`
 
 ---
 
@@ -238,9 +239,9 @@ Any composite index must be secondary, with published weights and Pareto-frontie
 
 ## 12. Implementation sequence and gate criteria
 
-**C2-A1 — Demand panel:** persistent household needs, requests and privacy-scoped aggregation.  
-**C2-A2 — Delivery bridge:** per-period household allocations reconcile to Stage-B physical delivery.  
-**C2-A3 — Backlog dynamics:** bounded unmet-need carry-over and ageing, with tests against runaway demand.  
+**C2-A1 — Demand signal bridge (first prototype implemented):** a reproducible synthetic household panel is generated from the existing cell demand, and only cell/product aggregates are published to the production engine. Household identifiers and priority weights are absent from the signal payload. A minimum-contributor threshold suppresses small aggregates and fails closed. The bridge must reconcile exactly to the original CellSpec demand, so the controlled Stage-B physical outcome remains unchanged. This is a source-of-demand and privacy-boundary test, not yet a new behavioural or welfare result. See `prototype/scc_household_signals.py` and `prototype/test_scc_household_signals.py`.  
+**C2-A2 — In-loop delivery bridge:** allocate each period's actual physical cell delivery to the persistent household panel inside the economic transition, while reconciling every unit and preserving household privacy.  
+**C2-A3 — Backlog dynamics:** bounded unmet-need carry-over, ageing, expiry and anti-runaway tests; ensure it does not double-count Stage-B's existing external-order feedback.  
 **C2-B1 — Time budget:** voluntary work/care/rest allocation and time conservation.  
 **C2-B2 — Labour response:** transparent participation functions, sensitivity analysis and identical rules across regimes.  
 **C2-C1 — Household budget:** wages, transfers, ownership income, consumption spending and cash conservation.  
@@ -253,6 +254,6 @@ Do not advance to the next gate until the current gate passes physical/accountin
 
 Stage C1 establishes that distribution rules can change household lower-tail outcomes without changing aggregate physical consumption. Its 25/50/75% floor sensitivity also shows that a nominal floor may be ineffective or may leave too much residual allocation to arbitrary priority weights when supply is severely constrained.
 
-The next implementation should therefore be **C2-A1: persistent household demand and privacy-scoped cell signals**, followed by a bounded unmet-need state. The first C2 build must remain physical and money-free. Finance is added only after the household-to-cell physical feedback is tested; the existing accounting models remain supporting subsystems.
+The first C2-A1 prototype now makes household demand the explicit source of cell demand while preserving the Stage-B baseline exactly. The next implementation is **C2-A2: an in-loop household delivery bridge**, followed by bounded unmet-need ageing. Only after that physical feedback passes reconciliation and replay tests should C2-B introduce voluntary time and productive participation. The first C2 stages remain physical and money-free; finance is added later as a supporting subsystem, not as a substitute for the cellular mechanism.
 
 **No conclusion about SCCE superiority is justified yet.** The model must earn that conclusion through matched, held-out comparisons that include material, distributional, time, ecological and institutional costs.
