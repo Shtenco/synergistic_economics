@@ -158,6 +158,16 @@ def distribute_period_to_households(
             used = served[cell_id].get(product, 0.0)
             unallocated[cell_id][product] = max(0.0, float(available) - used)
 
+    stage_b_total_consumption = sum(
+        float(quantity)
+        for products in cell_supply.values()
+        for quantity in products.values()
+    )
+    if abs(metrics["overall_served"] - stage_b_total_consumption) > 1e-7:
+        raise HouseholdBridgeError(
+            "total household allocation does not reconcile to Stage-B consumption"
+        )
+
     if set(essential_products) == {"food", "care"}:
         stage_b_essential = (
             sum(v.get("food", 0.0) for v in cell_supply.values())
@@ -274,6 +284,17 @@ def summarize_periods_to_households(
     )
     validate_household_allocation(households, aggregate_cell_supply, allocations)
     aggregate = evaluate_households(households, allocations)
+
+    expected_total = sum(
+        float(quantity)
+        for period in periods
+        for products in period.final_consumption_by_cell.values()
+        for quantity in products.values()
+    )
+    if abs(aggregate["overall_served"] - expected_total) > 1e-7:
+        raise HouseholdBridgeError(
+            "horizon household consumption does not reconcile to Stage-B"
+        )
 
     expected_essential = sum(
         float(period.final_consumption_by_product.get(product, 0.0))
