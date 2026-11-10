@@ -623,3 +623,42 @@ No PASS is claimed. The cohort adapter remains opt-in; the normal SCCE period
 loop does not yet own or persist the ledger. Zero-service capital remains
 unsupported by the current SCCE scalar-capital validator. A2.4.2 remains OPEN;
 A2.4.8 remains BLOCKED. PR #4 remains Draft and unmerged; `main` is untouched.
+
+
+## 11 November continuation — split credit creation from deposit transfer
+
+A review of the A2.4.4 entity-journal fixture found that the former
+`nonbank_deposit_transfer` example also posted a new non-bank loan asset and
+borrower loan liability. Although the aggregate deposit total remained
+unchanged, the event label hid a distinct credit-creation transaction. This
+was an A2-48 semantic defect in the fixture: deposit neutrality does not imply
+credit neutrality.
+
+The fixture now separates the event sequence into:
+1. `nonbank_loan_origination`: mirrored loan asset/liability only, with no new
+   deposit;
+2. `nonbank_deposit_transfer`: holder-to-holder transfer of existing deposits
+   with reciprocal bank liability movements, no loan postings and zero net
+   change in aggregate deposits;
+3. `bank_loan_origination`: mirrored loan asset/liability plus borrower
+   deposit asset and bank deposit liability creation for the same amount.
+
+Event-specific checks now validate account composition, posting sides,
+amounts, participant/issuer roles and bank-versus-nonbank originator sector
+for these three event types. Negative controls reject a mixed non-bank
+loan/transfer event and a bank loan origination without deposit creation.
+The fixture separately asserts +19 deposit creation for bank origination and
+zero deposit-aggregate change for both non-bank loan origination and transfer.
+
+Commit sequence:
+- `9136ef1c1c34352822e343bd39a291cc5d1fe40b` — split the E2 loan origination
+  from the deposit transfer and enforce event-specific posting contracts;
+- `b8d71e723fc1aecaafa5025ee2a16d81618e63be` — add mixed-event and incomplete
+  bank-origination negative controls.
+
+**Execution status:** code and controls are committed, but exact-head CI has
+not completed. The fixture remains synthetic; the production financial
+journal and SFC position register are not yet unified. Other event families
+still require explicit posting templates and the entity journal is not yet
+the authoritative source of financial positions. A2.4.4 remains OPEN and
+A2.4.8 remains BLOCKED. PR #4 remains Draft; `main` remains untouched.
