@@ -56,6 +56,49 @@ class HouseholdDistributionTests(unittest.TestCase):
         self.assertAlmostEqual(w["standard"], 1.0)
         self.assertAlmostEqual(sum(w.values()), 4.0)
 
+    def test_floor_priority_protects_a_minimum_before_priority_rationing(self):
+        households = (
+            Household("priority", "cell", {"food": 4.0}, {}, 3.0),
+            Household("standard", "cell", {"food": 4.0}, {}, 1.0),
+        )
+        floor_only = allocate_households(
+            households, {"cell": {"food": 4.0}},
+            "floor_priority", essential_floor_fraction=0.5,
+        )
+        by_id = {a.household_id: a.essential_served["food"] for a in floor_only}
+        self.assertAlmostEqual(by_id["priority"], 2.0)
+        self.assertAlmostEqual(by_id["standard"], 2.0)
+
+        surplus = allocate_households(
+            households, {"cell": {"food": 6.0}},
+            "floor_priority", essential_floor_fraction=0.5,
+        )
+        by_id = {a.household_id: a.essential_served["food"] for a in surplus}
+        self.assertAlmostEqual(by_id["priority"], 3.5)
+        self.assertAlmostEqual(by_id["standard"], 2.5)
+        self.assertTrue(validate_household_allocation(
+            households, {"cell": {"food": 6.0}}, surplus))
+
+    def test_floor_priority_shares_insufficient_floor_supply_proportionally(self):
+        households = (
+            Household("priority", "cell", {"food": 4.0}, {}, 3.0),
+            Household("standard", "cell", {"food": 4.0}, {}, 1.0),
+        )
+        allocations = allocate_households(
+            households, {"cell": {"food": 3.0}},
+            "floor_priority", essential_floor_fraction=0.5,
+        )
+        by_id = {a.household_id: a.essential_served["food"] for a in allocations}
+        self.assertAlmostEqual(by_id["priority"], 1.5)
+        self.assertAlmostEqual(by_id["standard"], 1.5)
+
+    def test_invalid_essential_floor_fraction_rejected(self):
+        with self.assertRaises(HouseholdDistributionError):
+            allocate_households(
+                self.households, self.supply, "floor_priority",
+                essential_floor_fraction=1.1,
+            )
+
     def test_cell_supply_cannot_be_used_by_another_cell(self):
         households = (
             Household("need-a", "cell-a", {"food": 5.0}, {}),
