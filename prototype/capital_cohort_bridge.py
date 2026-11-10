@@ -56,6 +56,14 @@ class CohortEvent:
 
 
 @dataclass(frozen=True)
+class CohortLedgerState:
+    """Durable state required to make cohort events and period advances idempotent."""
+    last_processed_period: int | None
+    cohorts: tuple[CapitalCohort, ...]
+    processed_event_ids: frozenset[str]
+
+
+@dataclass(frozen=True)
 class CohortPeriodResult:
     period: int
     opening_physical_units: float
@@ -65,6 +73,7 @@ class CohortPeriodResult:
     closing_physical_units: float
     closing_cohorts: tuple[CapitalCohort, ...]
     events: tuple[CohortEvent, ...]
+    state: CohortLedgerState
 
 
 @dataclass(frozen=True)
@@ -127,8 +136,21 @@ def validate_cohort(cohort: CapitalCohort) -> None:
         raise CapitalBridgeError("active cohort cannot carry a final retirement reason")
 
 
+def initial_cohort_state(cohorts: Sequence[CapitalCohort]) -> CohortLedgerState:
+    """Create a validated initial ledger state before the first period."""
+    if not isinstance(cohorts, tuple):
+        raise CapitalBridgeError("initial cohorts must be an immutable tuple")
+    seen = set()
+    for cohort in cohorts:
+        validate_cohort(cohort)
+        if cohort.cohort_id in seen:
+            raise CapitalBridgeError(f"duplicate initial cohort ID: {cohort.cohort_id}")
+        seen.add(cohort.cohort_id)
+    return CohortLedgerState(None, cohorts, frozenset())
+
+
 def advance_cohort_period(
-    opening_cohorts: Sequence[CapitalCohort],
+    opening_state: CohortLedgerState,
     events: Sequence[CohortEvent],
     additions: Sequence[CapitalCohort],
     period: int,
@@ -142,9 +164,20 @@ def advance_cohort_period(
     """
     if not isinstance(period, int) or isinstance(period, bool) or period < 0:
         raise CapitalBridgeError("period must be a non-negative integer")
-    if not isinstance(opening_cohorts, tuple) or not isinstance(events, tuple) or not isinstance(additions, tuple):
-        raise CapitalBridgeError("opening cohorts, events and additions must be immutable tuples")
+    if not isinstance(opening_state, CohortLedgerState):
+        raise CapitalBridgeError("opening_state must be a CohortLedgerState; raw cohorts omit replay history")
+    if (opening_state.last_processed_period is not None
+            and period != opening_state.last_processed_period + 1):
+        raise CapitalBridgeError("cohort periods must advance exactly once and in sequence")
+    if (not isinstance(opening_state.cohorts, tuple)
+            or not isinstance(opening_state.processed_event_ids, frozenset)
+            or any(not isinstance(x, str) or not x.strip()
+                   for x in opening_state.processed_event_ids)):
+        raise CapitalBridgeError("cohort ledger state has invalid immutable history")
+    if not isinstance(events, tuple) or not isinstance(additions, tuple):
+        raise CapitalBridgeError("events and additions must be immutable tuples")
 
+    opening_cohorts = opening_state.cohorts
     records = {}
     for cohort in opening_cohorts:
         validate_cohort(cohort)
@@ -159,7 +192,7 @@ def advance_cohort_period(
     )
     if not math.isfinite(opening_units):
         raise CapitalBridgeError("opening physical cohort stock is non-finite")
-    seen_event_ids = set()
+    seen_event_ids = set(opening_state.processed_event_ids)
     retired_quantity = 0.0
     lost_quantity = 0.0
 
@@ -170,7 +203,7 @@ def advance_cohort_period(
                 or not isinstance(event.cohort_id, str) or not event.cohort_id.strip()):
             raise CapitalBridgeError("event and cohort IDs must be non-empty strings")
         if event.event_id in seen_event_ids:
-            raise CapitalBridgeError(f"duplicate cohort event ID: {event.event_id}")
+            raise CapitalBridgeError(f"duplicate or previously processed cohort event ID: {event.event_id}")
         if not isinstance(event.event_type, str):
             raise CapitalBridgeError("cohort event type must be a string")
         seen_event_ids.add(event.event_id)
@@ -263,9 +296,10 @@ def advance_cohort_period(
     if not math.isclose(closing_units, expected, rel_tol=1e-12, abs_tol=1e-12):
         raise CapitalBridgeError(
             f"physical cohort stock-flow mismatch: closing={closing_units}, expected={expected}")
+    next_state = CohortLedgerState(period, closing, frozenset(seen_event_ids))
     return CohortPeriodResult(
         period, opening_units, addition_quantity, retired_quantity, lost_quantity,
-        closing_units, closing, events)
+        closing_units, closing, events, next_state)
 
 
 def aggregate_capital_services(
