@@ -124,7 +124,7 @@ This sensitivity is deliberately visible because it changes current-care fulfilm
 | Cooperative | 62.45 | 0.55 | 0.55 | +0.002 (−0.002 to +0.005) |
 | Market | 39.27 | 8.46 | 10.15 | +1.69 (+1.56 to +1.82) |
 
-Food fulfilment is exactly unchanged by this service-order switch. Total care deliveries, gross output, final consumption and ending queue quantity are also unchanged; only the attribution between current care requests and old queued claims changes. FIFO/backlog-first is the default for the current prototype because it is the natural rule for an aged service queue, but it is not a neutral convention. The next implementation must record queue age and explicit service priority so that "which claim is cleared" is an auditable event rather than an implicit accounting choice.
+Total physical food and care deliveries, gross output, final consumption and ending queue quantity are unchanged. Household-level food fulfilment can nevertheless move slightly because the allocator considers the combined essential claim when splitting goods among households; the service-order setting changes the care component of that claim. Thus report both physical product delivery and household allocation, rather than assuming that a fixed cell-level food flow implies identical household food fulfilment. FIFO/backlog-first is the default for the current prototype because it is the natural rule for an aged service queue, but it is not a neutral convention. The next implementation must record queue age and explicit service priority so that "which claim is cleared" is an auditable event rather than an implicit accounting choice.
 
 ## 7. Limitations
 
