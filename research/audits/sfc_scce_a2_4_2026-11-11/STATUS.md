@@ -452,3 +452,34 @@ The exact-head runs surfaced by GitHub are:
 - A2.4 audit control fixtures `42909252997` — **QUEUED**.
 
 Each run has a queued job and no assigned runner, conclusion, execution steps or logs. Older runs target ancestor commits and cannot verify the latest changes. No code execution PASS is claimed. The A2.4 workflow now includes the live cohort-to-SCCE adapter script; its exact-head execution is still pending.
+
+
+### Exact-head refresh — cohort lifecycle and adapter rollback control
+
+Current branch HEAD: `34fc4f9cec9eede409aad1fccf1925a4b194d909`.
+Compare with `main`: 117 commits ahead, 0 behind; 28 changed files.
+
+The lifecycle adapter now distinguishes the six active B8.1 states from a
+terminal retired audit record. Partial state transitions and retirement create
+deterministic child cohort IDs; physical loss removes quantity without being
+misclassified as ordinary retirement; active survivors age once; new additions
+enter at age zero; terminal retired records are excluded from physical stock
+and capital services and cannot be reactivated. The SCCE adapter validates all
+cell mappings before mutation and rolls back earlier assignments if a later
+cell write fails.
+
+A further negative-control review caught that the initial synthetic rollback
+test had used a baseline that generated multiplier 1.0, so its fake setter did
+not actually reject a write. The fixture was corrected to generate multiplier
+0.5 in both cells, ensuring the second-cell setter raises after the first cell
+has changed; the test then checks that both cells return to their original
+capital value. This is a test correction, not a production-model change.
+
+Exact current-head PR CI:
+- Prototype validation `42909450947` — QUEUED;
+- SCCE Stage-C2 validation `42909450934` — QUEUED.
+
+No completed logs are available; no PASS is claimed. The dedicated A2.4
+branch-push workflow runs the capital-cohort adapter script, but its completed
+exact-head result has not been verified. A2.4.2 remains OPEN and the adapter
+remains opt-in; the SCCE period loop does not yet own the cohort register.
