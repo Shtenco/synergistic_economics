@@ -36,6 +36,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_sfc_six_sector(self):
         self._run_script("audit_sfc_six_sector.py")
 
+    def test_audit_scce_physical_transition(self):
+        self._run_script("audit_scce_physical_transition.py")
+
     def test_audit_capital_bridge(self):
         self._run_script("audit_capital_bridge.py")
 
