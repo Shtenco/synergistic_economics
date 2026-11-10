@@ -62,3 +62,5 @@ jobs:
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.25 --summary-only
       - name: Run Stage-C1 household floor sensitivity (75 percent floor, 20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.75 --summary-only
+      - name: Run Stage-C2-A2 endogenous household feedback experiment (20 paired seeds)
+        run: python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only
