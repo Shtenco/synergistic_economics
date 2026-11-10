@@ -55,9 +55,9 @@ def run_household_distribution_experiment(
 ) -> dict:
     """Compare three household rationing rules on identical Stage-B consumption.
 
-    Each Stage-B world is simulated once per seed/economic policy. Both
-    household rules then receive exactly the same per-cell physical consumption
-    snapshots and the same synthetic household needs and priorities.
+    Each Stage-B world is simulated once per seed/economic policy. All three
+    household rules receive exactly the same per-cell physical consumption
+    snapshots and the same persistent synthetic household needs and priorities.
     """
     if runs < 2 or periods < 1:
         raise ValueError("runs must be >=2 and periods must be positive")
@@ -82,7 +82,7 @@ def run_household_distribution_experiment(
             distributions = {}
             for household_policy in HOUSEHOLD_POLICIES:
                 # The same seed preserves a stable household panel across all
-                # periods and across both rationing policies.
+                # periods and across all three rationing policies.
                 distributions[household_policy] = summarize_periods_to_households(
                     model.periods,
                     households_per_cell=households_per_cell,
