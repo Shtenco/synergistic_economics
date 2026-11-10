@@ -150,7 +150,7 @@ class CellularCoordinationTests(unittest.TestCase):
         # Each buyer's TTL-2 broadcast also reaches the other buyer through
         # the shared relay; those two forwarded requests are real payload work.
         self.assertEqual(records, 18)
-        self.assertEqual(len(trace), 12)
+        self.assertEqual(len(trace), 14)
         shared = [
             event for event in trace
             if event["type"] == "request_forward"
