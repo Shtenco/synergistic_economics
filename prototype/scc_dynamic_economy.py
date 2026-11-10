@@ -831,6 +831,44 @@ def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
     }
 
 
+
+def coordination_sensitivity(runs: int = 20, shock: str = "compound",
+                             periods: int = 24, cellular_hops: int = 2,
+                             base_hours: float = 0.01,
+                             stress_hours: float = 0.05):
+    """Paired same-seed comparison of two coordination-time assumptions."""
+    base = monte_carlo(runs, shock, periods, cellular_hops, base_hours)
+    stress = monte_carlo(runs, shock, periods, cellular_hops, stress_hours)
+    base_rows = {(r["seed"], r["policy"]): r for r in base["paired_runs"]}
+    stress_rows = {(r["seed"], r["policy"]): r for r in stress["paired_runs"]}
+    metrics = (
+        "final_fulfilment_rate", "mean_essential_fulfilment",
+        "mean_weighted_fulfilment", "fixed_price_final_consumption_index",
+        "fixed_price_gross_output_index", "total_coordination_hours",
+    )
+    result = {}
+    for policy in POLICIES:
+        result[policy] = {}
+        for metric in metrics:
+            differences = [
+                stress_rows[(seed, policy)][metric] - base_rows[(seed, policy)][metric]
+                for seed in range(1, runs + 1)
+            ]
+            result[policy][metric] = {
+                "base_mean": statistics.mean(
+                    base_rows[(seed, policy)][metric] for seed in range(1, runs + 1)),
+                "stress_mean": statistics.mean(
+                    stress_rows[(seed, policy)][metric] for seed in range(1, runs + 1)),
+                "paired_stress_minus_base": _confidence_summary(differences),
+            }
+    return {
+        "runs": runs, "shock": shock, "periods": periods,
+        "cellular_hops": cellular_hops,
+        "base_hours_per_message": base_hours,
+        "stress_hours_per_message": stress_hours,
+        "sensitivity": result,
+    }
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", choices=POLICIES, default="cellular")
@@ -842,9 +880,16 @@ def main():
     parser.add_argument("--coordination-hours-per-message", type=float, default=0.01)
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--monte-carlo", type=int, default=0)
+    parser.add_argument("--coordination-sensitivity", action="store_true")
+    parser.add_argument("--base-coordination-hours", type=float, default=0.01)
+    parser.add_argument("--stress-coordination-hours", type=float, default=0.05)
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
-    if args.monte_carlo:
+    if args.coordination_sensitivity:
+        result = coordination_sensitivity(
+            args.monte_carlo or 20, args.shock, args.periods, args.hops,
+            args.base_coordination_hours, args.stress_coordination_hours)
+    elif args.monte_carlo:
         result = monte_carlo(args.monte_carlo, args.shock, args.periods, args.hops,
                              args.coordination_hours_per_message)
         if args.summary_only:
