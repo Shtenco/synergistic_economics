@@ -258,3 +258,22 @@ changing `main`.
 
 **Execution state:** wrapper committed; current-head PR run IDs and logs not
 yet surfaced at the last poll. G0 remains pending until exact-head completion.
+
+
+## 11 November continuation — exact workflow inventory and execution status
+
+The current `.github/workflows/a2-4-audit-controls.yml` has a branch-push
+trigger and a pull-request trigger. It does **not** declare
+`workflow_dispatch`; the earlier statement that this workflow can be manually
+dispatched was inaccurate and is corrected here.
+
+The workflow compiles the audit directory and invokes eleven scripts:
+six-sector SFC, capital bridge, same-cohort capital, B8.1 cohort contract,
+product dimensions, product valuation, physical flow register, financial
+event controls, financial journal, instrument stock-flow and labour/consent.
+
+The GitHub Actions API surfaced multiple queued runs, including audit-control
+run `42904711717` on head
+`84958a1f448d7ab89bcddcfa0a5f4155862e52fe`. The latest branch head at the
+time of this note is newer than some surfaced runs; a queued run on an older
+head does not validate the latest head. No completed exact-head PASS is claimed.
