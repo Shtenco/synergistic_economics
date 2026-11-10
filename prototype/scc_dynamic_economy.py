@@ -78,6 +78,40 @@ class CellState:
     cumulative_unmet_final: float = 0.0
 
 
+@dataclass(frozen=True)
+class CellLocalView:
+    """Only own state and explicitly reachable neighbour demand signals."""
+    cell_id: str
+    output: str
+    inventory: float
+    local_final_need: float
+    previous_external_orders: float
+    safety_stock: float
+    capacity: float
+    labour_hours: float
+    productivity: float
+    capital: float
+    productivity_multiplier: float
+    neighbour_ids: tuple[str, ...]
+    neighbour_input_demand: float
+
+
+def propose_cellular_output(view: CellLocalView) -> float:
+    """Pure local transition rule for one cell's next-period output proposal."""
+    if view.output in INPUT_PRODUCTS:
+        local_signal = view.neighbour_input_demand
+    else:
+        local_signal = view.local_final_need
+    target = max(
+        0.0,
+        local_signal + view.previous_external_orders
+        + view.safety_stock - view.inventory,
+    )
+    labour_capacity = min(view.capacity, view.labour_hours * view.productivity)
+    feasible_capacity = labour_capacity * view.capital * view.productivity_multiplier
+    return min(feasible_capacity, target)
+
+
 @dataclass
 class PeriodResult:
     period: int
@@ -298,6 +332,39 @@ class DynamicCellularEconomy:
                           self.transport_cost_per_hop, self.transaction_cost,
                           self.communication_edges)
 
+    def _cell_local_view(self, cell_id: str, demand_mult: float,
+                         productivity_mult: float,
+                         labour_budget: Mapping[str, float],
+                         plans: Mapping[str, float],
+                         distances: Mapping[str, Mapping[str, int]]) -> CellLocalView:
+        """Build a cell-scoped view; unreachable cells are not observable."""
+        cell = self.cells[cell_id]
+        output = cell.spec.output
+        neighbours = tuple(sorted(
+            other_id for other_id, distance in distances[cell_id].items()
+            if other_id != cell_id and distance <= self.cellular_hops
+        ))
+        neighbour_input_demand = sum(
+            plans.get(other_id, 0.0)
+            * self.cells[other_id].spec.recipe.get(output, 0.0)
+            for other_id in neighbours
+        ) if output in INPUT_PRODUCTS else 0.0
+        return CellLocalView(
+            cell_id=cell_id,
+            output=output,
+            inventory=cell.stocks[output],
+            local_final_need=cell.spec.final_demand.get(output, 0.0) * demand_mult,
+            previous_external_orders=cell.last_external_orders,
+            safety_stock=cell.spec.safety_stock,
+            capacity=cell.spec.capacity,
+            labour_hours=labour_budget[cell_id],
+            productivity=cell.spec.productivity,
+            capital=cell.capital,
+            productivity_multiplier=productivity_mult,
+            neighbour_ids=neighbours,
+            neighbour_input_demand=neighbour_input_demand,
+        )
+
     def _allocate(self, world: MatchWorld, trace: list[dict] | None = None) -> list[Allocation]:
         if self.policy == "market":
             return allocate_market(world)
@@ -439,6 +506,14 @@ class DynamicCellularEconomy:
         }
         for cid, c in self.cells.items():
             s = c.spec
+            if self.policy == "cellular":
+                # The initial local transition sees only own state and no
+                # neighbour production plans; inter-cell input demand is added
+                # during the bounded fixed-point exchange below.
+                local_view = self._cell_local_view(
+                    cid, demand_mult, productivity_mult, labour_budget, {}, distances)
+                plans[cid] = propose_cellular_output(local_view)
+                continue
             local_need = s.final_demand.get(s.output, 0.0) * demand_mult
             cap = min(s.capacity, labour_budget[cid] * s.productivity) * c.capital * productivity_mult
             if s.output in FINAL_PRODUCTS and self.policy in ("central", "cooperative"):
@@ -469,16 +544,11 @@ class DynamicCellularEconomy:
                                   + producer.spec.safety_stock
                                   - producer.stocks[p])
                 else:
-                    local_input_need = sum(
-                        plans[buyer_id] * self.cells[buyer_id].spec.recipe.get(p, 0.0)
-                        for buyer_id in self.cells
-                        if buyer_id != producer.spec.cell_id
-                        and distances[producer.spec.cell_id].get(buyer_id, 10**6)
-                            <= self.cellular_hops
-                    )
-                    desired = max(0.0, local_input_need + producer.last_external_orders
-                                  + producer.spec.safety_stock
-                                  - producer.stocks[p])
+                    local_view = self._cell_local_view(
+                        producer.spec.cell_id, demand_mult, productivity_mult,
+                        labour_budget, plans, distances)
+                    plans[producer.spec.cell_id] = propose_cellular_output(local_view)
+                    continue
                 plans[producer.spec.cell_id] = min(cap, desired)
 
         for cid, c in self.cells.items():
