@@ -81,3 +81,27 @@ a full register integration. No claim of executed PASS is made here.
 5. Implement the missing A2.4.4 journal event fixtures and A2.4.5 labour/consent
    fixtures before Gate 1 can be considered.
 6. Freeze A2.4.6 preregistration and complete all A2.4.7 gates before A2.4.8.
+
+
+## Continuation — journal, labour and physical-flow controls
+
+Added three component fixtures:
+- `audit_financial_journal.py`: event-ID idempotency and balanced debit/credit postings for bank loan origination, non-bank transfer, payment, principal repayment, interest accrual/settlement, impairment and creditor write-off. The debtor's legal liability is not silently extinguished by creditor write-off.
+- `audit_labour_consent.py`: weekly interval budget, overlap rejection, consent-state gate, scheduled/safety delivery bounds, capability transition and wage accrual/settlement separation.
+- `audit_physical_flow_register.py`: one physical flow ID mirrored by sender/receiver, exact product/grade/unit/period/quantity match, duplicate rejection and one-time cancellation of internal transfer at consolidated boundary.
+
+All three files are committed component fixtures. Their execution in a recorded Python runner remains pending; do not describe them as runtime-tested or CI-green.
+
+### CI after opening Draft PR #4
+- Prototype validation run `42901021739` (run 307): queued at last poll; job `130126684304`.
+- SCCE Stage-C2 validation run `42901021866` (run 38): queued at last poll; job `130126683896`.
+- No completed job conclusion or logs were available at the last poll. CI remains pending.
+
+### Current remaining blockers
+1. Execute all five new audit fixtures (same-cohort capital, product valuation, physical flow, financial journal, labour/consent) and record exact output/exit status/hash.
+2. Wait for both PR CI workflows and inspect full job logs. If the deterministic fixture fails, debug the model/test interaction; do not weaken assertions.
+3. Bind physical flow and capital fixtures to actual B2/B3/B8.1 runtime schemas.
+4. Complete financial stock-flow positions, sector mirror accounts and default/forgiveness legal distinction.
+5. Complete labour interval provenance, paid/unpaid classification, rights/appeal and privacy tests.
+6. Freeze A2.4.6 comparator, treatment definitions, primary outcomes, seed count, horizon, exclusions and statistical method against the actual existing regime implementation. Do not invent these parameters from an illustrative protocol.
+7. Only after Gates 0–2 pass, begin A2.4.8; only after Gate 3 may comparative claims be made. Gate 4 remains empirical validation.
