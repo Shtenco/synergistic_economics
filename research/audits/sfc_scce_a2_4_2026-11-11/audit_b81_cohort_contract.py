@@ -66,6 +66,11 @@ class AssetCohort:
     repair_history: tuple
     retirement_reason: str
     data_quality: str
+    cohort_id: str = ""
+    owner_id: str = ""
+    economic_user_id: str = ""
+    institutional_sector: str = ""
+    legal_basis: str = ""
 
 
 @dataclass(frozen=True)
@@ -76,11 +81,16 @@ class ComponentCohort:
     age: int
     quantity: D
     material_vector: tuple
+    component_cohort_id: str = ""
+    host_cohort_id: str = ""
 
 
 def validate_cohort(cohort):
-    if not all((cohort.asset_type, cohort.region_origin, cohort.region_use,
-                cohort.condition_state, cohort.retirement_reason)):
+    if not all((cohort.cohort_id, cohort.asset_type, cohort.region_origin,
+                cohort.region_use, cohort.condition_state,
+                cohort.retirement_reason, cohort.owner_id,
+                cohort.economic_user_id, cohort.institutional_sector,
+                cohort.legal_basis)):
         raise CohortError("B8.1 asset identity/state metadata is incomplete")
     if (not isinstance(cohort.vintage, int) or isinstance(cohort.vintage, bool)
             or not isinstance(cohort.age, int) or isinstance(cohort.age, bool)
@@ -121,6 +131,33 @@ def validate_component(component):
     finite_nonnegative(component.quantity, "component quantity")
     validate_material_vector(component.material_vector)
     return True
+
+def validate_portfolio(cohorts, components):
+    """Validate unique cohort identity and explicit component-to-host links."""
+    if not isinstance(cohorts, tuple) or not isinstance(components, tuple):
+        raise CohortError("portfolio cohort/component collections must be immutable tuples")
+    cohort_by_id = {}
+    for cohort in cohorts:
+        validate_cohort(cohort)
+        if cohort.cohort_id in cohort_by_id:
+            raise CohortError(f"duplicate asset cohort ID: {cohort.cohort_id}")
+        cohort_by_id[cohort.cohort_id] = cohort
+
+    component_ids = set()
+    for component in components:
+        validate_component(component)
+        if component.component_cohort_id in component_ids:
+            raise CohortError(
+                f"duplicate component cohort ID: {component.component_cohort_id}")
+        component_ids.add(component.component_cohort_id)
+        host = cohort_by_id.get(component.host_cohort_id)
+        if host is None:
+            raise CohortError(
+                f"component references unknown host cohort: {component.host_cohort_id}")
+        if host.asset_type != component.host_asset_type:
+            raise CohortError("component host asset type does not match host cohort")
+    return True
+
 
 def apply_period(opening_states, moves, additions, retirements, physical_losses):
     states = {k: finite_nonnegative(v, f"opening state {k}")
@@ -191,7 +228,10 @@ def main():
         material_vector=(steel,), service_capacity=D("100"),
         availability=D("0.9"), utilization=D("0.8"),
         service_quality=D("0.95"), repair_history=("repair-2024",),
-        retirement_reason="none", data_quality="documented")
+        retirement_reason="none", data_quality="documented",
+        cohort_id="machine-v2020-R1-001", owner_id="org-1",
+        economic_user_id="plant-1", institutional_sector="NFC",
+        legal_basis="asset-title-001")
     assert validate_cohort(cohort)
     assert capital_services(cohort) == D("684.000")
     assert material_mass(cohort, "steel") == D("20")
@@ -212,13 +252,53 @@ def main():
     host_age_after_period = cohort.age + 1
     replacement = ComponentCohort(
         "machine", "motor", 2026, 0, D("1"),
-        (Material("copper", D("12"), "kg"),))
+        (Material("copper", D("12"), "kg"),),
+        component_cohort_id="motor-v2026-001",
+        host_cohort_id=cohort.cohort_id)
     assert validate_component(replacement)
+    assert validate_portfolio((cohort,), (replacement,))
     assert replacement.host_asset_type == cohort.asset_type
     assert replacement.quantity > 0 and replacement.vintage > cohort.vintage
     assert host_age_after_period == 7
     assert replacement.vintage == 2026 and replacement.age == 0
     assert cohort.vintage == 2020
+
+    # Asset and component identities must remain linked across registers.
+    try:
+        validate_portfolio((cohort, cohort), (replacement,))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("duplicate asset cohort identity accepted")
+    orphan_component = ComponentCohort(
+        "machine", "motor", 2026, 0, D("1"),
+        (Material("copper", D("12"), "kg"),),
+        component_cohort_id="motor-orphan-001",
+        host_cohort_id="missing-host")
+    try:
+        validate_portfolio((cohort,), (orphan_component,))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("orphan component cohort accepted")
+    wrong_host_type = ComponentCohort(
+        "tractor", "motor", 2026, 0, D("1"),
+        (Material("copper", D("12"), "kg"),),
+        component_cohort_id="motor-wrong-host-001",
+        host_cohort_id=cohort.cohort_id)
+    try:
+        validate_portfolio((cohort,), (wrong_host_type,))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("component with mismatched host type accepted")
+    try:
+        validate_cohort(AssetCohort(
+            **{**cohort.__dict__, "owner_id": ""}))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("cohort without owner identity accepted")
 
     # Fail-closed schema controls: duplicate materials, unknown condition,
     # non-finite service factors and malformed component identity.
