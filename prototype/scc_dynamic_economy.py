@@ -28,6 +28,8 @@ from cellular_coordination import (
     communication_paths,
 )
 
+from scc_household_bridge import summarize_periods_to_households
+
 EPS = 1e-9
 
 PRODUCTS = ("food", "materials", "energy", "machinery",
@@ -837,6 +839,9 @@ class DynamicCellularEconomy:
                                for r in self.periods) for p in FINAL_PRODUCTS}
         total_demand = sum(sum(r.final_demand_by_product.values()) for r in self.periods)
         total_consumed = sum(sum(r.final_consumption_by_product.values()) for r in self.periods)
+        household_metrics = summarize_periods_to_households(
+            self.periods, households_per_cell=5, policy="proportional",
+            seed=self.seed, priority_dispersion=0.0)
         return {
             "policy": self.policy, "shock": self.shock, "seed": self.seed,
             "periods": len(self.periods), "cellular_hops": self.cellular_hops,
@@ -850,6 +855,25 @@ class DynamicCellularEconomy:
             "mean_essential_fulfilment": sum(r.essential_fulfilment for r in self.periods) / len(self.periods),
             "mean_weighted_fulfilment": sum(r.weighted_fulfilment for r in self.periods) / len(self.periods),
             "mean_cell_fulfilment_gini": sum(r.cell_fulfilment_gini for r in self.periods) / len(self.periods),
+            "household_count": household_metrics["households"],
+            "household_essential_fulfilment": household_metrics["essential_fulfilment"],
+            "household_overall_fulfilment": household_metrics["overall_fulfilment"],
+            "household_lower_decile_essential_fulfilment": household_metrics[
+                "lower_decile_household_essential_fulfilment"],
+            "household_minimum_essential_fulfilment": household_metrics[
+                "minimum_household_essential_fulfilment"],
+            "household_essential_fulfilment_gini": household_metrics[
+                "essential_fulfilment_gini"],
+            "household_overall_fulfilment_gini": household_metrics[
+                "overall_fulfilment_gini"],
+            "household_mean_period_lower_decile_essential_fulfilment": household_metrics[
+                "mean_period_lower_decile_household_essential_fulfilment"],
+            "household_mean_period_minimum_essential_fulfilment": household_metrics[
+                "mean_period_minimum_household_essential_fulfilment"],
+            "household_mean_period_essential_fulfilment_gini": household_metrics[
+                "mean_period_household_essential_fulfilment_gini"],
+            "household_worst_period_minimum_essential_fulfilment": household_metrics[
+                "worst_period_minimum_household_essential_fulfilment"],
             "cumulative_unmet_final_units": sum(r.unmet_final_units for r in self.periods),
             "cumulative_input_shortage_units": sum(r.input_shortage_units for r in self.periods),
             "fixed_price_gross_output_index": sum(r.fixed_price_gross_output for r in self.periods),
