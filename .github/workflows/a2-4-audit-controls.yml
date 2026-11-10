@@ -1,0 +1,45 @@
+name: A2.4 audit control fixtures
+
+on:
+  push:
+    branches:
+      - audit/sfc-scce-a2-4-continuation-20261111
+    paths:
+      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
+      - ".github/workflows/a2-4-audit-controls.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit-control-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Record interpreter
+        run: python --version
+      - name: Compile audit controls
+        run: python -m compileall -q research/audits/sfc_scce_a2_4_2026-11-11
+      - name: A2.4.1 six-sector SFC and physical arithmetic
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_six_sector.py
+      - name: A2.4.2 capital stock and services bridge
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_capital_bridge.py
+      - name: A2.4.2 same-cohort capital integration fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_same_cohort_capital.py
+      - name: A2.4.3 native-unit product balances
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_dimensions.py
+      - name: A2.4.3 typed product valuation adapter
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_valuation_adapter.py
+      - name: A2.4.3 physical flow endpoint register
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_physical_flow_register.py
+      - name: A2.4.4 financial event balance controls
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_events.py
+      - name: A2.4.4 balanced double-entry journal fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal.py
+      - name: A2.4.5 labour, time and consent fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
