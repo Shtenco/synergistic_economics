@@ -52,5 +52,7 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 3 --summary-only
       - name: Run Stage-B paired dynamic Monte Carlo (100 seeds, compound shock, one-hop local reach)
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 1 --summary-only
+      - name: Run Stage-B coordination-labour reference (20 seeds, default message cost)
+        run: python prototype/scc_dynamic_economy.py --monte-carlo 20 --shock compound --periods 24 --hops 2 --coordination-hours-per-message 0.01 --summary-only
       - name: Run Stage-B coordination-labour sensitivity (20 seeds, elevated message cost)
         run: python prototype/scc_dynamic_economy.py --monte-carlo 20 --shock compound --periods 24 --hops 2 --coordination-hours-per-message 0.05 --summary-only
