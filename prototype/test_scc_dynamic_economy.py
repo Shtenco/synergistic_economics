@@ -1,7 +1,8 @@
 import unittest
+from dataclasses import replace
 
 from cellular_coordination import (
-    Cell, World, allocate_cellular, allocate_central,
+    Cell, World, allocate_cellular, allocate_relay_cellular, allocate_central,
     allocate_cooperative, allocate_market,
 )
 from scc_dynamic_economy import (
@@ -240,6 +241,49 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         )
         with self.assertRaises(DynamicEconomyError):
             coordination_frontier(runs=3, hours_levels=(0.01, 0.05))
+
+    def test_stage_b_trade_consent_blocks_external_delivery(self):
+        specs = list(DynamicCellularEconomy.default_specs(31))
+        specs = [
+            replace(spec, trade_consent=False) if spec.cell_id == "cell-1" else spec
+            for spec in specs
+        ]
+        model = DynamicCellularEconomy(
+            "cellular", specs=specs, cellular_hops=2,
+            communication_edges=(("cell-1", "cell-2"), ("cell-2", "cell-3")),
+        )
+        world = model._matching_world(
+            {"food": {"cell-1": 5.0}},
+            {"food": {"cell-3": 5.0}},
+        )
+        self.assertEqual(allocate_relay_cellular(world, max_hops=2), [])
+
+    def test_stage_b_relay_consent_controls_multihop_reach(self):
+        base = list(DynamicCellularEconomy.default_specs(32))
+        chain = (("cell-1", "cell-2"), ("cell-2", "cell-3"))
+        supply = {"food": {"cell-1": 5.0}}
+        demand = {"food": {"cell-3": 5.0}}
+
+        blocked_specs = [
+            replace(spec, relay_consent=False) if spec.cell_id == "cell-2" else spec
+            for spec in base
+        ]
+        blocked = DynamicCellularEconomy(
+            "cellular", specs=blocked_specs, cellular_hops=2,
+            communication_edges=chain,
+        )
+        blocked_world = blocked._matching_world(supply, demand)
+        self.assertEqual(allocate_relay_cellular(blocked_world, max_hops=2), [])
+
+        permitted = DynamicCellularEconomy(
+            "cellular", specs=base, cellular_hops=2,
+            communication_edges=chain,
+        )
+        permitted_world = permitted._matching_world(supply, demand)
+        self.assertEqual(
+            sum(a.quantity for a in allocate_relay_cellular(permitted_world, max_hops=2)),
+            5.0,
+        )
 
     def test_invalid_policy_rejected(self):
         with self.assertRaises(DynamicEconomyError):
