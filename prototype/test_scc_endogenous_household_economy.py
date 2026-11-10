@@ -43,19 +43,27 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
         )
         model.run(16)
         self.assertTrue(model.validate())
-        base_essential = sum(
-            sum(h.essential_needs.values()) for h in model.households
+        base_care = sum(
+            h.essential_needs.get("care", 0.0) for h in model.households
         )
         for result in model.period_results:
             self.assertGreaterEqual(result.opening_essential_backlog, 0.0)
             self.assertGreaterEqual(result.closing_essential_backlog, 0.0)
             self.assertLessEqual(
                 result.closing_essential_backlog,
-                base_essential * 0.5 + 1e-7,
+                base_care * 0.5 + 1e-7,
             )
         self.assertGreater(model.summary()["peak_essential_backlog"], 0.0)
-        # The period-5 cell demand includes the essential backlog accumulated
-        # during the first shock period (period 4).
+        # Care is a delayed service queue; food is a recurring period need.
+        base_care = sum(
+            spec.final_demand.get("care", 0.0)
+            for spec in model.base_specs
+        )
+        period5_care = sum(
+            values.get("care", 0.0)
+            for values in model.period_results[4].cell_demand.values()
+        )
+        self.assertGreater(period5_care, base_care * 1.2)
         base_food = sum(
             spec.final_demand.get("food", 0.0)
             for spec in model.base_specs
@@ -64,7 +72,8 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
             values.get("food", 0.0)
             for values in model.period_results[4].cell_demand.values()
         )
-        self.assertGreaterEqual(period5_food, base_food - 1e-7)
+        self.assertAlmostEqual(period5_food, base_food * 1.2, places=7)
+        self.assertGreater(model.summary()["cumulative_unmet_food_units"], 0.0)
 
     def test_allocation_rule_changes_household_distribution_metrics(self):
         proportional = EndogenousHouseholdEconomy(
