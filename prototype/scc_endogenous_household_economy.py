@@ -395,6 +395,16 @@ class EndogenousHouseholdEconomy:
         ]
         sorted_rates = sorted(household_rates)
         lower_index = max(0, math.ceil(0.10 * len(sorted_rates)) - 1)
+        total_care_delivered = sum(
+            float(products.get("care", 0.0))
+            for result in self.period_results
+            for products in result.cell_consumption.values()
+        )
+        cumulative_current_care_served = sum(
+            result.current_care_served for result in self.period_results
+        )
+        cumulative_care_backlog_served = max(
+            0.0, total_care_delivered - cumulative_current_care_served)
         return {
             "policy": self.policy,
             "household_policy": self.household_policy,
@@ -413,9 +423,11 @@ class EndogenousHouseholdEconomy:
                 / sum(r.current_food_demand for r in self.period_results)
                 if sum(r.current_food_demand for r in self.period_results) > EPS else 1.0),
             "current_care_fulfilment": (
-                sum(r.current_care_served for r in self.period_results)
+                cumulative_current_care_served
                 / sum(r.current_care_demand for r in self.period_results)
                 if sum(r.current_care_demand for r in self.period_results) > EPS else 1.0),
+            "total_care_delivered": total_care_delivered,
+            "cumulative_care_backlog_served": cumulative_care_backlog_served,
             "cumulative_unmet_food_units": sum(self.cumulative_unmet_food.values()),
             "cumulative_lower_decile_current_essential_fulfilment": sorted_rates[lower_index],
             "cumulative_minimum_current_essential_fulfilment": min(sorted_rates, default=1.0),
