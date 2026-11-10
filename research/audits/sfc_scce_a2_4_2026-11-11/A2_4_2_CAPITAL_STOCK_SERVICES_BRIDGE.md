@@ -28,7 +28,7 @@ The gap is the *typed bridge*: no single frozen control currently demonstrates, 
 | Gross capital stock | (K^G_t) | currency at stated replacement-price basis | GrossAcquisitions, gross disposals, price revaluation, OVC |
 | Net capital stock | (K^N_t) | currency at stated net replacement-cost basis | GrossAcquisitions, CFC, net disposals, revaluation, OVC |
 | CFC | (CFC_t) | currency per period | age-price/condition profile under declared valuation convention |
-| Repair/maintenance | (MNT_t) | event/flow; currency and material inputs separately | repair and service events; normally current intermediate use unless major improvement qualifies as GrossAcquisitions |
+| Repair/maintenance | (MNT_t) | event/flow; currency and material inputs separately | repair and service events; normally current intermediate use unless major improvement qualifies as GFCF |
 
 A financial asset (share, bond, loan or deposit) is not a productive asset. A monetary value is not a physical quantity. Capital services are a flow, not a balance-sheet stock.
 
@@ -107,8 +107,8 @@ CFC is a current-price value of the consumption of fixed capital during the peri
 
 ### 5.2 Repair versus capital formation
 
-- Routine maintenance and repair that restore the asset to its expected operating condition are normally current costs; record their labour, parts, materials and payment, but do not automatically add them to GrossAcquisitions.
-- A major improvement that demonstrably increases capacity, extends service potential beyond the originally expected level, or creates a separately identifiable component may qualify as GrossAcquisitions under the selected standard. Record the new component/vintage and its own service/age profile.
+- Routine maintenance and repair that restore the asset to its expected operating condition are normally current costs; record their labour, parts, materials and payment, but do not automatically capitalize them as GFCF.
+- A major improvement that demonstrably increases capacity, extends service potential beyond the originally expected level, or creates a separately identifiable component may qualify as GFCF under the selected standard. Record the new component/vintage and its own service/age profile.
 - Spare parts held in inventory remain inventory until used; usage is then classified according to the repair/improvement event.
 - Remanufacturing must declare whether it restores an existing asset, creates a distinct new fixed asset, or produces a component. Do not book a full new asset and retain the old one as fully productive unless two physical assets actually exist.
 
@@ -226,7 +226,7 @@ Each capital event should minimally carry:
 - gross value, net value, price basis, currency, CFC method and counterpart account where applicable;
 - source, evidence quality, model version and correction lineage.
 
-A repair event can alter availability and condition without creating a financial asset. A payment event can settle the repair invoice without changing physical capital quantity. An upgrade event may change service capacity and create GrossAcquisitions, but only when recognition criteria and physical evidence are met.
+A repair event can alter availability and condition without creating a financial asset. A payment event can settle the repair invoice without changing physical capital quantity. An upgrade event may change service capacity and create GFCF, but only when recognition criteria and physical evidence are met.
 
 ## 9. A2.4.2 pass/fail checklist
 
@@ -238,8 +238,8 @@ A repair event can alter availability and condition without creating a financial
 6. Capital services use measured available hours/quantity, utilization and non-duplicative quality.
 7. Gross and net stocks are independently reproducible from cohorts and valuation profiles.
 8. CFC, disposals, revaluation and other-volume changes are mutually exclusive adjustments.
-9. Routine repair does not become GrossAcquisitions merely because money was spent.
-10. GrossAcquisitions/CFC are assigned to institutional sectors and reconciled to gross/net capital accounts.
+9. Routine repair does not become GFCF merely because money was spent.
+10. GFCF/CFC are assigned to institutional sectors and reconciled to gross/net capital accounts.
 11. Financial payment/credit events do not directly change physical quantity or service absent a corresponding asset/repair event.
 12. The same cohort dataset reproduces physical count, service flow, gross stock, net stock and all adjustment terms.
 
