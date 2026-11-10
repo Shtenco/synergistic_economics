@@ -206,7 +206,9 @@ class HouseholdDistributionTests(unittest.TestCase):
         result = compare_household_distribution_policies(
             period, households_per_cell=6, seed=19)
         self.assertEqual(result["household_count"], 12)
-        self.assertEqual(set(result["policies"]), {"proportional", "priority_weighted"})
+        self.assertEqual(set(result["policies"]), {
+            "proportional", "priority_weighted", "floor_priority",
+        })
         for metrics in result["policies"].values():
             self.assertAlmostEqual(metrics["essential_served"], 11.0)
             self.assertAlmostEqual(metrics["overall_served"], 14.0)
