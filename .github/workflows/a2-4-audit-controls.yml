@@ -43,5 +43,7 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_events.py
       - name: A2.4.4 balanced double-entry journal fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal.py
+      - name: A2.4.4 instrument stock-flow and holder/issuer mirrors
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_instrument_stock_flow.py
       - name: A2.4.5 labour, time and consent fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
