@@ -501,7 +501,7 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                             visited.add(neighbour)
                             next_path = path + [neighbour]
                             next_frontier.append((neighbour, next_path))
-                            message_trace.append({
+                            raw_message_trace.append({
                                 "type": "request_forward", "product": product,
                                 "round": round_index, "origin": buyer,
                                 "sender": node, "receiver": neighbour,
