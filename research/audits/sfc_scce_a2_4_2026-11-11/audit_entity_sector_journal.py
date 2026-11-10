@@ -416,7 +416,7 @@ def make_claim_position(registry, period, side, holder, issuer, instrument_id,
 
 def claim_key(row):
     return (
-        row.instrument_id, row.instrument_class,
+        row.effective_period, row.instrument_id, row.instrument_class,
         row.entity_id if row.side == "holder_asset" else row.counterparty_entity_id,
         row.issuer_entity_id, row.currency, row.maturity,
         row.denomination, row.valuation_basis,
@@ -495,10 +495,20 @@ def validate_claim_positions(holder_records, issuer_records, registry):
     return True
 
 
-def sector_financial_net_lending(holder_records, registry):
-    """Aggregate transactions only, after entity-level claim mirrors close."""
+def sector_financial_net_lending(holder_records, registry, period=None):
+    """Aggregate transaction flows for exactly one period, never across periods."""
+    periods = {row.effective_period for row in holder_records}
+    if period is None:
+        if len(periods) > 1:
+            raise IdentityError(
+                "period is required when financial positions span multiple periods")
+        period = next(iter(periods), 0)
+    if not isinstance(period, int) or isinstance(period, bool) or period < 0:
+        raise IdentityError("period must be a non-negative integer")
     assets, liabilities = {}, {}
     for row in holder_records:
+        if row.effective_period != period:
+            continue
         holder_sector = registry.sector_of(row.entity_id, row.effective_period)
         issuer_sector = registry.sector_of(row.issuer_entity_id, row.effective_period)
         assets[holder_sector] = assets.get(holder_sector, D("0")) + row.transactions
@@ -773,6 +783,39 @@ def main():
             instrument_class, opening, t, closing))
 
     validate_claim_positions(holders, issuers, registry)
+
+    # The same legal instrument must be representable in multiple periods.
+    # Period is part of the mirror key; a holder record from period 1 cannot
+    # be matched to an issuer liability from period 2.
+    period2_holder = make_claim_position(
+        registry, 2, "holder_asset", "household-1", "bank-1",
+        "deposit-H", "deposit", 107, 3, 110)
+    period2_issuer = make_claim_position(
+        registry, 2, "issuer_liability", "household-1", "bank-1",
+        "deposit-H", "deposit", 107, 3, 110)
+    validate_claim_positions(
+        holders + [period2_holder], issuers + [period2_issuer], registry)
+    try:
+        validate_claim_positions([holders[0]], [period2_issuer], registry)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("holder and issuer positions from different periods matched")
+
+    try:
+        sector_financial_net_lending(
+            holders + [period2_holder], registry)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("financial net lending silently aggregated multiple periods")
+    period2_nl = sector_financial_net_lending(
+        holders + [period2_holder], registry, period=2)
+    assert period2_nl == {
+        "H": D("3"), "NFC": D("0"), "CB": D("-3"),
+        "CBank": D("0"), "GOV": D("0"), "ROW": D("0"),
+    }
+
     sector_nl = sector_financial_net_lending(holders, registry)
     expected = {
         "H": D("7"), "NFC": D("-19"), "CB": D("4"),
