@@ -115,3 +115,11 @@ All three files are committed component fixtures. Their execution in a recorded 
 - At the latest poll, the new commit had no surfaced PR workflow runs and combined status returned an empty status list. The two older PR jobs from the preceding head were still queued when last checked. This is **not CI success**; the new branch-push workflow still requires a completed run and logs.
 - Financial journal and labour/consent controls are implemented as component fixtures, not yet integrated institutional-sector ledgers or a legally complete rights engine.
 - A2.4.7 remains open; A2.4.8 remains blocked pending actual B8.1/B2/SCCE schema integration, financial stock-flow reconciliation, preregistration and exact-head test evidence.
+
+
+## Additional continuation — A2.4.4 instrument stock-flow reconciliation
+
+- Added `audit_instrument_stock_flow.py` (commit `81086176619a9a4307a5a8ef017da90897e884e9`). It uses the exact opening/closing position table from the six-sector SFC numerical closure: ten holder/issuer positions, seven mirror groups, stock-flow equations and the sector financial net-lending vector H +7, NFC −19, CB +4, CBank 0, GOV −15, ROW +23.
+- Independent Decimal arithmetic verification passed for all ten roll-forwards, all seven mirror groups and zero aggregate net lending. This is an independent check of the example values, not execution of the committed script.
+- The audit CI workflow was extended to execute this fixture. The workflow now contains eleven audit-script commands. A completed run and exact-head logs remain unverified.
+- A2.4.4 remains open: no general-purpose instrument ledger, full legal/account taxonomy, or live SFC runtime integration has been implemented.
