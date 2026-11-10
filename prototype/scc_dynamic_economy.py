@@ -378,8 +378,8 @@ class DynamicCellularEconomy:
         # Intermediate inputs are prioritized by the downstream value/criticality
         # of the production they enable, not by arbitrary cell-id ordering.
         input_criticality = {
-            "food": 2.4, "care": 2.2, "energy": 2.1,
-            "materials": 2.0, "software": 1.3,
+            "energy": 3.0, "materials": 2.9, "food": 2.4,
+            "care": 2.2, "software": 1.3,
             "machinery": 1.2, "logistics": 1.0,
         }
         input_priorities = {
