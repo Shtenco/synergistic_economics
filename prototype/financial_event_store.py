@@ -129,6 +129,19 @@ class FinancialEventStore:
                 raise FinancialEventStoreError(
                     "SQLite WAL mode and FULL synchronous durability are required")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
+            if version == 0:
+                # Recover safely if an older initializer created the v1 events
+                # table but crashed before stamping PRAGMA user_version.
+                table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'"
+                ).fetchone()
+                if table is not None:
+                    columns = {
+                        row["name"] for row in connection.execute(
+                            "PRAGMA table_info(events)").fetchall()
+                    }
+                    if "event_index" not in columns:
+                        version = 1
             if version not in (0, 1, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
                     f"unsupported event-store schema version: {version}")
