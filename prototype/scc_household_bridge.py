@@ -160,7 +160,7 @@ def distribute_period_to_households(
         "households": households,
         "allocations": allocations,
         "metrics": metrics,
-        "unallocated_supply_by_cell": unallocated,
+        "unassigned_consumption_by_cell": unallocated,
         "is_posthoc_decomposition": True,
     }
 
