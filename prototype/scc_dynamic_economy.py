@@ -375,7 +375,20 @@ class DynamicCellularEconomy:
                 offer = max(0.0, c.stocks[p] - local_use)
                 input_supply[p][cid] = offer
                 input_demand[p][cid] = shortage
-        input_world = self._matching_world(input_supply, input_demand)
+        # Intermediate inputs are prioritized by the downstream value/criticality
+        # of the production they enable, not by arbitrary cell-id ordering.
+        input_criticality = {
+            "food": 2.4, "care": 2.2, "energy": 2.1,
+            "materials": 2.0, "software": 1.3,
+            "machinery": 1.2, "logistics": 1.0,
+        }
+        input_priorities = {
+            cid: {p: input_criticality.get(c.spec.output, 1.0)
+                  for p in INPUT_PRODUCTS}
+            for cid, c in self.cells.items()
+        }
+        input_world = self._matching_world(
+            input_supply, input_demand, input_priorities)
         input_allocations = self._allocate(input_world)
         _, input_seller_deliveries, input_logistics, input_coordination = self._apply_allocations(
             input_allocations, period, "intermediate.input.delivery")
