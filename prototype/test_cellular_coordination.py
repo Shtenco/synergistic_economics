@@ -145,7 +145,9 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertAlmostEqual(sum(a.quantity for a in allocations), 4.0)
         records = sum(event.get("records", 1) for event in trace)
         self.assertGreater(records, len(trace))
-        self.assertEqual(records, 16)
+        # Each buyer's TTL-2 broadcast also reaches the other buyer through
+        # the shared relay; those two forwarded requests are real payload work.
+        self.assertEqual(records, 18)
         self.assertEqual(len(trace), 12)
         shared = [
             event for event in trace
