@@ -58,6 +58,32 @@ def event(event_id, kind, *lines):
     return Event(event_id, kind, tuple(lines))
 
 
+def account_change(event_record, account, instrument, sector=None):
+    """Return signed stock change from double-entry side conventions.
+
+    Asset: debit increases, credit decreases.
+    Liability/equity: credit increases, debit decreases.
+    The caller selects the account/sector whose balance is being reconciled.
+    """
+    if account.endswith("_asset"):
+        debit_sign = 1
+    elif account.endswith("_liability"):
+        debit_sign = -1
+    else:
+        raise PostingError("account must explicitly identify asset or liability")
+    total = D("0")
+    for line in event_record.lines:
+        if line.account != account or line.instrument != instrument:
+            continue
+        if sector is not None and line.sector != sector:
+            continue
+        if line.side == "D":
+            total += debit_sign * line.amount
+        elif line.side == "C":
+            total -= debit_sign * line.amount
+    return total
+
+
 def main():
     j = Journal()
     # Bank loan creation: deposit money is created once, against a loan asset.
@@ -122,14 +148,27 @@ def main():
     else:
         raise AssertionError("duplicate event id accepted")
 
-    # Cross-event controls: E1 creates +19 deposits; E2 moves existing deposits.
-    assert D("19") == D("19")  # bank-created deposit liability/asset mirror
-    assert D("-19") + D("19") == 0  # non-bank transfer system-wide deposit change
-    assert D("-7") + D("7") == 0  # payment is a transfer
-    assert D("-5") == D("-5")  # matched principal asset/liability reduction
+    # Derive deposit stock changes from the journal postings themselves.
+    e1, e2, e3, e4, e6 = (j.events[x] for x in ("E1", "E2", "E3", "E4", "E6"))
+    assert account_change(e1, "deposit_asset", "deposit") == D("19")
+    assert account_change(e1, "deposit_liability", "deposit") == D("19")
+    # A non-bank transfer and supplier payment redistribute existing deposits.
+    assert account_change(e2, "deposit_asset", "deposit") == D("0")
+    assert account_change(e2, "deposit_liability", "deposit") == D("0")
+    assert account_change(e3, "deposit_asset", "deposit") == D("0")
+    assert account_change(e3, "deposit_liability", "deposit") == D("0")
+    # Principal repayment and interest settlement contract deposits symmetrically.
+    assert account_change(e4, "deposit_asset", "deposit") == D("-5")
+    assert account_change(e4, "deposit_liability", "deposit") == D("-5")
+    assert account_change(e6, "deposit_asset", "deposit") == D("-2")
+    assert account_change(e6, "deposit_liability", "deposit") == D("-2")
+    assert account_change(e1, "deposit_asset", "deposit", "BORROWER") == D("19")
+    assert account_change(e2, "deposit_asset", "deposit", "LENDER") == D("-19")
+    assert account_change(e2, "deposit_asset", "deposit", "BORROWER2") == D("19")
     print("A2.4.4 balanced event journal fixture: PASS")
     print(f"events={len(j.events)}; journal_lines={len(j.lines)}; all events balanced")
     print("loan creation, transfer, payment, principal, interest, impairment, write-off distinct")
+    print("deposit changes derived from journal: origination +19; nonbank transfer/payment 0; repayment -5; interest -2")
 
 
 if __name__ == "__main__":
