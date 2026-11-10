@@ -74,6 +74,14 @@ class SCCEEndogenousHouseholdExperimentTests(unittest.TestCase):
             cellular["current_care_fulfilment"]
             ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=5,
         )
+        self.assertAlmostEqual(
+            cellular["total_care_delivered"]
+            ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=9,
+        )
+        self.assertGreater(
+            cellular["cumulative_care_backlog_served"]
+            ["paired_backlog_first_minus_current_first"]["mean"], 0.0,
+        )
 
     def test_invalid_experiment_size_or_policy_is_rejected(self):
         with self.assertRaises(EndogenousHouseholdExperimentError):
