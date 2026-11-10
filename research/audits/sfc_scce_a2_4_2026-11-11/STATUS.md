@@ -43,3 +43,41 @@
 5. Add A2.4.5 time/consent/compensation test fixtures and preserve the rights boundary.
 6. Freeze A2.4.6 preregistration, then complete A2.4.7 CI coverage; execute A2.4.8 only when the entry conditions in `A2_4_7_CROSS_REGISTER_TEST_GATES.md` are met.
 7. Only after Gate 2 and relevant comparative evidence pass, design the integrated economic engine boundary. Do not merge the ledgers prematurely.
+
+
+## Continuation — three-task execution package
+
+- Added `audit_same_cohort_capital.py`: one cohort input set drives physical
+  count, capital services, gross/net stock, CFC, gross/NBV disposals and gross/net
+  revaluation. It asserts direct cohort closing valuation against the stock-flow
+  bridge. Synthetic expected values remain those in A2.4.2. **Committed; runtime
+  execution still pending.**
+- Added `audit_product_valuation_adapter.py`: immutable typed product/grade/unit
+  records, exact native-unit price denominator, period and valuation-basis
+  metadata, and a quantity-preserving monetary view. Negative controls reject
+  wrong unit denominator and cross-grade price. **Committed; runtime execution
+  still pending.**
+- Expanded A2.4.7 with an operational gate matrix, explicit PENDING semantics,
+  per-gate evidence requirements and exact-head CI evidence requirements.
+  **Specification strengthened; A2.4.7 remains open.**
+
+The new capital and product scripts are independent standard-library controls.
+They do not yet consume live B8.1/B2 runtime objects, and they do not constitute
+a full register integration. No claim of executed PASS is made here.
+
+## Updated next actions
+
+1. Trigger and inspect PR CI for the deterministic SCCE fixture; require both
+   Prototype validation and Stage-C2 to pass on the exact audit head.
+2. Execute `audit_same_cohort_capital.py` and
+   `audit_product_valuation_adapter.py` on a controlled runner; record exact
+   command, interpreter, output, exit code and file hashes.
+3. Bind the generic capital fixture to the actual B8.1 cohort output schema;
+   reject any field mapping that cannot preserve vintage, status, retirement
+   timing, service availability or component identity.
+4. Extend the product adapter from unit valuation to node-level flow IDs,
+   sender/receiver mirrors, inventory movements, process conversion and
+   valuation reconciliation with B2/B3.
+5. Implement the missing A2.4.4 journal event fixtures and A2.4.5 labour/consent
+   fixtures before Gate 1 can be considered.
+6. Freeze A2.4.6 preregistration and complete all A2.4.7 gates before A2.4.8.
