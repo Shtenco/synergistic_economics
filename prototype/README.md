@@ -74,7 +74,7 @@ This is a local allocation/coordination kernel, not yet a complete dynamic econo
 
 - [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption, explicit cellular message relay and per-message coordination-cost accounting.
 - [test_scc_dynamic_economy.py](test_scc_dynamic_economy.py) — production, determinism, self-trade, resource stock-flow and paired-regime tests.
-- [100-seed Stage-B results](../research/SCCE_STAGE_B_PRELIMINARY_RESULTS_2026-11-10.md) — paired baseline and compound-shock comparisons, confidence intervals and hop-radius sensitivity.
+- [100-seed Stage-B results](../research/SCCE_STAGE_B_PRELIMINARY_RESULTS_2026-11-10.md) — paired baseline and compound-shock comparisons, confidence intervals hop-radius sensitivity and paired coordination-labour response curve.
 - [Stage-B design and limitations](../research/SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md#part-iii--stage-a-kernel-and-its-scope)
 
 Run from the repository root:
@@ -87,9 +87,10 @@ python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --per
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 2 --summary-only
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 3 --summary-only
 python prototype/scc_dynamic_economy.py --coordination-sensitivity --monte-carlo 20 --shock compound --periods 24 --hops 2
+python prototype/scc_dynamic_economy.py --coordination-curve --monte-carlo 20 --shock compound --periods 24 --hops 2
 ```
 
-Stage B is a physical production-and-consumption layer. Cellular requests are now relayed neighbour by neighbour, and the simulator records forwarded requests, offers, reservations, acceptances and a synthetic per-message cost. The current model also deducts a configurable labour-time cost per message from productive capacity (including delayed effects from final-goods coordination). This parameter is synthetic and requires sensitivity analysis; governance, failed bargaining beyond the recorded relay requests, enforcement and dispute resolution remain incomplete. Stage B does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
+Stage B is a physical production-and-consumption layer. Cellular requests are now relayed neighbour by neighbour, and the simulator records forwarded requests, offers, reservations, acceptances and a synthetic per-message cost and labour-time consumption. A paired sensitivity comparison and multi-level response curve are available for coordination cost per message. The current model deducts a configurable labour-time cost per message from productive capacity (including delayed effects from final-goods coordination). This parameter is synthetic and requires sensitivity analysis; governance, failed bargaining beyond the recorded relay requests, enforcement and dispute resolution remain incomplete. Stage B does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
 
 ## Validation
 
