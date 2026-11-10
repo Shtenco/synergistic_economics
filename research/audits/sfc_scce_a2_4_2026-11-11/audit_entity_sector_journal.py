@@ -467,6 +467,55 @@ def main():
     ))
     journal.post(e3)
 
+    # Principal repayment changes both the bank asset and borrower liability,
+    # while extinguishing the same holder's deposit asset and bank liability.
+    principal = JournalEvent("E6", "principal_repayment", p, (
+        make_line(registry, p, "loan_liability", "D", 5, "company-1",
+                  counterparty="bank-1", issuer="company-1",
+                  instrument_id="loan-company-1", instrument_class="loan",
+                  maturity="2029"),
+        make_line(registry, p, "deposit_asset", "C", 5, "company-1",
+                  issuer="bank-1", instrument_id="deposit-company-1",
+                  instrument_class="deposit"),
+        make_line(registry, p, "deposit_liability", "D", 5, "bank-1",
+                  counterparty="company-1", issuer="bank-1",
+                  instrument_id="deposit-company-1",
+                  instrument_class="deposit"),
+        make_line(registry, p, "loan_asset", "C", 5, "bank-1",
+                  issuer="company-1", instrument_id="loan-company-1",
+                  instrument_class="loan", maturity="2029"),
+    ))
+    journal.post(principal)
+
+    interest_accrual = JournalEvent("E7", "interest_accrual", p, (
+        make_line(registry, p, "interest_expense", "D", 2, "company-1"),
+        make_line(registry, p, "interest_payable_liability", "C", 2, "company-1",
+                  counterparty="bank-1", issuer="company-1",
+                  instrument_id="interest-company-1", instrument_class="interest"),
+        make_line(registry, p, "interest_receivable_asset", "D", 2, "bank-1",
+                  issuer="company-1", instrument_id="interest-company-1",
+                  instrument_class="interest"),
+        make_line(registry, p, "interest_income", "C", 2, "bank-1"),
+    ))
+    journal.post(interest_accrual)
+
+    interest_settlement = JournalEvent("E8", "interest_settlement", p, (
+        make_line(registry, p, "interest_payable_liability", "D", 2, "company-1",
+                  counterparty="bank-1", issuer="company-1",
+                  instrument_id="interest-company-1", instrument_class="interest"),
+        make_line(registry, p, "deposit_asset", "C", 2, "company-1",
+                  issuer="bank-1", instrument_id="deposit-company-1",
+                  instrument_class="deposit"),
+        make_line(registry, p, "deposit_liability", "D", 2, "bank-1",
+                  counterparty="company-1", issuer="bank-1",
+                  instrument_id="deposit-company-1",
+                  instrument_class="deposit"),
+        make_line(registry, p, "interest_receivable_asset", "C", 2, "bank-1",
+                  issuer="company-1", instrument_id="interest-company-1",
+                  instrument_class="interest"),
+    ))
+    journal.post(interest_settlement)
+
     # Creditor write-off and legal forgiveness are deliberately separate events.
     writeoff = JournalEvent("E4", "creditor_writeoff", p, (
         make_line(registry, p, "loss_allowance", "D", 3, "bank-1"),
@@ -682,6 +731,7 @@ def main():
     print("A2.4.4 entity/sector/issuer identity journal: PASS")
     print("stable entity IDs are distinct from controlled six-sector membership")
     print("deposit claim mirrors validate holder and issuer entities, not sector labels")
+    print("entity-level origination, transfer, supplier settlement, principal, interest, write-off and forgiveness events checked")
     print("10 holder claims and 10 issuer liabilities reconcile at entity level")
     print("sector financial NL derived only after claim reconciliation: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23")
     print("effective-dated sector changes, write-off versus legal forgiveness and T/V/O stock flow are distinguished")
