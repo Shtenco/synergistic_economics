@@ -167,6 +167,10 @@ def advance_cohort_period(
     if not isinstance(opening_state, CohortLedgerState):
         raise CapitalBridgeError("opening_state must be a CohortLedgerState; raw cohorts omit replay history")
     if (opening_state.last_processed_period is not None
+            and (not isinstance(opening_state.last_processed_period, int)
+                 or isinstance(opening_state.last_processed_period, bool))):
+        raise CapitalBridgeError("last_processed_period must be an integer or None")
+    if (opening_state.last_processed_period is not None
             and period != opening_state.last_processed_period + 1):
         raise CapitalBridgeError("cohort periods must advance exactly once and in sequence")
     if (not isinstance(opening_state.cohorts, tuple)
@@ -181,6 +185,8 @@ def advance_cohort_period(
     records = {}
     for cohort in opening_cohorts:
         validate_cohort(cohort)
+        if cohort.vintage > period:
+            raise CapitalBridgeError("cohort vintage cannot be later than the current period")
         if cohort.cohort_id in records:
             raise CapitalBridgeError(f"duplicate opening cohort ID: {cohort.cohort_id}")
         records[cohort.cohort_id] = cohort
