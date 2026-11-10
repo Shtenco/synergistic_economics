@@ -30,8 +30,9 @@ all events in one declared transaction group need one durable commit boundary.
 - reuse of an event ID by another group is rejected;
 - event and posting rows are protected against UPDATE and DELETE by database
   triggers;
-- SQLite WAL mode and `synchronous=FULL` are configured; the schema has an
-  explicit version;
+- SQLite WAL mode and `synchronous=FULL` are configured and verified on
+  initialization; in-memory databases and non-finite/non-positive timeouts are
+  rejected; the schema has an explicit version;
 - `integrity_check()` verifies SQLite integrity, foreign keys, group/event
   payload hashes, event order, and the posting rows against the canonical
   event envelope.
@@ -52,7 +53,8 @@ unittest wrapper. It covers:
 6. database-level rejection of updates/deletes to committed rows;
 7. injected failure after the group and event rows have started writing,
    requiring complete rollback of group, event and posting rows;
-8. post-write SQLite and mirror integrity checks.
+8. rejection of in-memory configuration and non-finite lock timeouts;
+9. post-write SQLite and mirror integrity checks.
 
 The fixture uses a non-bank loan origination and an existing-deposit transfer
 inside one transaction group, with a shared causation ID. This establishes
