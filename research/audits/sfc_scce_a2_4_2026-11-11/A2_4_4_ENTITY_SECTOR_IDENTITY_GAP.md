@@ -139,3 +139,39 @@ different event and must reduce both the creditor claim and debtor liability.
 Additional adversarial controls now preserve global debit/credit balance while
 changing the loan instrument ID, or preserve closing stock while shifting
 transactions into revaluation; both must be rejected by the claim mirror.
+
+
+### Credit-origin semantics: non-bank loan versus deposit transfer
+
+A further audit of the synthetic event fixture found that its former `E2`
+record was labelled `nonbank_deposit_transfer` while containing both a new
+non-bank loan asset/liability pair and a transfer of an existing bank deposit.
+The deposit aggregate was unchanged, but the event label concealed the
+creation of a new credit claim. That ambiguity directly weakens the A2-48
+control because a deposit-neutral transaction is not necessarily a
+credit-neutral transaction.
+
+The fixture now separates the transaction into:
+- `nonbank_loan_origination`: one non-bank lender loan-asset debit and one
+  borrower loan-liability credit; it creates no deposit asset or bank deposit
+  liability;
+- `nonbank_deposit_transfer`: one payer deposit-asset credit, one recipient
+  deposit-asset debit and the corresponding bank deposit-liability movements
+  by holder; it contains no loan postings and leaves aggregate deposits
+  unchanged;
+- `bank_loan_origination`: one bank loan asset, one borrower loan liability,
+  one borrower deposit asset and one matching bank deposit liability, all for
+  the same amount and correctly linked counterparties.
+
+The event journal now validates the exact account composition, debit/credit
+sides, amounts, participant roles and originator sector for these three event
+types. Negative controls reject the former mixed credit/transfer event and a
+bank loan origination missing the matching deposit creation. The fixture
+asserts that bank origination changes deposit assets by +19, while non-bank
+loan origination and the subsequent transfer each change the aggregate
+deposit-asset total by zero.
+
+This closes an ambiguity in the synthetic event contract, not the production
+SFC runtime. Other event families still need equally explicit event-specific
+posting contracts, and the journal remains disconnected from the authoritative
+position register. A2.4.4 remains OPEN; exact-head execution is pending.
