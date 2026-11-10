@@ -225,3 +225,19 @@ This closes source discovery for the existing exploratory experiment design,
 not preregistration. Previously observed settings cannot be relabelled as
 preregistered after the fact. A2.4.6 remains **OPEN** until a new confirmatory
 protocol is frozen before results are generated.
+
+
+### 6.8 Audit workflow trigger and observability
+
+The dedicated audit workflow is configured for both audit-branch `push` and
+PR-to-`main` changes affecting the audit directory/workflow. Manual
+`workflow_dispatch` was removed because the workflow file is not present on
+the default branch; GitHub documents that the manual dispatch path requires
+the workflow file on the default branch. The PR trigger is intended to make
+the dedicated suite appear among PR-associated checks.
+
+At the latest poll, the connector had not surfaced a dedicated audit run ID.
+Existing Prototype and Stage-C2 PR jobs remained queued without conclusions.
+Until the exact-head audit job and both existing PR jobs complete and their
+logs are inspected, Gate 0 remains pending. A missing surfaced run is not a
+pass and is not, by itself, proof that the push-triggered run did not occur.
