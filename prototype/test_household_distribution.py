@@ -1,7 +1,9 @@
 import unittest
+from types import SimpleNamespace
 
 from household_distribution import (
     Household, HouseholdDistributionError, allocate_households,
+    allocate_period_households,
     evaluate_households, validate_household_allocation,
 )
 
@@ -88,6 +90,25 @@ class HouseholdDistributionTests(unittest.TestCase):
         )
         self.assertGreaterEqual(metrics["essential_fulfilment_gini"], 0.0)
         self.assertIn("food", metrics["per_product_essential"])
+
+    def test_stage_b_period_result_is_disaggregated_without_double_counting(self):
+        households = (
+            Household("h-a", "cell-a", {"food": 2.0}, {"books": 1.0}),
+            Household("h-b", "cell-b", {"food": 3.0}, {"books": 2.0}),
+        )
+        period = SimpleNamespace(final_consumption_by_cell={
+            "cell-a": {"food": 2.0, "books": 1.0},
+            "cell-b": {"food": 3.0, "books": 2.0},
+        })
+        allocations = allocate_period_households(households, period)
+        self.assertEqual(
+            sum(sum(a.essential_served.values()) for a in allocations), 5.0
+        )
+        self.assertEqual(
+            sum(sum(a.discretionary_served.values()) for a in allocations), 3.0
+        )
+        self.assertTrue(validate_household_allocation(
+            households, period.final_consumption_by_cell, allocations))
 
     def test_unknown_policy_rejected(self):
         with self.assertRaises(HouseholdDistributionError):
