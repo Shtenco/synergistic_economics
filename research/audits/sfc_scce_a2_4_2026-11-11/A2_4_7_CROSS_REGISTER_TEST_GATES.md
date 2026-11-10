@@ -293,3 +293,18 @@ Both jobs had no conclusion or logs at the latest poll. The test snapshot
 includes the eleven-script wrapper and financial posting/mirror controls.
 Subsequent commits `01c43c6f...` and `31b12467...` are documentation-only.
 Gate 0 remains pending; no PASS is inferred from queued status.
+
+
+### Financial mirror gate refinement — issuer-side component roll-forward
+
+A holder/issuer mirror is not accepted merely because closing balances agree.
+For each instrument/issuer pair, the independent issuer liability register
+must also satisfy its own opening + T + V + O = closing identity. Aggregated
+holder-side opening, T, V, O and closing values must match the issuer record
+component by component.
+
+The adversarial test must preserve closing balance while shifting value
+between T and V; Gate 0-D rejects this classification mismatch. A missing
+issuer-side record must also fail. The current fixture implements seven issuer
+records against ten holder positions, but remains a synthetic component
+fixture pending exact-head CI and broader instrument coverage.
