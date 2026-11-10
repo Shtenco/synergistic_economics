@@ -89,12 +89,6 @@ def run_household_distribution_experiment(
                         period_values[household_policy][metric].append(
                             distribution["metrics"][metric]
                         )
-                    if abs(
-                        distribution["metrics"]["overall_fulfilment"]
-                        - period_result.unmet_final_units * 0.0
-                        - distribution["metrics"]["overall_fulfilment"]
-                    ) > 1e-12:
-                        raise AssertionError("unreachable reconciliation guard")
 
             for household_policy in HOUSEHOLD_POLICIES:
                 row = {
