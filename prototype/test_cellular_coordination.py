@@ -71,6 +71,48 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(sum(e["type"] == "acceptance_forward" for e in trace), 2)
         self.assertEqual(len(trace), 8)
 
+    def test_every_allocation_regime_requires_bilateral_consent(self):
+        cells = (
+            Cell("buyer", {}, {"food": 3.0}, {"food": 2.0}, {"food": 10.0}),
+            Cell("seller", {"food": 3.0}, {}, {"food": 1.0}, {"food": 10.0},
+                 trade_consent=False),
+        )
+        world = World(cells, edges=(("buyer", "seller"),), prices={"food": 4.0})
+        allocators = (
+            allocate_market(world),
+            allocate_central(world),
+            allocate_cooperative(world),
+            allocate_cellular(world, max_hops=2),
+            allocate_relay_cellular(world, max_hops=2),
+        )
+        for allocations in allocators:
+            self.assertEqual(allocations, [])
+
+    def test_counterparty_allowlists_are_bilateral(self):
+        buyer = Cell(
+            "buyer", {}, {"food": 2.0}, {"food": 2.0}, {"food": 10.0},
+            allowed_counterparties=frozenset({"other"}),
+        )
+        seller = Cell("seller", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0})
+        world = World((buyer, seller), edges=(("buyer", "seller"),),
+                      prices={"food": 4.0})
+        for allocator in (
+            allocate_market, allocate_central, allocate_cooperative,
+            lambda w: allocate_cellular(w, max_hops=2),
+            lambda w: allocate_relay_cellular(w, max_hops=2),
+        ):
+            self.assertEqual(allocator(world), [])
+
+    def test_local_self_use_does_not_require_external_trade_consent(self):
+        cell = Cell(
+            "cell", {"food": 2.0}, {"food": 2.0}, {"food": 1.0}, {"food": 1.0},
+            trade_consent=False,
+        )
+        world = World((cell,), edges=(), prices={"food": 4.0})
+        supply, demand = _state(world)
+        self.assertEqual(supply["food"]["cell"], 0.0)
+        self.assertEqual(demand["food"]["cell"], 0.0)
+
     def test_message_relay_and_physical_delivery_use_separate_graphs(self):
         world = World(
             cells=(
