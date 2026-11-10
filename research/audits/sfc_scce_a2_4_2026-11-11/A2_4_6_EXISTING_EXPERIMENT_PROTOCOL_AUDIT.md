@@ -109,3 +109,53 @@ The financial layer is intentionally outside the current SCCE physical experimen
 **What remains open:** primary/secondary outcome hierarchy, treatment definition for a specific institutional feature, complete incremental-input account, adverse-outcome constraints, practically important effect, exclusions/missingness, confirmatory seed design, statistical method and independent reproduction.
 
 **Decision:** the current experiments are suitable for exploratory synthetic comparison and software regression. They must not be relabelled as preregistered evidence of net synergy or empirical superiority. A2.4.6 remains open until a new confirmatory protocol is frozen before its results are generated and all required input/outcome registers are available.
+
+
+## 8. Additional identification audit: what the current seed pairing actually identifies
+
+A closer read of `scc_dynamic_economy.py` narrows the interpretation of the
+existing Monte Carlo results:
+
+- `DynamicCellularEconomy.default_specs(seed)` uses the seed to generate
+  bounded initial jitter in capacity, demand and opening resource/material
+  stocks.
+- The model stores `self.rng = random.Random(seed)`, but the inspected
+  simulation path does not consume that generator after initial specification
+  construction. The named shock is applied through a deterministic
+  period-dependent multiplier schedule (the compound shock begins at period 4).
+- Thus the existing seed loop samples a synthetic distribution of initial
+  conditions. It is not, in the current implementation, a simulation of
+  repeated stochastic innovations or a stochastic time-series of shocks.
+- The same seed does create a matched initial specification across policy
+  arms, which is useful for paired regime comparisons. The confidence interval
+  therefore describes variation across these generated initial conditions
+  under the fixed scenario schedule; it is not empirical sampling uncertainty.
+
+The four economic policies are also **bundled institutional regimes**, not
+single-factor treatments. The policy branches differ in allocation functions,
+stock-buffer rules, communication/message handling, network reach and the
+cellular fixed-point exchange path. The present contrast estimates the
+difference between those complete model packages. It cannot attribute an
+observed difference uniquely to decentralization, local information, relay
+reach, cooperation, inventory buffers or any one governance feature.
+
+The Stage-C2-A2 design is a 4 × 3 economic-policy/household-policy factorial.
+The code reports economic-policy contrasts against market within each
+household policy and household-policy contrasts against proportional within
+each economic policy. It does not currently report an explicit interaction
+contrast (difference-in-differences) or a full factorial interaction model.
+That omission matters if the hypothesized benefit is complementarity between
+an economic coordination regime and a household allocation rule.
+
+Before confirmatory use, the protocol must therefore decide whether its
+estimand is:
+1. a **total package effect** of one complete regime versus the modelled market
+   policy; or
+2. a **component effect** of one specified mechanism, requiring controlled
+   ablation or factorial manipulation while holding other mechanisms fixed.
+
+The current code supports exploratory package comparisons and matched
+household-policy simple effects. It does not yet isolate a component effect,
+estimate the economic × household-policy interaction, or sample a stochastic
+shock process. These are design choices to preregister, not defects that can
+be repaired by merely increasing the number of seeds.
