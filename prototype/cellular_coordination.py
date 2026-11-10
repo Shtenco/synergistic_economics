@@ -111,10 +111,11 @@ def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
 
 
 def communication_paths(world: World) -> Dict[str, Dict[str, int]]:
-    """Reachable hop counts when intermediate cells must consent to relay.
+    """Shortest message paths; only consenting intermediate cells may relay.
 
-    An origin may always publish its own message. A non-consenting cell may
-    receive a message, but it is a terminal node for other origins' paths.
+    The origin may always send its own request, and a non-consenting destination
+    may receive it. A cell with relay_consent=False cannot be used as an
+    intermediate hop for another cell's information.
     """
     graph = {c.cell_id: set() for c in world.cells}
     cells = {c.cell_id: c for c in world.cells}
