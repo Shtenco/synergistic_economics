@@ -92,6 +92,7 @@ def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
     for a, b in world.edges:
         graph[a].add(b)
         graph[b].add(a)
+    cells = {c.cell_id: c for c in world.cells}
     distances = {}
     for origin in graph:
         dist = {origin: 0}
@@ -101,7 +102,10 @@ def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
             for nxt in sorted(graph[node]):
                 if nxt not in dist:
                     dist[nxt] = dist[node] + 1
-                    queue.append(nxt)
+                    # A non-consenting cell may receive a message, but it
+                    # cannot forward that message to another neighbour.
+                    if cells[nxt].relay_consent:
+                        queue.append(nxt)
         distances[origin] = dist
     return distances
 
