@@ -131,7 +131,7 @@ The integration preserves the boundary:
 - household disaggregation is not counted as an inter-cell trade or a second delivery;
 - aggregate household quantities must reconcile exactly to the Stage-B cell totals.
 
-Two paired experiments are available. `prototype/household_distribution_experiment.py` aggregates the full 24-period horizon before household rationing; it is a cumulative resource-adequacy view and permits intertemporal aggregation. `prototype/scc_household_experiment.py` distributes each period separately, preserving the timing of shortages and avoiding cross-period pooling. The latter varies synthetic household-priority dispersion and compares proportional with priority-weighted allocation on identical per-period supplies and household profiles. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
+`prototype/scc_household_experiment.py` compares proportional and priority-weighted rationing using a persistent synthetic household panel across all periods. It reports cumulative-horizon household fulfilment alongside mean-period lower-decile fulfilment, mean-period minimum fulfilment, inequality and worst-period minimum fulfilment. Thus the cumulative measure does not conceal the timing of shortages; period-level tail metrics remain visible. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
 
 Experiments should compare:
 - proportional versus priority-weighted distribution;
