@@ -155,3 +155,57 @@ groups and six-sector net-lending vector returned PASS. This is a separate
 arithmetic verification of the fixture's data, **not** execution evidence for
 the committed script and not proof of a full general-ledger implementation.
 
+
+
+## 7. Transaction-only financial net lending — correction to the executable fixture
+
+A code review found that the first version of
+`audit_instrument_stock_flow.py` calculated sector financial net lending
+from `closing - opening`. That is only equivalent to transaction-based
+financial net lending when revaluation and other-volume changes are both zero.
+It is not a valid general formula.
+
+The fixture now computes:
+
+```
+financial_NL_s = sum(transaction changes in financial assets)
+               - sum(transaction changes in financial liabilities)
+```
+
+while retaining the independent stock-flow identity:
+
+```
+closing_position = opening_position + transactions + revaluation + other_volume
+```
+
+Two negative/contrast controls were added:
+- a position with transactions = 0, revaluation = +10 and other-volume change
+  = +3 changes the closing stock by +13 but produces zero financial net lending;
+- a position with transactions = +7, revaluation = +10 and other-volume change
+  = +3 produces financial net lending of +7 for the holder and −7 for the
+  issuer, not +20.
+
+The correction is committed in
+`audit_instrument_stock_flow.py` at the audit branch commit
+`5c083ed8afd4f5986333ec2fd9ba280da6ce1ce4`. Its exact-head audit CI was
+queued at the time of this update; no PASS is claimed until the completed
+workflow and logs are inspected.
+
+### Remaining limits of this fixture
+
+This is still a six-sector, one-period synthetic position set. It does not yet
+provide:
+- a multi-period event ledger linking each transaction to immutable event IDs;
+- a complete instrument identity key including currency, denomination,
+  maturity, valuation basis and contractual subtype;
+- independently rolled-forward issuer-side liability records for every
+  instrument (the current fixture checks closing mirror equality);
+- a full T/V/O matrix for deposits, loans, reserves, cash, bonds, equity,
+  trade credit, receivables/payables and external assets;
+- an explicit holder allocation for bank equity, or a declared residual-net-
+  worth treatment;
+- the legal-principal / recognized-gross-claim / loss-allowance / written-off-
+  but-enforceable memorandum bridge.
+
+Therefore the transaction-only formula is now corrected in the fixture, but
+A2.4.4 and full SFC-A…G remain open.
