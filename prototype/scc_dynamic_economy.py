@@ -295,7 +295,7 @@ class DynamicCellularEconomy:
             before = c.stocks["raw_resource"]
             c.stocks["raw_resource"] = min(
                 c.spec.resource_capacity,
-                before + c.spec.resource_regeneration)
+                before + c.spec.resource_regeneration * resource_mult)
             regenerated += c.stocks["raw_resource"] - before
         self.total_regenerated += regenerated
 
