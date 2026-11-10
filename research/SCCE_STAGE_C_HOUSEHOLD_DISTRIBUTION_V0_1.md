@@ -124,6 +124,10 @@ The test suite also checks that priority-weighted allocation changes the distrib
 
 The module remains separate from Stage-B production and matching, but a tested data bridge now exists. Stage B exposes per-cell final demand and per-cell physical consumption in each `PeriodResult`. The bridge in `prototype/scc_household_bridge.py` constructs reproducible synthetic household profiles whose product totals exactly reconcile to each cell's Stage-B demand, then allocates the already-consumed Stage-B quantities to those households. It checks total demand, total physical consumption and essential food/care service against Stage B.
 
+The Stage-B Monte Carlo summary now calls the horizon bridge and reports household-level cumulative essential/overall fulfilment, lower-decile and minimum household essential fulfilment, household fulfilment Gini, mean period lower-tail metrics and the worst-period household minimum. Its default reporting panel uses five synthetic households per cell, proportional rationing and zero priority dispersion. This adds distributional observability to the four economic-regime comparisons without changing their physical production or trade decisions.
+
+The separate Stage-C1 rationing experiment uses ten synthetic households per cell and a declared priority dispersion of 0.4. For each seed and economic regime, it simulates the Stage-B world once, then applies proportional and priority-weighted allocation to the exact same per-cell consumed quantities and the same persistent household panel. The paired difference therefore isolates the post-hoc rationing rule; it does not measure a production response to household distribution.
+
 The integration preserves the boundary:
 - Stage B determines what goods reach each cell and records cell-level consumption;
 - Stage C1 splits those same quantities among the cell's households;
