@@ -26,7 +26,7 @@ Four allocation regimes:
 - **Cooperative:** common-pool, priority-weighted max-min rationing, followed by nearest-supplier delivery.
 - **Cellular:** repeated local request/response rounds; a buyer can contact only suppliers within the configured hop radius.
 
-Before external matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The cellular algorithm uses repeated local request rounds; unfilled buyers may approach another supplier in a later round.
+Before external matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The cellular algorithm uses repeated local request rounds; unfilled buyers may approach another supplier in a later round. Communication links can be configured separately from physical delivery links: requests and offers propagate through the message graph, while logistics costs use the delivery graph.
 
 Each reported mean is based on 100 deterministic paired seeds. The confidence intervals are 95% normal-approximation intervals for the mean. Paired-difference intervals compare each regime with the market arm using the same seed and initial world.
 
