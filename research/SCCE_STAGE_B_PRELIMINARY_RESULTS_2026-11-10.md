@@ -40,7 +40,9 @@ Every seed is paired across regimes. The 100-seed summaries below use the same 1
 - **Fixed-price final-consumption index:** consumed quantities valued at fixed model prices.
 - **Fixed-price gross-output index:** produced quantities valued at the same fixed prices, including intermediate products.
 - **Unmet demand and input shortage:** physical quantities, reported separately.
-- **Logistics and coordination costs:** synthetic diagnostics. Coordination cost is currently a fixed charge per executed allocation; it excludes failed messages, search, governance, enforcement and the labour time consumed by coordination.
+- **Coordination cost:** a synthetic fixed charge per executed allocation plus a per-packet charge; the packet charge does not yet price payload-record processing.
+- **Coordination labour:** a configurable fixed time per packet plus a smaller time per additional payload record in a batched packet. This labour is deducted from productive capacity; it is not converted into money or welfare units.
+- **Protocol traffic:** cellular packet and payload-record counts come from the hop-by-hop trace after edge-level batching. Non-cellular message counts remain simplified estimates.
 
 The fixed-price indices are not GDP, value added, income, profit, utility or empirically measured welfare. Logistics and monetary coordination diagnostics are not calibrated to the consumption index and must not be subtracted from it to claim net welfare. Coordination labour is deducted from productive capacity, but packet and record time assumptions are synthetic and require sensitivity analysis. Non-cellular message counts are estimates; cellular packets and payload records are counted from the hop-by-hop trace after batching. Governance, enforcement, meetings and dispute resolution remain incomplete.
 
@@ -97,7 +99,7 @@ The compound-shock cellular results show a sharp dependence on communication/del
 | 2 hops | 46.00% | 42.77% | 44.30% | 754.20 |
 | 3 hops | 46.68% | 42.12% | 44.38% | 759.47 |
 
-This is not a small tuning effect. One-hop cells become trapped in local shortages while useful production and demand exist elsewhere. Extending reach across the network recovers much of the lost consumption. However, three-hop reach is not yet a real federation: it is a radius setting in a single-process simulator. It has no federation charter, relay consent, message delay, edge capacity, dispute protocol or independent cell runtime.
+This is not a small tuning effect. One-hop cells become trapped in local shortages while useful production and demand exist elsewhere. Extending reach across the network recovers much of the lost consumption. However, three-hop reach is not yet a real federation: it is a radius setting in a single-process simulator. Cells now have separate trade consent, counterparty allowlists and relay-forwarding consent, but the model still lacks a federation charter, message delay, edge capacity, dispute protocol and independent cell runtime.
 
 ## 7. What these results do and do not show
 
@@ -123,10 +125,10 @@ The current model excludes money, credit, wages, ownership, investment, househol
 
 ## 8. Immediate research implications
 
-1. **Do not treat one-hop locality as the canonical SCCE design.** Cells need bounded multi-hop relay and voluntary federation.
+1. **Do not treat one-hop locality as the canonical SCCE design.** Cells need bounded multi-hop relay, explicit consent to forward traffic, and voluntary federation rules.
 2. **Separate communication topology from logistics topology.** A request can propagate through several cells while the physical shipment follows a different route.
 3. **Add essential-service safeguards.** The cellular rule must protect food, care and other essential needs during shocks, without turning priority scores into a measure of human worth.
-4. **Model coordination as a real resource cost.** Messages, search, negotiation, governance and dispute resolution must consume labour/time or another explicit scarce resource.
+4. **Model coordination as a real resource cost.** Packet overhead and payload-record work now consume labour/time; search, negotiation, governance and dispute resolution still need explicit costs.
 5. **Strengthen the market baseline.** Add household/cell budgets, price formation, strategic response, market power, inventories and entry/exit.
 6. **Strengthen cooperative governance.** Model member reporting, voting, free-riding, participation and dispute costs rather than only a common-pool allocation formula.
 7. **Keep the central min-cost-flow result in its proper role.** It is an upper bound for a narrow linear allocation objective, not a whole-economy optimum.
@@ -137,7 +139,7 @@ The current model excludes money, credit, wages, ownership, investment, househol
 
 The first dynamic comparison does **not** show that SCCE is already superior. The strongest result so far is diagnostic: local economic cells need a carefully designed multi-hop/federation layer and explicit essential-service protection. The cooperative-pool control currently leads the stylized model on aggregate consumption; the market control retains an advantage on essential fulfilment during the compound shock; the cellular model improves its aggregate performance as its reach expands, but still does not win.
 
-Proceed with SCCE, but treat these outcomes as constraints for the next design iteration—not as a victory claim. The next step is to implement voluntary relay/federation and resource-priced coordination, then rerun the same paired experiments with stronger market and cooperative baselines.
+Proceed with SCCE, but treat these outcomes as constraints for the next design iteration—not as a victory claim. The next step is to test the cost frontier with the packetized, consent-gated relay protocol, then add edge capacity, latency and federation-level quotas before rerunning the paired experiments with stronger market and cooperative baselines.
 
 ---
 
