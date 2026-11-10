@@ -555,3 +555,29 @@ Latest documentation commit: `060462d1a0d186f7bdd13dc68a8eb00c06e7169f`.
 No completed logs are available and no PASS is claimed. A2.4.4 remains OPEN;
 the fixture is not yet the production financial ledger or authoritative entity
 registry.
+
+
+### Narrowed claim-mirror exception and final entity fixture controls
+
+The entity journal now mirrors every recognized asset/liability claim pair
+(deposit, loan, trade credit and accrued interest) by
+`(instrument_id, instrument_class, holder_entity_id, issuer_entity_id,
+currency, maturity, denomination, valuation_basis)`. The creditor-write-off
+exception is tightly constrained to exactly one loan-asset credit and one
+equal loss-allowance debit; it cannot be used to bypass mirrors for arbitrary
+extra postings. Legal forgiveness remains a separate two-sided claim event.
+Unsupported event types are rejected.
+
+The fixture additionally rejects a balanced loan event with a substituted
+instrument ID and a position mirror whose closing balance is unchanged but
+whose transaction/revaluation split differs.
+
+Latest code HEAD: `3b85dbf0f818f08b0efdb4a20b25f811ac6205ee`;
+133 commits ahead of `main`, 0 behind; 29 changed files.
+
+Exact-code-head PR CI:
+- Prototype validation `42910616553` — QUEUED;
+- SCCE Stage-C2 validation `42910616630` — QUEUED.
+
+Neither job has completed or produced logs. No PASS is claimed. The entity
+journal remains a synthetic fixture and A2.4.4 remains OPEN.
