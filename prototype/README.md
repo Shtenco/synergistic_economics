@@ -100,7 +100,7 @@ Stage B is a physical production-and-consumption layer. Its paired summaries als
 The experiment uses a persistent synthetic household panel across all periods. It reports both cumulative-horizon household fulfilment and period-level lower-tail/worst-period metrics, so temporal shortages are not hidden by the cumulative totals.
 - [test_household_distribution.py](test_household_distribution.py) and [test_scc_household_bridge.py](test_scc_household_bridge.py) — test stock conservation, household need bounds, no cross-cell pooling, lower-tail metrics, and exact reconciliation of household essential service to Stage-B consumption.
 - [Stage-C1 design and limitations](../research/SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md) — money-free household layer and integration boundary with Stage B.
-- [Stage-C1 preliminary results](../research/SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md) — 20-seed paired comparison of proportional, priority-weighted and floor-priority household allocation, including lower-tail effects.
+- [Stage-C1 preliminary results](../research/SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md) — 20-seed paired comparison of proportional, priority-weighted and floor-priority household allocation, including paired 25%, 50% and 75% essential-floor sensitivity and lower-tail effects.
 
 Run the paired Stage-C1 experiment from the repository root:
 
