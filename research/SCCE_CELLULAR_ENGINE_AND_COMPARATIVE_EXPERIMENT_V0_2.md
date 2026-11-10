@@ -233,12 +233,12 @@ The first changes the economic state. The second changes the rules or parameters
 **Stage A — local matching kernel:** `prototype/cellular_coordination.py` implements:
 - seven synthetic cells and three initial product classes;
 - heterogeneous supply, demand and need priorities;
-- sparse inter-cell graph and shortest-path logistics costs;
-- market, central-priority, cooperative-pool and cellular local-request regimes;
+- sparse physical-delivery graph and a separately configurable communication graph;
+- market, central min-cost-flow, cooperative-pool and cellular local-request regimes;
 - configurable hop radius, deterministic seeds and stress variants;
 - fulfilment, weighted fulfilment, lower-cell fulfilment, inequality and coordination metrics.
 
-Before inter-cell matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The canonical Stage-A cellular comparison now uses an explicit neighbour-relay protocol. A request is forwarded one edge at a time with a bounded time-to-live; cells return offers; the buyer reserves/accepts a feasible offer; and unfilled demand may retry another supplier. The optional event trace records request forwarding, offers, reservations and acceptances. The earlier direct-radius matcher remains available as a comparison helper.
+Before inter-cell matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The canonical Stage-A cellular comparison now uses an explicit neighbour-relay protocol. A request is forwarded one edge at a time with a bounded time-to-live over the communication graph; cells return offers; the buyer reserves/accepts a feasible offer; and unfilled demand may retry another supplier. The physical delivery route is calculated separately on the delivery graph. The optional event trace records each hop of request forwarding, offers, reservations and acceptances. The earlier direct-radius matcher remains available as a comparison helper.
 
 **Stage B — dynamic physical economy:** `prototype/scc_dynamic_economy.py` adds:
 - seven heterogeneous production cells: food, materials, energy, machinery, logistics, software and care;
