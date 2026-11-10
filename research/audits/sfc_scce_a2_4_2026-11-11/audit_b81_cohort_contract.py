@@ -13,6 +13,32 @@ class CohortError(ValueError):
 
 STATES = {"operating", "reserve", "diagnostics", "repair",
           "remanufacturing", "storage"}
+CONDITIONS = {"new", "serviceable", "degraded", "failed", "unsafe", "unknown"}
+RETIREMENT_REASONS = {
+    "none", "planned", "failure", "obsolescence", "accident", "other"
+}
+DATA_QUALITY = {"measured", "documented", "estimated", "simulated", "unknown"}
+
+
+def finite_nonnegative(value, field):
+    value = D(str(value))
+    if not value.is_finite() or value < 0:
+        raise CohortError(f"{field} must be finite and non-negative")
+    return value
+
+
+def validate_material_vector(material_vector):
+    if not isinstance(material_vector, tuple) or not material_vector:
+        raise CohortError("material_vector must be a non-empty immutable tuple")
+    ids = set()
+    for material in material_vector:
+        if not material.material_id or material.material_id in ids:
+            raise CohortError("material IDs must be non-empty and unique per cohort")
+        ids.add(material.material_id)
+        finite_nonnegative(material.mass_per_unit, "mass_per_unit")
+        if material.unit not in {"kg", "t"}:
+            raise CohortError("material passport must use a mass unit")
+    return True
 
 
 @dataclass(frozen=True)
@@ -56,37 +82,56 @@ def validate_cohort(cohort):
     if not all((cohort.asset_type, cohort.region_origin, cohort.region_use,
                 cohort.condition_state, cohort.retirement_reason)):
         raise CohortError("B8.1 asset identity/state metadata is incomplete")
-    if cohort.vintage < 0 or cohort.age < 0 or cohort.quantity < 0:
-        raise CohortError("invalid vintage, age or quantity")
+    if (not isinstance(cohort.vintage, int) or isinstance(cohort.vintage, bool)
+            or not isinstance(cohort.age, int) or isinstance(cohort.age, bool)
+            or cohort.vintage < 0 or cohort.age < 0):
+        raise CohortError("vintage and age must be non-negative integer periods")
+    finite_nonnegative(cohort.quantity, "quantity")
+    finite_nonnegative(cohort.service_capacity, "service_capacity")
+    if cohort.condition_state not in CONDITIONS:
+        raise CohortError("unknown condition_state")
     if cohort.operating_status not in STATES:
         raise CohortError("unknown operating_status")
-    if cohort.service_capacity < 0:
-        raise CohortError("negative service capacity")
-    if not (D("0") <= cohort.availability <= D("1")
-            and D("0") <= cohort.utilization <= D("1")
-            and D("0") <= cohort.service_quality <= D("1")):
-        raise CohortError("availability, utilization and quality must be in [0,1]")
-    if not cohort.material_vector:
-        raise CohortError("material_vector is required")
-    if not cohort.data_quality or not isinstance(cohort.repair_history, tuple):
-        raise CohortError("data_quality and immutable repair_history are required")
-    for material in cohort.material_vector:
-        if not material.material_id or material.mass_per_unit < 0:
-            raise CohortError("invalid material passport")
-        if material.unit not in {"kg", "t"}:
-            raise CohortError("material passport must use a mass unit")
+    if cohort.retirement_reason not in RETIREMENT_REASONS:
+        raise CohortError("unknown retirement_reason")
+    for field, value in (
+        ("availability", cohort.availability),
+        ("utilization", cohort.utilization),
+        ("service_quality", cohort.service_quality),
+    ):
+        value = D(str(value))
+        if not value.is_finite() or not D("0") <= value <= D("1"):
+            raise CohortError(f"{field} must be finite and in [0,1]")
+    validate_material_vector(cohort.material_vector)
+    if (not cohort.data_quality or cohort.data_quality not in DATA_QUALITY
+            or not isinstance(cohort.repair_history, tuple)
+            or any(not isinstance(x, str) or not x for x in cohort.repair_history)
+            or len(set(cohort.repair_history)) != len(cohort.repair_history)):
+        raise CohortError("data_quality and unique immutable repair event IDs are required")
     return True
 
 
+def validate_component(component):
+    if not component.host_asset_type or not component.component_type:
+        raise CohortError("component and host asset identity are required")
+    if (not isinstance(component.vintage, int) or isinstance(component.vintage, bool)
+            or not isinstance(component.age, int) or isinstance(component.age, bool)
+            or component.vintage < 0 or component.age < 0):
+        raise CohortError("component vintage and age must be non-negative integer periods")
+    finite_nonnegative(component.quantity, "component quantity")
+    validate_material_vector(component.material_vector)
+    return True
+
 def apply_period(opening_states, moves, additions, retirements, physical_losses):
-    states = {k: D(str(v)) for k, v in opening_states.items()}
-    if set(states) - STATES or any(v < 0 for v in states.values()):
-        raise CohortError("invalid opening state counts")
+    states = {k: finite_nonnegative(v, f"opening state {k}")
+              for k, v in opening_states.items()}
+    if set(states) - STATES:
+        raise CohortError("unknown opening operating state")
     closing = {state: states.get(state, D("0")) for state in STATES}
 
     for source, destination, quantity in moves:
-        quantity = D(str(quantity))
-        if source not in STATES or destination not in STATES or quantity < 0:
+        quantity = finite_nonnegative(quantity, "state transition quantity")
+        if source not in STATES or destination not in STATES:
             raise CohortError("invalid state transition")
         if source == destination or closing[source] < quantity:
             raise CohortError("invalid or overdrawn state transition")
@@ -94,20 +139,20 @@ def apply_period(opening_states, moves, additions, retirements, physical_losses)
         closing[destination] += quantity
 
     for state, quantity in additions.items():
-        quantity = D(str(quantity))
-        if state not in STATES or quantity < 0:
+        quantity = finite_nonnegative(quantity, "cohort addition quantity")
+        if state not in STATES:
             raise CohortError("invalid cohort additions")
         closing[state] += quantity
 
     for state, quantity in retirements.items():
-        quantity = D(str(quantity))
-        if state not in STATES or quantity < 0 or closing[state] < quantity:
+        quantity = finite_nonnegative(quantity, "retirement quantity")
+        if state not in STATES or closing[state] < quantity:
             raise CohortError("invalid final retirement")
         closing[state] -= quantity
 
     for state, quantity in physical_losses.items():
-        quantity = D(str(quantity))
-        if state not in STATES or quantity < 0 or closing[state] < quantity:
+        quantity = finite_nonnegative(quantity, "physical loss quantity")
+        if state not in STATES or closing[state] < quantity:
             raise CohortError("invalid physical loss")
         closing[state] -= quantity
 
@@ -168,11 +213,49 @@ def main():
     replacement = ComponentCohort(
         "machine", "motor", 2026, 0, D("1"),
         (Material("copper", D("12"), "kg"),))
+    assert validate_component(replacement)
     assert replacement.host_asset_type == cohort.asset_type
     assert replacement.quantity > 0 and replacement.vintage > cohort.vintage
     assert host_age_after_period == 7
     assert replacement.vintage == 2026 and replacement.age == 0
     assert cohort.vintage == 2020
+
+    # Fail-closed schema controls: duplicate materials, unknown condition,
+    # non-finite service factors and malformed component identity.
+    try:
+        validate_cohort(AssetCohort(
+            **{**cohort.__dict__, "material_vector": (steel, steel)}))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("duplicate material passport accepted")
+    try:
+        validate_cohort(AssetCohort(
+            **{**cohort.__dict__, "condition_state": "magically_new"}))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("unknown condition state accepted")
+    try:
+        validate_cohort(AssetCohort(
+            **{**cohort.__dict__, "availability": D("NaN")}))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("non-finite availability accepted")
+    try:
+        validate_component(ComponentCohort(
+            "machine", "", 2026, 0, D("1"), (steel,)))
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("component without identity accepted")
+    try:
+        apply_period({"operating": D("NaN")}, [], {}, {}, {})
+    except CohortError:
+        pass
+    else:
+        raise AssertionError("non-finite opening state accepted")
 
     # Final retirement removes units once; failure/repair transitions do not.
     retired = apply_period(
@@ -184,6 +267,7 @@ def main():
     print("capital_services=684.000; steel_in_cohort=20 t")
     print("repair transitions preserve physical stock; retirement reduces it once")
     print("host vintage/age preserved; replacement component receives own vintage")
+    print("negative controls: duplicate material, unknown condition, NaN availability/state and incomplete component rejected")
 
 
 if __name__ == "__main__":
