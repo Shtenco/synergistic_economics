@@ -1,8 +1,8 @@
 # SCCE Stage-C1 Preliminary Household Distribution Results
 
 **Date:** 10 November 2026  
-**Version:** 0.1  
-**Status:** 20-seed paired synthetic experiment; post-hoc physical disaggregation only  
+**Version:** 0.2  
+**Status:** 20-seed paired synthetic experiment; three rationing policies; post-hoc physical disaggregation only  
 **Engine:** \`prototype/household_distribution.py\`, \`prototype/scc_household_bridge.py\`, \`prototype/scc_household_experiment.py\`  
 **Validation:** unit tests and GitHub Actions run [42803047854](https://github.com/Shtenco/synergistic_economics/actions/runs/42803047854)
 
@@ -21,16 +21,17 @@ This experiment deliberately isolates the distribution rule. It does not allow t
 - 24 periods under the compound shock;
 - four Stage-B production/coordination regimes: market, central, cooperative and cellular;
 - a persistent synthetic household panel across all 24 periods;
-- priority dispersion 0.4;
-- both rationing rules receive the same household needs, priorities and already-consumed physical quantities within each seed and production regime.
+- priority dispersion 0.4 and essential-floor fraction 0.5;
+- all three rationing rules receive the same household needs, priorities and already-consumed physical quantities within each seed and production regime.
 
-The two household rules are:
+The three household rules are:
 1. **Proportional:** each household receives the same fraction of its essential claim, then the same fraction of its discretionary claim, subject to cell stock.
 2. **Priority-weighted max-min:** scarce quantities are allocated in proportion to declared synthetic household priorities, with saturated claims removed and remaining stock redistributed.
+3. **Floor-priority:** reserve 50% of each household's essential claim first; if supply is insufficient for the combined floor claims, ration those floor claims proportionally; then allocate residual essential needs by priority and discretionary needs last.
 
-Essential claims are allocated before discretionary claims. This is a sequencing rule, **not a guaranteed minimum essential floor**: if physical supply is insufficient, a household can still receive only a fraction of its essential need.
+The floor-priority rule is not an absolute guarantee: if physical supply is below the combined floor claims, households receive only a proportional fraction of the declared floor.
 
-All 95% confidence intervals are normal-approximation intervals across 20 seeds. Paired differences compare priority-weighted minus proportional allocation within the same seed.
+All 95% confidence intervals are normal-approximation intervals across 20 seeds. Paired differences compare each alternative rule with proportional allocation within the same seed.
 
 ## 3. Core finding: totals stay fixed, distribution changes
 
