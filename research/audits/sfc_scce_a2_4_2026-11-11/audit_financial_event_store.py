@@ -100,13 +100,26 @@ def main():
             "groups": 1, "events": 2, "journal_lines": 6,
         }
 
+        # The database itself rejects mutation of committed event/posting rows.
+        with closing(sqlite3.connect(database)) as connection:
+            _must_reject(
+                lambda: connection.execute(
+                    "UPDATE events SET payload_json = '{}' WHERE event_id = 'loan-1'"),
+                "committed event row was mutable",
+            )
+            _must_reject(
+                lambda: connection.execute(
+                    "DELETE FROM journal_lines WHERE event_id = 'loan-1'"),
+                "committed posting rows were deletable",
+            )
+        assert reopened.integrity_check()
+
         # Decimal strings are required: binary floats and non-finite values
         # must not enter the canonical financial event payload.
         malformed = _event("bad-amount", "supplier_settlement", (
             _posting("expense", "D", "1", "payer"),
             _posting("deposit_asset", "C", "1", "payer"),
         ))
-        malformed["postings"] = malformed["postings"] if "postings" in malformed else None
         malformed["postings"][0]["amount"] = 1.25
         _must_reject(
             lambda: reopened.append_group("bad-amount-group", (malformed,)),
