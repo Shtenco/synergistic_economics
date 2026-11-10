@@ -131,10 +131,21 @@ def _products(world: World) -> List[str]:
 
 
 def _state(world: World):
+    """Net each cell's own stock against its own need before inter-cell trade.
+
+    Self-consumption is an internal physical use, not a market transaction.
+    Netting also prevents a seller from shipping stock that it needs locally.
+    """
     supply = {p: {c.cell_id: float(c.supply.get(p, 0.0)) for c in world.cells}
               for p in _products(world)}
     demand = {p: {c.cell_id: float(c.demand.get(p, 0.0)) for c in world.cells}
               for p in _products(world)}
+    for product in _products(world):
+        for cell in world.cells:
+            cid = cell.cell_id
+            local_use = min(supply[product][cid], demand[product][cid])
+            supply[product][cid] -= local_use
+            demand[product][cid] -= local_use
     return supply, demand
 
 
