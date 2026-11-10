@@ -21,6 +21,7 @@ class A24AuditControlScriptsTest(unittest.TestCase):
         self.assertTrue(script.is_file(), f"missing audit control script: {script}")
         env = os.environ.copy()
         env["PYTHONHASHSEED"] = "0"
+        env["PYTHONIOENCODING"] = "utf-8"
         result = subprocess.run(
             [sys.executable, str(script)],
             cwd=ROOT,
