@@ -289,3 +289,43 @@ physical loss), validate the opening-to-closing physical stock identity, and
 derive baseline service flows from measured or explicitly calibrated evidence.
 The scalar multiplier remains a compatibility boundary, not a monetary capital
 stock and not a substitute for asset quantities or capital-service units.
+
+
+## 11. Event idempotency and period chronology — hardening finding
+
+A deeper review of the first lifecycle adapter found a concrete replay defect:
+a partial `physical_loss` removes quantity from the source cohort without
+creating a child/tombstone carrying the event identity. Event IDs were only
+unique within one function call. Replaying the same partial loss in a later
+call could therefore remove the same physical units again while preserving a
+locally balanced stock-flow equation. A similar class of defect could arise
+from replaying a period transition after restart if only cohort rows were
+persisted and the event history was discarded.
+
+The adapter now requires an immutable `CohortLedgerState`, created by
+`initial_cohort_state()` for the initial portfolio and returned in each
+`CohortPeriodResult.state`. It carries:
+- the closing immutable cohort tuple;
+- `last_processed_period`;
+- the set of previously processed event IDs.
+
+The next transition must advance exactly one period. Event IDs are rejected
+both when repeated within a period and when present in prior ledger history.
+Opening cohort vintages cannot lie after the current period; new additions must
+have `vintage == period` and `age == 0`. The synthetic lifecycle fixture now
+uses calendar year 2021 consistently for the transition and its additions.
+Negative controls explicitly replay a partial physical-loss event, replay the
+same period, and skip a period; all must fail closed.
+
+**Operational requirement:** callers must persist and restore the complete
+`CohortLedgerState`, not only `closing_cohorts`. Persisting only cohort rows
+throws away the replay barrier and reintroduces the double-loss defect. In a
+production runtime, the event-ID set should be backed by the authoritative
+append-only event store or an equivalent durable uniqueness index; this
+in-memory frozen state is a prototype contract, not a distributed transaction
+or crash-safe database implementation.
+
+This change hardens the adapter contract and test fixture only. It does not
+integrate the cohort ledger into the normal SCCE period loop, does not solve
+the zero-service state limitation, and has not yet received completed exact-
+head CI execution. A2.4.2 remains OPEN.
