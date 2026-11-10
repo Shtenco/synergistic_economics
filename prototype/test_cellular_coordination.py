@@ -32,6 +32,7 @@ class CellularCoordinationTests(unittest.TestCase):
         for allocator in (allocate_market, allocate_central, allocate_cooperative):
             self.assert_allocation_bounds(world, allocator(world))
         self.assert_allocation_bounds(world, allocate_cellular(world, 1))
+        self.assert_allocation_bounds(world, allocate_relay_cellular(world, 1))
 
     def test_central_flow_optimizer_prioritizes_higher_service_value(self):
         world = World(
