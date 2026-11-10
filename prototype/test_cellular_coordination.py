@@ -132,8 +132,10 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_relay_batches_multiple_buyers_on_shared_edges(self):
         world = World(
             cells=(
-                Cell("buyer-a", {}, {"food": 2.0}, {"food": 2.0}, {"food": 5.0}),
-                Cell("buyer-b", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0}),
+                Cell("buyer-a", {}, {"food": 2.0}, {"food": 2.0}, {"food": 5.0},
+                     relay_consent=False),
+                Cell("buyer-b", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0},
+                     relay_consent=False),
                 Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0}),
                 Cell("supplier", {"food": 4.0}, {}, {"food": 1.0}, {"food": 5.0}),
             ),
@@ -157,6 +159,22 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(len(shared), 1)
         self.assertEqual(shared[0]["records"], 2)
         self.assertEqual(set(shared[0]["origins"]), {"buyer-a", "buyer-b"})
+
+    def test_cell_without_relay_consent_does_not_forward_requests(self):
+        world = World(
+            cells=(
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0},
+                     relay_consent=False),
+                Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 5.0}),
+            ),
+            edges=(("buyer", "relay"), ("relay", "supplier")),
+            prices={"food": 2.0},
+        )
+        trace = []
+        self.assertEqual(allocate_relay_cellular(world, max_hops=2, trace=trace), [])
+        self.assertEqual(len(trace), 1)
+        self.assertEqual(trace[0]["receiver"], "relay")
 
     def test_relay_protocol_respects_ttl_and_disconnected_networks(self):
         world = World(
