@@ -80,6 +80,10 @@ the immutable event log with a replay cursor and reconciliation barrier.
 
 No production financial runtime is migrated to this store. The in-memory
 `EntityJournal.events` remains non-durable until that integration occurs.
+The new adapter preserves the complete entity, sector, counterparty, issuer
+and instrument dimensions, but it does not itself apply the resulting postings
+to an SFC position projection. The journal object is not made thread-safe by
+this adapter; calls against one instance must currently be serialized.
 No exact-head CI result is claimed until GitHub Actions runs and logs complete.
 
 ## Acceptance gates before production use
