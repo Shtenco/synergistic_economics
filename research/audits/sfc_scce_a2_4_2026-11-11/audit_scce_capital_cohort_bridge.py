@@ -18,6 +18,8 @@ sys.path.insert(0, str(PROTOTYPE))
 from capital_cohort_bridge import (  # noqa: E402
     CapitalBridgeError,
     CapitalCohort,
+    CohortEvent,
+    advance_cohort_period,
     aggregate_capital_services,
     apply_capital_cohorts,
 )
@@ -56,10 +58,69 @@ def close(actual, expected, label):
         raise AssertionError(f"{label}: {actual} != {expected}")
 
 
+def check_cohort_lifecycle(seed_cohorts):
+    opening = next(row for row in seed_cohorts if row.cell_id == "cell-1")
+    repair_event = CohortEvent(
+        "repair-start-1", opening.cohort_id, "state_transition",
+        2, "operating", "repair")
+    repair_child = f"{opening.cohort_id}::event::repair-start-1"
+    repair_complete = CohortEvent(
+        "repair-complete-1", repair_child, "state_transition",
+        1, "repair", "operating")
+    retirement = CohortEvent(
+        "retirement-1", opening.cohort_id, "final_retirement",
+        1, "operating", "retired", "planned")
+    physical_loss = CohortEvent(
+        "loss-1", opening.cohort_id, "physical_loss",
+        1, "operating", None, "accident")
+    addition = CapitalCohort(
+        "machine-cell-1-new-period-1", "cell-1", "machine",
+        1, 0, 2, 10, "operating", .9, .8, .95)
+    result = advance_cohort_period(
+        (opening,),
+        (repair_event, repair_complete, retirement, physical_loss),
+        (addition,),
+        period=1)
+    close(result.opening_physical_units, 10.0, "opening physical units")
+    close(result.additions, 2.0, "period additions")
+    close(result.final_retirements, 1.0, "final retirements")
+    close(result.physical_losses, 1.0, "physical losses")
+    close(result.closing_physical_units, 10.0, "closing physical units")
+    rows = {row.cohort_id: row for row in result.closing_cohorts}
+    close(rows[opening.cohort_id].quantity, 6.0, "remaining original cohort")
+    close(rows[opening.cohort_id].age, 7.0, "aged original cohort")
+    close(rows[repair_child].quantity, 1.0, "remaining repair cohort")
+    close(rows[repair_child].age, 7.0, "aged repair cohort")
+    close(rows[addition.cohort_id].age, 0.0, "new cohort entry age")
+    if rows[repair_child].operating_status != "repair":
+        raise AssertionError("repair state was not retained after period transition")
+    if not any(row.operating_status == "retired" and row.retirement_reason == "planned"
+               for row in result.closing_cohorts):
+        raise AssertionError("final retirement record/reason was not retained")
+
+    # An overdrawn event must fail rather than silently clamp or destroy stock.
+    try:
+        advance_cohort_period(
+            (opening,),
+            (CohortEvent(
+                "overdraw-1", opening.cohort_id, "state_transition",
+                11, "operating", "repair"),),
+            (),
+            period=1)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("overdrawn cohort transition accepted")
+    return result
+
+
 def main():
     model = DynamicCellularEconomy(
         policy="cellular", seed=23, shock="compound", cellular_hops=2)
     cohorts = build_cohorts(model)
+    lifecycle = check_cohort_lifecycle(cohorts)
+    if lifecycle.closing_physical_units != 10.0:
+        raise AssertionError("cohort lifecycle stock-flow did not close")
     baseline = {cell_id: 68.4 for cell_id in model.cells}
 
     snapshots = apply_capital_cohorts(model, cohorts, baseline)
@@ -201,6 +262,7 @@ def main():
         raise AssertionError("incomplete baseline map accepted")
 
     print("A2.4.2/B8.1 cohort-to-SCCE runtime adapter: PASS")
+    print("identity-preserving lifecycle: age, repair, component split, retirement and physical-loss flows reconcile")
     print("physical units remain distinct from operating units and service flow")
     print("B8.1 active-state vocabulary enforced; final retirement is a separate stock-removal event")
     print("repair downtime reduces service, not physical stock; utilization scales service")
