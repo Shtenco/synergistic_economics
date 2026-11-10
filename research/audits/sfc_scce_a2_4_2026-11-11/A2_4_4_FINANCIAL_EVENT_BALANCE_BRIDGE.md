@@ -226,3 +226,21 @@ transaction flows (T), not total changes in stocks. Revaluation (V) and
 other-volume changes (O) affect closing positions but must not create
 financial net lending. Negative controls cover valuation-only and mixed
 (T/V/O) changes.
+
+
+### Per-holder deposit mirror correction
+
+A second review found that the first journal-derived deposit check could pass
+an incomplete non-bank transfer or payment: it checked only aggregate deposit
+asset/liability changes, while the journal omitted the bank's liability-holder
+transfer postings for the outgoing and incoming account holders.
+
+The corrected `audit_financial_journal.py` now includes holder identity on
+each deposit liability posting and validates the signed asset/liability delta
+for each holder on each event. Its negative control removes both liability
+holder postings from a globally balanced non-bank transfer; the per-holder
+validator must reject the incomplete event.
+
+This is a component-level control only. It does not replace the full
+instrument-by-instrument holder/issuer register, and the script remains
+subject to exact-head CI execution.
