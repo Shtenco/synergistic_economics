@@ -7,6 +7,10 @@ class LabourContractError(ValueError):
     pass
 
 
+CONSENT_STATES = {"not_offered", "offered", "declined", "accepted",
+                  "started", "delivered", "verified", "withdrawn"}
+
+
 @dataclass(frozen=True)
 class Interval:
     activity: str
@@ -20,6 +24,9 @@ class Interval:
 
 
 def validate_time_budget(intervals, period_hours=D("168")):
+    period_hours = D(str(period_hours))
+    if period_hours <= 0:
+        raise LabourContractError("period_hours must be positive")
     ordered = sorted(intervals, key=lambda x: (x.start, x.end))
     for item in ordered:
         if item.start < 0 or item.end <= item.start or item.end > period_hours:
@@ -37,6 +44,8 @@ def delivered_hours(offered, accepted, scheduled, delivered, consent_state,
                     safety_limit):
     vals = [D(str(x)) for x in (offered, accepted, scheduled, delivered, safety_limit)]
     offered, accepted, scheduled, delivered, safety_limit = vals
+    if consent_state not in CONSENT_STATES:
+        raise LabourContractError("unknown consent state")
     if consent_state not in ("accepted", "started", "delivered", "verified"):
         if delivered != 0:
             raise LabourContractError("delivery cannot be inferred without active consent")
@@ -51,7 +60,10 @@ def capability_transition(opening, learning, obsolescence, verified_update):
     values = [D(str(x)) for x in (opening, learning, obsolescence, verified_update)]
     if min(values) < 0:
         raise LabourContractError("capability components must be non-negative")
-    return values[0] + values[1] - values[2] + values[3]
+    closing = values[0] + values[1] - values[2] + values[3]
+    if closing < 0:
+        raise LabourContractError("capability stock cannot become negative")
+    return closing
 
 
 def wage_journal(hours, rate, settled):
@@ -112,6 +124,25 @@ def main():
         pass
     else:
         raise AssertionError("settlement above accrued wage accepted")
+
+    try:
+        delivered_hours(8, 8, 8, 1, "unknown", 8)
+    except LabourContractError:
+        pass
+    else:
+        raise AssertionError("unknown consent state accepted")
+    try:
+        capability_transition(1, 0, 2, 0)
+    except LabourContractError:
+        pass
+    else:
+        raise AssertionError("negative closing capability accepted")
+    try:
+        validate_time_budget([], D("0"))
+    except LabourContractError:
+        pass
+    else:
+        raise AssertionError("zero-length time budget accepted")
 
     print("A2.4.5 time/consent/labour fixture: PASS")
     print(f"allocated_hours={allocated}; delivered_paid_hours={hours}")
