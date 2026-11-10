@@ -195,7 +195,7 @@ def apply_capital_cohorts(
         if not hasattr(cell, "__dict__") or "capital" not in vars(cell):
             raise CapitalBridgeError(
                 f"{snapshot.cell_id} capital must be a writable instance field")
-        targets.append((cell, old_number, snapshot.capital_multiplier, snapshot.cell_id))
+        targets.append((cell, old_value, snapshot.capital_multiplier, snapshot.cell_id))
 
     attempted = []
     try:
