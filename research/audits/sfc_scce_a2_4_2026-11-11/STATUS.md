@@ -372,3 +372,19 @@ are attached to its parent code commit `59409a3654934fd7ec2893cdf4325cda090abc26
 The newest status-only commit does not alter test code, but exact-head
 verification still requires confirming the workflow's tested checkout and
 completed result. No PASS is claimed.
+
+
+## 11 November continuation — A2.4.4 entity/sector identity gap
+
+A source review of `audit_financial_journal.py` found that its `sector` field is overloaded: `BORROWER`, `LENDER` and `SUPPLIER` are participant identities, while `BANK` is an institution role. These are not the controlled six institutional-sector codes used by the SFC position table. The per-holder deposit mirror is a useful component control, but the journal does not yet provide a stable entity ID plus a separately typed institutional-sector membership and issuer/counterparty identity.
+
+Added `A2_4_4_ENTITY_SECTOR_IDENTITY_GAP.md` (commit `b01edd585cff7b3f36d5dd9a5dcbfe31184b82f4`). It defines the minimum entity/sector/issuer/instrument identity contract, entity-level bilateral mirror key, adversarial controls, and the sequence for deriving sector financial net lending only after claim-level reconciliation. The six-sector oracle remains H +7, NFC −19, CB +4, CBank 0, GOV −15, ROW +23; source-unspecified transaction provenance must remain explicitly unresolved.
+
+This is a documented audit finding, not an implemented correction. A2.4.4 remains OPEN; no SFC runtime integration or Gate 1 closure is claimed.
+
+### Current exact-head snapshot
+
+- Audit branch HEAD after the finding document: `b01edd585cff7b3f36d5dd9a5dcbfe31184b82f4`.
+- Draft PR #4 remains open and unmerged; canonical `main` remains unchanged.
+- Before the finding-document commit, the exact code-head workflow runs were all queued: A2.4 audit controls `42906220504`, Prototype validation `42906225088`, SCCE Stage-C2 `42906225115`. These runs target parent code HEAD `f14488b6a895d49425bc6be248e505ca757fc837`, not the new documentation HEAD.
+- The finding document does not alter executable code. No exact-head CI PASS is claimed; current code still requires completed workflow evidence.
