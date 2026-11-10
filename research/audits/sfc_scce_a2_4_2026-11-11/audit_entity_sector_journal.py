@@ -674,6 +674,23 @@ def main():
     else:
         raise AssertionError("missing issuer claim record accepted")
 
+    # Same closing stock but a different T/V split must fail on both sides.
+    wrong_tvo = list(issuers)
+    wrong_tvo[0] = replace(
+        wrong_tvo[0], transactions=D("6"), revaluation=D("1"))
+    try:
+        validate_claim_positions(holders, wrong_tvo, registry)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("entity-level T/V classification mismatch accepted")
+    try:
+        validate_claim_positions(holders, issuers + [issuers[0]], registry)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("duplicate issuer claim record accepted")
+
     # Blank entity identity and unknown sector labels fail closed even when
     # the other field is populated.
     blank_entity = replace(
@@ -722,6 +739,22 @@ def main():
     else:
         raise AssertionError("wrong deposit issuer entity accepted")
 
+    # A balanced event with a wrong loan instrument ID must fail the
+    # entity-level asset/liability mirror even though the journal balances.
+    wrong_loan_id_lines = tuple(
+        replace(line, instrument_id="loan-company-2")
+        if line.account == "loan_liability" else line
+        for line in e1.lines
+    )
+    try:
+        EntityJournal(registry).post(
+            JournalEvent("BAD-LOAN-ID", "bank_loan_origination", p,
+                         wrong_loan_id_lines))
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("wrong loan instrument identity accepted")
+
     # A globally balanced duplicate asset/liability pair is still a duplicate
     # claim-side posting and must not change a stock twice.
     duplicate_pair = e1.lines + (
@@ -763,12 +796,13 @@ def main():
 
     print("A2.4.4 entity/sector/issuer identity journal: PASS")
     print("stable entity IDs are distinct from controlled six-sector membership")
+    print("all recognized claim assets/liabilities mirror by entity and full instrument identity")
     print("deposit claim mirrors validate holder and issuer entities, not sector labels")
     print("entity-level origination, transfer, supplier settlement, principal, interest, write-off and forgiveness events checked")
     print("10 holder claims and 10 issuer liabilities reconcile at entity level")
     print("sector financial NL derived only after claim reconciliation: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23")
     print("effective-dated sector changes, write-off versus legal forgiveness and T/V/O stock flow are distinguished")
-    print("negative controls: blank/unknown identity, overlapping sectors, wrong holder/issuer, currency/maturity/denomination/valuation, duplicate claims/events rejected")
+    print("negative controls: blank/unknown identity, overlapping sectors, wrong holder/issuer/instrument, T/V mismatch, currency/maturity/denomination/valuation, duplicate claims/events rejected")
 
 
 if __name__ == "__main__":
