@@ -62,6 +62,8 @@ Paired mean differences versus the market arm:
 
 **Interpretation:** in the baseline scenario, the cooperative-pool mechanism leads on total final fulfilment, weighted fulfilment and the fixed-price consumption index. Central planning is second on these aggregate measures and has the highest essential fulfilment. Two-hop cellular coordination is approximately tied with the market on total fulfilment, but has lower inequality and weaker essential-service fulfilment.
 
+**Coordination detail:** the two-hop cellular arm generated about 10,141 packets carrying 11,190 individual payload records. Batching reduced packet count by roughly 9.4% relative to sending every record separately. At the assumed packet and additional-record labour costs, coordination consumed about 103.5 hours across the seven cells and 24 periods.
+
 ## 5. Compound shock
 
 The compound shock combines a food-demand increase, reduced resource regeneration and lower productivity. 100 paired seeds, 24 periods.
@@ -82,6 +84,8 @@ Paired mean differences versus the market arm:
 - Cellular, one hop: final fulfilment −32.56 points; essential fulfilment −35.80 points; consumption index −497.56.
 
 **Interpretation:** the cooperative-pool rule is strongest on aggregate final fulfilment, weighted fulfilment, consumption index and distributional evenness in this compound scenario. The market arm has the highest essential-service fulfilment. Cellular coordination improves materially as its reach expands from one hop to two and three hops. Three-hop cellular reach nearly closes the fixed-price consumption-index gap with the market, but does not close the essential-service or weighted-fulfilment gaps.
+
+**Coordination detail:** two-hop cellular matching used about 10,526 packets for 11,608 payload records; three-hop matching used about 11,209 packets for 12,305 records. Packet bundling therefore removes roughly 9% of packet overhead, but the broader relay radius still increases total messages and labour consumption.
 
 ## 6. The key cellular finding: reach is an economic parameter
 
