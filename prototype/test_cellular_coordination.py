@@ -33,6 +33,21 @@ class CellularCoordinationTests(unittest.TestCase):
             self.assert_allocation_bounds(world, allocator(world))
         self.assert_allocation_bounds(world, allocate_cellular(world, 1))
 
+    def test_central_flow_optimizer_prioritizes_higher_service_value(self):
+        world = World(
+            cells=(
+                Cell("seller", {"food": 1.0}, {}, {"food": 1.0}, {"food": 1.0}),
+                Cell("buyer-a", {}, {"food": 1.0}, {"food": 1.0}, {"food": 1.0}),
+                Cell("buyer-b", {}, {"food": 1.0}, {"food": 2.0}, {"food": 1.0}),
+            ),
+            edges=(("seller", "buyer-a"), ("seller", "buyer-b")),
+            prices={"food": 1.0},
+        )
+        allocations = allocate_central(world)
+        self.assertEqual(len(allocations), 1)
+        self.assertEqual(allocations[0].buyer, "buyer-b")
+        self.assertAlmostEqual(allocations[0].quantity, 1.0)
+
     def test_cellular_allocations_respect_local_hop_limit(self):
         world = default_world(3)
         dist = shortest_paths(world)
