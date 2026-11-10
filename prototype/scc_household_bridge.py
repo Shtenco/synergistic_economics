@@ -108,6 +108,20 @@ def distribute_period_to_households(
     allocations = allocate_households(households, cell_supply, policy)
     validate_household_allocation(households, cell_supply, allocations)
     metrics = evaluate_households(households, allocations)
+    stage_b_demand = sum(
+        float(quantity)
+        for products in cell_demand.values()
+        for quantity in products.values()
+    )
+    stage_b_consumption = sum(
+        float(quantity)
+        for products in cell_supply.values()
+        for quantity in products.values()
+    )
+    if abs(metrics["overall_demand"] - stage_b_demand) > 1e-7:
+        raise HouseholdBridgeError("household demand does not reconcile to Stage-B")
+    if abs(metrics["overall_served"] - stage_b_consumption) > 1e-7:
+        raise HouseholdBridgeError("household consumption does not reconcile to Stage-B")
 
     served: dict[str, dict[str, float]] = {cid: {} for cid in cell_supply}
     for allocation in allocations:
