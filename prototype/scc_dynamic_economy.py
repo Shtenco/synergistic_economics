@@ -417,8 +417,15 @@ class DynamicCellularEconomy:
         }
         essential_demand = final_demand_totals["food"] + final_demand_totals["care"]
         essential_served = final_consumption["food"] + final_consumption["care"]
-        essential_fulfilment = essential_served / essential_demand if essential_demand else 1.0
-        weighted_fulfilment = weighted_served / weighted_demand if weighted_demand else 1.0
+        essential_raw = essential_served / essential_demand if essential_demand else 1.0
+        weighted_raw = weighted_served / weighted_demand if weighted_demand else 1.0
+        if essential_raw < -1e-7 or essential_raw > 1.0 + 1e-7:
+            raise DynamicEconomyError(f"essential over/under-count: {essential_raw}")
+        if weighted_raw < -1e-7 or weighted_raw > 1.0 + 1e-7:
+            raise DynamicEconomyError(f"weighted over/under-count: {weighted_raw}")
+        # Clip only floating-point residue after the physical quantity checks.
+        essential_fulfilment = min(1.0, max(0.0, essential_raw))
+        weighted_fulfilment = min(1.0, max(0.0, weighted_raw))
         cell_rates = []
         for cid in self.cells:
             d = sum(demand_by_cell[cid].values())
@@ -471,11 +478,11 @@ class DynamicCellularEconomy:
                - self.total_resource_used - ending_resource) > 1e-6:
             raise DynamicEconomyError("raw resource stock-flow identity violated")
         for period in self.periods:
-            if not 0 <= period.essential_fulfilment <= 1 + EPS:
+            if not -EPS <= period.essential_fulfilment <= 1 + EPS:
                 raise DynamicEconomyError(
                     f"essential fulfilment outside [0,1] at period {period.period}: "
                     f"{period.essential_fulfilment:.12f}")
-            if not 0 <= period.weighted_fulfilment <= 1 + EPS:
+            if not -EPS <= period.weighted_fulfilment <= 1 + EPS:
                 raise DynamicEconomyError("weighted fulfilment outside [0,1]")
         return True
 
