@@ -2,9 +2,9 @@
 
 **Document ID:** SCCE-ENGINE-EXP-002  
 **Version:** 0.2 — 10 November 2026  
-**Status:** Operational design specification; Stage-A local coordination kernel implemented; full dynamic economy and empirical validation remain pending.  
+**Status:** Operational design specification; Stage-A matching and Stage-B dynamic physical prototypes implemented; full financial/institutional integration and empirical validation remain pending.  
 **Parent:** [SYNERGY CELLULAR CONSORTIUM ECONOMY](SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)  
-**Related prototypes:** [Seven-cell economy](../prototype/SEVEN_CELL_ECONOMY.md), [General input-output economy](../prototype/GENERAL_IO_ECONOMY.md), [Stage-A cellular coordination kernel](../prototype/cellular_coordination.py)
+**Related prototypes:** [Seven-cell economy](../prototype/SEVEN_CELL_ECONOMY.md), [General input-output economy](../prototype/GENERAL_IO_ECONOMY.md), [Stage-A cellular coordination kernel](../prototype/cellular_coordination.py), [Stage-B dynamic physical economy](../prototype/scc_dynamic_economy.py)
 
 ---
 
@@ -264,7 +264,7 @@ They are not a distributed runtime or a complete economy. They currently omit:
 - public goods, pollution, ecological externalities beyond the raw-resource stock;
 - policy learning, technology diffusion and cell entry, exit, merger or split.
 
-The current fixed-price output and consumption indices are diagnostic model metrics, not GDP, profit, income, utility or measured social welfare. The market baseline is a simplified price-ranked matching rule without buyer cash constraints or strategic bidding; the central baseline is an aggregate-demand priority allocator, not a mathematically solved social-planner optimum; and the cooperative baseline is weighted max-min rationing, not a fully modelled cooperative institution. None is yet strong enough to support an empirical ranking of economic systems.
+The current fixed-price output and consumption indices are diagnostic model metrics, not GDP, profit, income, utility or measured social welfare. The market baseline is a simplified price-ranked matching rule without buyer cash constraints or strategic bidding; the central allocation layer is a min-cost-flow solution for a linear priority-weighted service-minus-route-cost objective, not a whole-economy social-planner optimum; and the cooperative baseline is weighted max-min rationing, not a fully modelled cooperative institution. None is yet strong enough to support an empirical ranking of economic systems.
 
 The current "service value" is a diagnostic allocation metric, not GDP, profit, income, utility or measured social welfare. It must not be reported as empirical prosperity.
 
@@ -412,7 +412,7 @@ A 2026 synthetic benchmark comparing centralized computational planning, agent-b
 
 ## 21. Staged implementation
 
-**Stage A — local coordination kernel (current)**
+**Stage A — local coordination kernel (implemented)**
 - seven synthetic cells;
 - local graph and request rounds;
 - market, central and cooperative comparators;
