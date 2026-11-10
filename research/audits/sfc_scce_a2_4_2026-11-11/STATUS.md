@@ -167,3 +167,26 @@ without job conclusions or logs. No CI PASS is claimed.
 - Replaced tautological constant assertions in `audit_financial_journal.py` with derived signed-balance calculations over actual journal lines. The fixture now verifies deposit-asset and bank deposit-liability changes for loan origination, non-bank credit transfer, supplier payment, principal repayment and interest settlement.
 - `audit_instrument_stock_flow.py` now explicitly computes sector financial net lending from transaction flows (T), excluding revaluation (V) and other-volume changes (O). Added valuation-only and mixed T/V/O negative/positive controls.
 - These controls are committed but await execution in the exact-head audit workflow. No production financial runtime is claimed.
+
+
+## CI integration correction — execute audit scripts through established PR workflow
+
+The standalone A2.4 workflow remains **push-triggered only** on the audit branch.
+A PR trigger was considered and removed: this workflow file is not present on
+`main`, so it cannot be relied upon as the repository's established PR check
+before merge.
+
+To obtain observable PR validation without modifying `main`, added
+`prototype/test_a2_4_audit_controls.py` (commit
+`751bbe60ca6e059d560ea5d84089f30f12aa4a56`). The existing
+`.github/workflows/prototype-validation.yml` on `main` already triggers for
+PRs changing `prototype/**` and runs unittest discovery over
+`prototype/test_*.py`. The wrapper adds eleven separate unittest cases; each
+executes one exact committed A2.4 script in a subprocess, captures output,
+requires exit code 0 and requires a PASS marker. This is the primary
+PR-observable path for all eleven audit scripts.
+
+At the first poll after adding the wrapper, the connector had not yet surfaced
+new PR run IDs for the new head. The earlier Prototype and Stage-C2 runs
+`42904160933` and `42904160781` remained queued. No execution result is
+claimed until new exact-head runs complete and their job logs are inspected.
