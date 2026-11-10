@@ -99,7 +99,7 @@ The compound-shock cellular results show a sharp dependence on communication/del
 | 2 hops | 46.00% | 42.77% | 44.30% | 754.20 |
 | 3 hops | 46.68% | 42.12% | 44.38% | 759.47 |
 
-This is not a small tuning effect. One-hop cells become trapped in local shortages while useful production and demand exist elsewhere. Extending reach across the network recovers much of the lost consumption. However, three-hop reach is not yet a real federation: it is a radius setting in a single-process simulator. Cells now have separate trade consent, counterparty allowlists and relay-forwarding consent, but the model still lacks a federation charter, message delay, edge capacity, dispute protocol and independent cell runtime.
+This is not a small tuning effect. One-hop cells become trapped in local shortages while useful production and demand exist elsewhere. Extending reach across the network recovers much of the lost consumption. However, three-hop reach is not yet a real federation: it is a radius setting in a single-process simulator. Cells now have separate trade consent, counterparty allowlists and relay-forwarding consent. Relay consent defaults off for a newly constructed cell; the synthetic Stage-B baseline explicitly opts its seven cells in. The model still lacks a federation charter, realistic message delay, edge capacity, complete dispute protocol and independent cell runtime.
 
 ## 7. Coordination-cost response frontier
 
@@ -141,7 +141,7 @@ The results do not establish that:
 - fixed-price output/consumption indices measure welfare;
 - the seven-cell results generalize to larger, calibrated economies.
 
-The current model excludes money, credit, wages, ownership, investment, household income, employment, working-time choice, public goods, technology diffusion and most ecological externalities. Cellular message forwarding is counted hop by hop and its synthetic labour requirement is deducted from production capacity. Non-cellular message counts remain estimates rather than full protocol traces; governance and enforcement effort remain incomplete. No conclusion about positive-sum prosperity is justified until these are modelled and calibrated.
+The current model excludes money, credit, wages, ownership, investment, household income, employment, working-time choice, public goods, technology diffusion and most ecological externalities. Cellular message forwarding is counted hop by hop, batched into packets with record-level payload accounting, and its synthetic labour requirement is deducted from production capacity. Relay consent defaults off for new cells; the synthetic benchmark opts in explicitly. Non-cellular message counts remain estimates rather than full protocol traces; governance and enforcement effort remain incomplete. No conclusion about positive-sum prosperity is justified until these are modelled and calibrated.
 
 ## 9. Immediate research implications
 
