@@ -33,7 +33,7 @@ For household h, product/service p and period t, keep four distinct objects:
 3. **Request or service claim** — a signed request submitted to a cell or public-service provider; a request is not a delivery or a contract.
 4. **Actual fulfilment** — verified physical goods or services received at the required quality and time.
 
-A household can have unmet need without effective purchasing power. A forecast is not a purchase order. A token or credit limit is not a physical good. A booked service is not a delivered service.
+A household can have unmet need without effective purchasing power. A forecast is not a purchase order. A token or credit limit is not a physical good. A booked service is not a delivered service. Recurring consumables (for example, food) are period-specific needs: a shortfall is recorded as deprivation exposure and must not automatically become another period's demand. Queueable services (for example, a delayed care appointment or repair) may carry forward only when the service remains valid, with age, expiry and priority rules. The two states must not be collapsed into one generic backlog.
 
 For every period, report both need-based fulfilment and budget-constrained consumption. Never use a high market-sales figure as a proxy for universal need satisfaction.
 
