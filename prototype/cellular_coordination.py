@@ -32,6 +32,8 @@ class Cell:
     demand: Mapping[str, float]
     priority: Mapping[str, float]
     bid: Mapping[str, float]
+    trade_consent: bool = True
+    allowed_counterparties: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +72,8 @@ class World:
         if not products:
             raise CoordinationError("at least one product is required")
         for c in self.cells:
+            if c.allowed_counterparties is not None and not c.allowed_counterparties.issubset(known):
+                raise CoordinationError("unknown allowed counterparty")
             if any(v < 0 for v in c.supply.values()):
                 raise CoordinationError("negative supply")
             if any(v < 0 for v in c.demand.values()):
@@ -157,6 +161,17 @@ def _products(world: World) -> List[str]:
     return sorted(world.prices)
 
 
+def _pair_consented(cells: Mapping[str, Cell], seller: str, buyer: str) -> bool:
+    """Both counterparties must opt in; optional allowlists are bilateral."""
+    s = cells[seller]
+    b = cells[buyer]
+    return (
+        s.trade_consent and b.trade_consent
+        and (s.allowed_counterparties is None or buyer in s.allowed_counterparties)
+        and (b.allowed_counterparties is None or seller in b.allowed_counterparties)
+    )
+
+
 def _state(world: World):
     """Net each cell's own stock against its own need before inter-cell trade.
 
@@ -185,7 +200,8 @@ def _route_allocations(world: World, product: str,
     for buyer in sorted(buyer_targets):
         left = buyer_targets[buyer]
         sellers = sorted(
-            (s for s, q in supply.items() if q > EPS and buyer in distances[s]),
+            (s for s, q in supply.items() if q > EPS and buyer in distances[s]
+             and _pair_consented({c.cell_id: c for c in world.cells}, s, buyer)),
             key=lambda s: (distances[buyer][s], s))
         for seller in sellers:
             if left <= EPS:
@@ -213,8 +229,10 @@ def allocate_central(world: World) -> List[Allocation]:
     allocations: List[Allocation] = []
 
     for product in _products(world):
-        sellers = sorted(s for s, q in supply[product].items() if q > EPS)
-        buyers = sorted(b for b, q in demand[product].items() if q > EPS)
+        sellers = sorted(s for s, q in supply[product].items()
+                         if q > EPS and cells[s].trade_consent)
+        buyers = sorted(b for b, q in demand[product].items()
+                        if q > EPS and cells[b].trade_consent)
         if not sellers or not buyers:
             continue
 
@@ -242,7 +260,8 @@ def allocate_central(world: World) -> List[Allocation]:
         route_edges = []
         for seller in sellers:
             for buyer in buyers:
-                if seller == buyer or buyer not in dist[seller]:
+                if (seller == buyer or buyer not in dist[seller]
+                        or not _pair_consented(cells, seller, buyer)):
                     continue
                 distance = dist[seller][buyer]
                 priority = cells[buyer].priority.get(product, 1.0)
@@ -317,12 +336,13 @@ def allocate_market(world: World) -> List[Allocation]:
     for p in _products(world):
         price = float(world.prices[p])
         buyers = sorted(
-            (b for b, q in demand[p].items() if q > EPS),
+            (b for b, q in demand[p].items() if q > EPS and cells[b].trade_consent),
             key=lambda b: (-cells[b].bid.get(p, price), b))
         for buyer in buyers:
             left = demand[p][buyer]
             sellers = sorted(
-                (s for s, q in supply[p].items() if q > EPS and buyer in dist[s]),
+                (s for s, q in supply[p].items() if q > EPS and buyer in dist[s]
+             and _pair_consented(cells, s, buyer)),
                 key=lambda s: (price + dist[buyer][s] * world.transport_cost_per_hop, s))
             for seller in sellers:
                 delivered_ask = price + dist[buyer][seller] * world.transport_cost_per_hop
@@ -347,9 +367,18 @@ def allocate_cooperative(world: World) -> List[Allocation]:
     allocations = []
     for p in _products(world):
         total_supply = sum(supply[p].values())
-        weights = {b: cells[b].priority.get(p, 1.0) for b in demand[p]}
-        targets = _weighted_waterfill(demand[p], weights, total_supply)
-        allocations.extend(_route_allocations(world, p, targets, supply[p], dist))
+        eligible_demand = {b: q for b, q in demand[p].items()
+                           if cells[b].trade_consent}
+        eligible_supply = {s: q for s, q in supply[p].items()
+                           if cells[s].trade_consent}
+        weights = {b: cells[b].priority.get(p, 1.0) for b in eligible_demand}
+        targets = _weighted_waterfill(eligible_demand, weights,
+                                      sum(eligible_supply.values()))
+        route_supply = dict(supply[p])
+        for seller in route_supply:
+            if not cells[seller].trade_consent:
+                route_supply[seller] = 0.0
+        allocations.extend(_route_allocations(world, p, targets, route_supply, dist))
     return allocations
 
 
@@ -381,6 +410,7 @@ def allocate_cellular(world: World, max_hops: int = 1,
                     s for s, q in available.items()
                     if q > EPS and s not in tried[buyer]
                     and buyer in dist[s] and dist[buyer][s] <= max_hops
+                    and _pair_consented(cells, s, buyer)
                 ]
                 if not candidates:
                     continue
@@ -477,7 +507,8 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                             })
                             if (neighbour != buyer
                                     and available[neighbour] > EPS
-                                    and neighbour not in tried[buyer]):
+                                    and neighbour not in tried[buyer]
+                                    and _pair_consented(cells, neighbour, buyer)):
                                 if neighbour in delivery_distances[buyer]:
                                     offers.append((depth, delivery_distances[buyer][neighbour],
                                                    neighbour, next_path))
