@@ -125,7 +125,7 @@ not execution evidence.
 | G0-A: SCCE queue | deterministic expiry and overflow integration fixture; all primitive queue tests | **PENDING CI** — replacement fixture committed as `bea7d625`; both required workflows still need successful runs |
 | G0-B: capital | same-cohort script, exact expected output, negative-input rejection | **IMPLEMENTED / EXECUTION PENDING** — `audit_same_cohort_capital.py` |
 | G0-C: product | typed registry/valuation script; mismatched unit and grade rejected; quantity invariant under price change | **IMPLEMENTED / EXECUTION PENDING** — `audit_product_valuation_adapter.py` |
-| G0-D: financial | balanced journal fixtures for origination, transfer, payment, accrual, settlement, default, impairment and write-off | **IMPLEMENTED / EXECUTION PENDING** — `audit_financial_journal.py`; component journal only, not full instrument/SFC reconciliation |
+| G0-D: financial | balanced journal fixtures plus instrument-level stock-flow and holder/issuer mirrors | **IMPLEMENTED / EXECUTION PENDING** — `audit_financial_journal.py`, `audit_instrument_stock_flow.py`; synthetic component controls, not a general ledger/runtime |
 | G0-E: labour/rights | interval-overlap, consent, delivery, compensation accrual/settlement and rights non-inference tests | **IMPLEMENTED / EXECUTION PENDING** — `audit_labour_consent.py`; component fixture, not a complete rights engine |
 | G1: interface closure | all A2.4.1–A2.4.7 interfaces pass, typed conversions explicit, no balancing plug | **OPEN** |
 | G2: end-to-end | one frozen period with linked physical, capital, labour and financial event IDs; all stock/flow and mirror identities close | **NOT STARTED** |
@@ -199,3 +199,14 @@ this document does not record a completed run, exit codes or logs. All nine
 scripts remain **IMPLEMENTED / EXECUTION PENDING** until a completed workflow
 on the exact commit SHA is inspected. An empty combined-status response is
 not a pass.
+
+
+### 6.6 Financial stock-flow component control — 11 November 2026
+
+`audit_instrument_stock_flow.py` adds ten exact opening/closing positions from
+the repository's six-sector SFC numerical example. It checks transaction,
+revaluation and other-volume reconciliation, holder/issuer mirror equality,
+and derives the six-sector financial net-lending vector. An independent
+Decimal calculation of those values passed, but the committed script has not
+yet been executed by a recorded runner. G0-D therefore remains **IMPLEMENTED /
+EXECUTION PENDING**, and does not close A2.4.4.
