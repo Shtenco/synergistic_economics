@@ -349,7 +349,7 @@ class DynamicCellularEconomy:
                               - producer.stocks[p])
             else:
                 local_input_need = sum(
-                    input_need[p].get(buyer_id, 0.0)
+                    plans[buyer_id] * self.cells[buyer_id].spec.recipe.get(p, 0.0)
                     for buyer_id in self.cells
                     if buyer_id != producer.spec.cell_id
                     and distances[producer.spec.cell_id].get(buyer_id, 10**6)
