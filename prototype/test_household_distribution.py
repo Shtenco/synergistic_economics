@@ -23,7 +23,7 @@ class HouseholdDistributionTests(unittest.TestCase):
             ),
         )
         self.supply = {
-            "cell-a": {"food": 7.0, "care": 1.0, "books": 1.0},
+            "cell-a": {"food": 6.0, "care": 1.0, "books": 1.0},
             "cell-b": {"food": 2.0, "care": 1.0, "books": 2.0},
         }
 
