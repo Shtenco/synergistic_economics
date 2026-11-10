@@ -14,7 +14,7 @@ from typing import Dict, Mapping, Sequence
 
 
 EPS = 1e-10
-POLICIES = ("proportional", "priority_weighted")
+POLICIES = ("proportional", "priority_weighted", "floor_priority")
 
 
 class HouseholdDistributionError(ValueError):
@@ -98,6 +98,7 @@ def allocate_households(
     households: Sequence[Household],
     cell_supply: Mapping[str, Mapping[str, float]],
     policy: str = "proportional",
+    essential_floor_fraction: float = 0.5,
 ) -> tuple[HouseholdAllocation, ...]:
     """Allocate each cell's available product stocks to its own households.
 
@@ -106,6 +107,8 @@ def allocate_households(
     """
     if policy not in POLICIES:
         raise HouseholdDistributionError("unknown household allocation policy")
+    if not 0.0 <= essential_floor_fraction <= 1.0:
+        raise HouseholdDistributionError("essential floor fraction must be in [0, 1]")
     ids = [h.household_id for h in households]
     if not households or len(ids) != len(set(ids)):
         raise HouseholdDistributionError("household ids must be unique and non-empty")
@@ -150,10 +153,36 @@ def allocate_households(
             essential_weights = {
                 h.household_id: h.essential_priority for h in members
             }
-            essential = _allocate_group(
-                members, product, essential_needs, essential_weights,
-                available, policy,
-            )
+            if policy == "floor_priority":
+                floor_claims = {
+                    household_id: need * essential_floor_fraction
+                    for household_id, need in essential_needs.items()
+                }
+                floor = _allocate_group(
+                    members, product, floor_claims,
+                    {h.household_id: 1.0 for h in members},
+                    available, "proportional",
+                )
+                floor_used = sum(floor.values())
+                residual_claims = {
+                    household_id: max(0.0, essential_needs[household_id]
+                                      - floor.get(household_id, 0.0))
+                    for household_id in essential_needs
+                }
+                additional = _waterfill(
+                    residual_claims, essential_weights,
+                    max(0.0, available - floor_used),
+                )
+                essential = {
+                    household_id: floor.get(household_id, 0.0)
+                    + additional.get(household_id, 0.0)
+                    for household_id in essential_needs
+                }
+            else:
+                essential = _allocate_group(
+                    members, product, essential_needs, essential_weights,
+                    available, policy,
+                )
             for h in members:
                 essential_out[h.household_id][product] = essential.get(h.household_id, 0.0)
             available = max(0.0, available - sum(essential.values()))
