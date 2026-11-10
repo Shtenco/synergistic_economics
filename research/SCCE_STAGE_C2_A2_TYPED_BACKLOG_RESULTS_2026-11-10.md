@@ -9,6 +9,8 @@
 
 ---
 
+> **Scope note:** these results validate the typed C2-A2 distinction between recurring food needs and queueable care claims. They predate the C2-A3 age-cohort integration. Queue-age expiry, admission attrition and overflow are not represented in the tables below; those are being validated separately.
+
 ## 1. Methodological correction
 
 The first C2-A2 experiment carried both food and care shortfalls forward as if they were queueable claims. A paired service-order sensitivity exposed a problem: the current-need fulfilment metric could change sharply without any change in physical deliveries. The earlier generic-backlog results are preserved in [the superseded experiment record](SCCE_STAGE_C2_A2_PRELIMINARY_RESULTS_2026-11-10.md), but their combined current-essential ranking must not be used as a welfare conclusion.
