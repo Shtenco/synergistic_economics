@@ -61,9 +61,16 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
         )
         for cell_id, products in period.final_consumption_by_cell.items():
             for product, quantity in products.items():
-                unallocated = result["unallocated_supply_by_cell"][cell_id][product]
-                self.assertGreaterEqual(unallocated, -1e-10)
-                self.assertLessEqual(unallocated, quantity + 1e-10)
+                unassigned = result["unassigned_consumption_by_cell"][cell_id][product]
+                self.assertGreaterEqual(unassigned, -1e-10)
+                self.assertAlmostEqual(
+                    unassigned, quantity - sum(
+                        a.essential_served.get(product, 0.0)
+                        + a.discretionary_served.get(product, 0.0)
+                        for a in result["allocations"] if a.cell_id == cell_id
+                    ),
+                    places=9,
+                )
 
     def test_paired_distribution_experiment_preserves_aggregate_physical_service(self):
         result = run_household_distribution_experiment(
