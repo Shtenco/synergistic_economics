@@ -59,6 +59,7 @@ def run_endogenous_household_experiment(
     max_backlog_periods: float = 1.0,
     economic_policies: Sequence[str] = POLICIES,
     household_policies: Sequence[str] = HOUSEHOLD_POLICIES,
+    backlog_service_order: str = "current_first",
 ) -> dict:
     if runs < 2:
         raise EndogenousHouseholdExperimentError("at least two paired runs are required")
@@ -84,6 +85,7 @@ def run_endogenous_household_experiment(
                     essential_floor_fraction=essential_floor_fraction,
                     backlog_retention=backlog_retention,
                     max_backlog_periods=max_backlog_periods,
+                    backlog_service_order=backlog_service_order,
                 )
                 model.run(periods)
                 summary = model.summary()
@@ -165,6 +167,7 @@ def run_endogenous_household_experiment(
         "essential_floor_fraction": essential_floor_fraction,
         "backlog_retention": backlog_retention,
         "max_backlog_periods": max_backlog_periods,
+        "backlog_service_order": backlog_service_order,
         "economic_policies": list(economic_policies),
         "household_policies": list(household_policies),
         "summary": summary,
@@ -197,6 +200,7 @@ def run_backlog_sensitivity(
         "priority_dispersion": priority_dispersion,
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
+        "backlog_service_order": "current_first",
     }
     with_backlog = run_endogenous_household_experiment(
         **common,
@@ -255,6 +259,83 @@ def run_backlog_sensitivity(
         "reference": "zero essential-backlog retention and zero backlog cap",
         "sensitivity": result,
     }
+
+
+def run_service_order_sensitivity(
+    runs: int = 20,
+    shock: str = "compound",
+    periods: int = 24,
+    cellular_hops: int = 2,
+    households_per_cell: int = 10,
+    priority_dispersion: float = 0.4,
+    backlog_retention: float = 0.5,
+    max_backlog_periods: float = 1.0,
+    economic_policies: Sequence[str] = POLICIES,
+) -> dict:
+    """Paired same-seed comparison of current-first and backlog-first service."""
+    common = {
+        "runs": runs,
+        "shock": shock,
+        "periods": periods,
+        "cellular_hops": cellular_hops,
+        "households_per_cell": households_per_cell,
+        "priority_dispersion": priority_dispersion,
+        "backlog_retention": backlog_retention,
+        "max_backlog_periods": max_backlog_periods,
+        "economic_policies": economic_policies,
+        "household_policies": ("proportional",),
+    }
+    current_first = run_endogenous_household_experiment(
+        **common, backlog_service_order="current_first")
+    backlog_first = run_endogenous_household_experiment(
+        **common, backlog_service_order="backlog_first")
+    current_rows = {
+        (row["seed"], row["economic_policy"]): row
+        for row in current_first["paired_runs"]
+    }
+    backlog_rows = {
+        (row["seed"], row["economic_policy"]): row
+        for row in backlog_first["paired_runs"]
+    }
+    metrics = (
+        "current_essential_fulfilment",
+        "current_overall_fulfilment",
+        "cumulative_lower_decile_current_essential_fulfilment",
+        "cumulative_minimum_current_essential_fulfilment",
+        "cumulative_household_essential_gini",
+        "ending_essential_backlog",
+        "peak_essential_backlog",
+        "fixed_price_final_consumption_index",
+        "fixed_price_gross_output_index",
+    )
+    sensitivity = {}
+    for policy in economic_policies:
+        sensitivity[policy] = {}
+        for metric in metrics:
+            differences = [
+                backlog_rows[(seed, policy)][metric]
+                - current_rows[(seed, policy)][metric]
+                for seed in range(1, runs + 1)
+            ]
+            sensitivity[policy][metric] = {
+                "current_first_mean": statistics.mean(
+                    current_rows[(seed, policy)][metric]
+                    for seed in range(1, runs + 1)),
+                "backlog_first_mean": statistics.mean(
+                    backlog_rows[(seed, policy)][metric]
+                    for seed in range(1, runs + 1)),
+                "paired_backlog_first_minus_current_first": confidence_summary(
+                    differences),
+            }
+    return {
+        "runs": runs,
+        "shock": shock,
+        "periods": periods,
+        "backlog_retention": backlog_retention,
+        "max_backlog_periods": max_backlog_periods,
+        "household_policy": "proportional",
+        "sensitivity": sensitivity,
+    }
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=20)
@@ -272,13 +353,21 @@ def main():
     parser.add_argument("--household-policies",
                         default="proportional,priority_weighted,floor_priority")
     parser.add_argument("--backlog-sensitivity", action="store_true")
+    parser.add_argument("--service-order-sensitivity", action="store_true")
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     economic_policies = tuple(
         x.strip() for x in args.economic_policies.split(",") if x.strip())
     household_policies = tuple(
         x.strip() for x in args.household_policies.split(",") if x.strip())
-    if args.backlog_sensitivity:
+    if args.service_order_sensitivity:
+        result = run_service_order_sensitivity(
+            args.runs, args.shock, args.periods, args.hops,
+            args.households_per_cell, args.priority_dispersion,
+            args.backlog_retention, args.max_backlog_periods,
+            economic_policies,
+        )
+    elif args.backlog_sensitivity:
         result = run_backlog_sensitivity(
             args.runs, args.shock, args.periods, args.hops,
             args.households_per_cell, args.priority_dispersion,
@@ -291,6 +380,7 @@ def main():
             args.households_per_cell, args.priority_dispersion,
             args.essential_floor_fraction, args.backlog_retention,
             args.max_backlog_periods, economic_policies, household_policies,
+            "current_first",
         )
         if args.summary_only:
             result.pop("paired_runs", None)
