@@ -1,7 +1,7 @@
 import unittest
 
 from cellular_coordination import (
-    Allocation, Cell, World, CoordinationError, allocate_cellular, allocate_central,
+    Allocation, Cell, World, CoordinationError, allocate_cellular, allocate_relay_cellular, allocate_central,
     allocate_cooperative, allocate_market, default_world, evaluate,
     monte_carlo, run_comparison, shortest_paths,
 )
@@ -47,6 +47,40 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(len(allocations), 1)
         self.assertEqual(allocations[0].buyer, "buyer-b")
         self.assertAlmostEqual(allocations[0].quantity, 1.0)
+
+    def test_relay_protocol_discovers_supplier_through_neighbour_messages(self):
+        world = World(
+            cells=(
+                Cell("buyer", {}, {"food": 4.0}, {"food": 2.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("supplier", {"food": 5.0}, {}, {"food": 1.0}, {"food": 10.0}),
+            ),
+            edges=(("buyer", "relay"), ("relay", "supplier")),
+            prices={"food": 4.0},
+        )
+        trace = []
+        allocations = allocate_relay_cellular(world, max_hops=2, trace=trace)
+        self.assertEqual(len(allocations), 1)
+        self.assertEqual((allocations[0].seller, allocations[0].buyer), ("supplier", "buyer"))
+        self.assertEqual(allocations[0].distance, 2)
+        self.assertEqual(sum(e["type"] == "request_forward" for e in trace), 2)
+        self.assertTrue(any(e["type"] == "offer" for e in trace))
+        self.assertTrue(any(e["type"] == "reservation" for e in trace))
+        self.assertTrue(any(e["type"] == "acceptance" for e in trace))
+
+    def test_relay_protocol_respects_ttl_and_disconnected_networks(self):
+        world = World(
+            cells=(
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}),
+            ),
+            edges=(("buyer", "relay"), ("relay", "supplier")),
+            prices={"food": 4.0},
+        )
+        self.assertEqual(allocate_relay_cellular(world, max_hops=1), [])
+        disconnected = World(world.cells, edges=(("buyer", "relay"),), prices=world.prices)
+        self.assertEqual(allocate_relay_cellular(disconnected, max_hops=3), [])
 
     def test_cellular_allocations_respect_local_hop_limit(self):
         world = default_world(3)
