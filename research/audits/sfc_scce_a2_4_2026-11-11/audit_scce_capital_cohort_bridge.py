@@ -20,6 +20,7 @@ from capital_cohort_bridge import (  # noqa: E402
     CapitalCohort,
     CohortEvent,
     advance_cohort_period,
+    initial_cohort_state,
     aggregate_capital_services,
     apply_capital_cohorts,
 )
@@ -74,13 +75,13 @@ def check_cohort_lifecycle(seed_cohorts):
         "loss-1", opening.cohort_id, "physical_loss",
         1, "operating", None, "accident")
     addition = CapitalCohort(
-        "machine-cell-1-new-period-1", "cell-1", "machine",
-        1, 0, 2, 10, "operating", .9, .8, .95)
+        "machine-cell-1-new-period-2021", "cell-1", "machine",
+        2021, 0, 2, 10, "operating", .9, .8, .95)
     result = advance_cohort_period(
-        (opening,),
+        initial_cohort_state((opening,)),
         (repair_event, repair_complete, retirement, physical_loss),
         (addition,),
-        period=1)
+        period=2021)
     close(result.opening_physical_units, 10.0, "opening physical units")
     close(result.additions, 2.0, "period additions")
     close(result.final_retirements, 1.0, "final retirements")
@@ -98,10 +99,30 @@ def check_cohort_lifecycle(seed_cohorts):
                for row in result.closing_cohorts):
         raise AssertionError("final retirement record/reason was not retained")
 
+    # Event IDs persist across periods: replaying a partial physical loss must
+    # not destroy the same units a second time. Period advancement is also
+    # strictly sequential, so a repeated period cannot age cohorts twice.
+    try:
+        advance_cohort_period(
+            result.state,
+            (physical_loss,),
+            (),
+            period=2022)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("replayed physical-loss event was accepted")
+    try:
+        advance_cohort_period(result.state, (), (), period=2021)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("same-period cohort ageing replay was accepted")
+
     # An overdrawn event must fail rather than silently clamp or destroy stock.
     try:
         advance_cohort_period(
-            (opening,),
+            initial_cohort_state((opening,)),
             (CohortEvent(
                 "overdraw-1", opening.cohort_id, "state_transition",
                 11, "operating", "repair"),),
@@ -195,7 +216,8 @@ def main():
     retirement = CohortEvent(
         "retire-event-1", "retire-source", "final_retirement",
         3, "operating", "retired", "planned")
-    advanced = advance_cohort_period(opening, (retirement,), (), period=2026)
+    advanced = advance_cohort_period(
+        initial_cohort_state(opening), (retirement,), (), period=2026)
     close(advanced.opening_physical_units, 10.0, "retirement opening units")
     close(advanced.final_retirements, 3.0, "partial final retirement")
     close(advanced.closing_physical_units, 7.0, "retirement closing units")
@@ -227,7 +249,7 @@ def main():
     # A terminally retired cohort cannot be transitioned back into operation.
     try:
         advance_cohort_period(
-            advanced.closing_cohorts,
+            advanced.state,
             (CohortEvent("reactivate-1", retired[0].cohort_id,
                          "state_transition", 1, "retired", "operating"),),
             (), period=2027)
