@@ -95,6 +95,7 @@ class CellLocalView:
     capital: float
     productivity_multiplier: float
     neighbour_ids: tuple[str, ...]
+    tradeable_neighbour_ids: tuple[str, ...]
     neighbour_input_demand: float
 
 
@@ -337,6 +338,19 @@ class DynamicCellularEconomy:
                           self.transport_cost_per_hop, self.transaction_cost,
                           self.communication_edges)
 
+    def _cells_may_trade(self, first_id: str, second_id: str) -> bool:
+        first = self.cells[first_id].spec
+        second = self.cells[second_id].spec
+        if not first.trade_consent or not second.trade_consent:
+            return False
+        if (first.allowed_counterparties is not None
+                and second_id not in first.allowed_counterparties):
+            return False
+        if (second.allowed_counterparties is not None
+                and first_id not in second.allowed_counterparties):
+            return False
+        return True
+
     def _cell_local_view(self, cell_id: str, demand_mult: float,
                          productivity_mult: float,
                          labour_budget: Mapping[str, float],
@@ -349,10 +363,14 @@ class DynamicCellularEconomy:
             other_id for other_id, distance in distances[cell_id].items()
             if other_id != cell_id and distance <= self.cellular_hops
         ))
+        tradeable_neighbours = tuple(
+            other_id for other_id in neighbours
+            if self._cells_may_trade(cell_id, other_id)
+        )
         neighbour_input_demand = sum(
             plans.get(other_id, 0.0)
             * self.cells[other_id].spec.recipe.get(output, 0.0)
-            for other_id in neighbours
+            for other_id in tradeable_neighbours
         ) if output in INPUT_PRODUCTS else 0.0
         return CellLocalView(
             cell_id=cell_id,
@@ -367,6 +385,7 @@ class DynamicCellularEconomy:
             capital=cell.capital,
             productivity_multiplier=productivity_mult,
             neighbour_ids=neighbours,
+            tradeable_neighbour_ids=tradeable_neighbours,
             neighbour_input_demand=neighbour_input_demand,
         )
 
