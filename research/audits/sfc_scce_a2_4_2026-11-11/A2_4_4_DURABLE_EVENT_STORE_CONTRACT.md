@@ -23,6 +23,10 @@ all events in one declared transaction group need one durable commit boundary.
 - event IDs are globally unique in the database, not only in one Python object;
 - a canonical JSON envelope and SHA-256 digest bind group metadata, event
   order, event types, periods and complete posting payloads;
+- event order is stored explicitly as `event_index` with a per-group unique
+  constraint; integrity verification never relies on implicit SQLite rowid;
+- schema version 2 migrates version-1 event rows in their original rowid order
+  and assigns stable event indexes;
 - each event and each posting is inserted under one `BEGIN IMMEDIATE`
   transaction;
 - an identical group replay returns `False` without writing new rows;
@@ -56,7 +60,8 @@ unittest wrapper. It covers:
 8. rejection of in-memory configuration and non-finite lock timeouts;
 9. concurrent identical group delivery (one insert, one replay);
 10. concurrent cross-group event-ID collision (exactly one winner);
-11. post-write SQLite and mirror integrity checks.
+11. version-1 to version-2 migration preserving original group event order;
+12. post-write SQLite and mirror integrity checks.
 
 The fixture uses a non-bank loan origination and an existing-deposit transfer
 inside one transaction group, with a shared causation ID. This establishes
