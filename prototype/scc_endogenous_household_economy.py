@@ -71,6 +71,7 @@ class EndogenousHouseholdEconomy:
         essential_floor_fraction: float = 0.5,
         backlog_retention: float = 0.5,
         max_backlog_periods: float = 1.0,
+        backlog_service_order: str = "current_first",
     ):
         if policy not in POLICIES:
             raise EndogenousHouseholdError("unknown economic policy")
@@ -82,6 +83,8 @@ class EndogenousHouseholdEconomy:
             raise EndogenousHouseholdError("max_backlog_periods must be finite and non-negative")
         if not 0.0 <= essential_floor_fraction <= 1.0:
             raise EndogenousHouseholdError("essential_floor_fraction must be in [0, 1]")
+        if backlog_service_order not in ("current_first", "backlog_first"):
+            raise EndogenousHouseholdError("backlog_service_order must be current_first or backlog_first")
 
         self.policy = policy
         self.seed = seed
@@ -91,6 +94,7 @@ class EndogenousHouseholdEconomy:
         self.essential_floor_fraction = essential_floor_fraction
         self.backlog_retention = backlog_retention
         self.max_backlog_periods = max_backlog_periods
+        self.backlog_service_order = backlog_service_order
 
         self.base_specs = DynamicCellularEconomy.default_specs(seed)
         self.base_specs_by_id = {spec.cell_id: spec for spec in self.base_specs}
@@ -254,9 +258,14 @@ class EndogenousHouseholdEconomy:
             next_backlog = {}
             for product, need in state["essential"].items():
                 delivered = float(claim.essential_served.get(product, 0.0))
-                current_served = min(float(need), delivered)
-                backlog_served = max(0.0, delivered - current_served)
                 old_backlog = float(state["opening_backlog"].get(product, 0.0))
+                if self.backlog_service_order == "current_first":
+                    current_served = min(float(need), delivered)
+                    backlog_served = max(0.0, delivered - current_served)
+                else:
+                    backlog_served = min(old_backlog, delivered)
+                    current_served = min(
+                        float(need), max(0.0, delivered - backlog_served))
                 residual_backlog = max(0.0, old_backlog - backlog_served)
                 current_unmet = max(0.0, float(need) - current_served)
                 retained = self.backlog_retention * (
@@ -352,6 +361,7 @@ class EndogenousHouseholdEconomy:
         return {
             "policy": self.policy,
             "household_policy": self.household_policy,
+            "backlog_service_order": self.backlog_service_order,
             "seed": self.seed,
             "shock": self.shock,
             "periods": len(self.period_results),
