@@ -238,7 +238,7 @@ The first changes the economic state. The second changes the rules or parameters
 - configurable hop radius, deterministic seeds and stress variants;
 - fulfilment, weighted fulfilment, lower-cell fulfilment, inequality and coordination metrics.
 
-Before inter-cell matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The cellular protocol then uses repeated local request rounds. A buyer contacts its nearest eligible supplier within the allowed radius; the supplier allocates scarce stock among received requests; unfilled demand can approach another supplier in a later round.
+Before inter-cell matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The canonical Stage-A cellular comparison now uses an explicit neighbour-relay protocol. A request is forwarded one edge at a time with a bounded time-to-live; cells return offers; the buyer reserves/accepts a feasible offer; and unfilled demand may retry another supplier. The optional event trace records request forwarding, offers, reservations and acceptances. The earlier direct-radius matcher remains available as a comparison helper.
 
 **Stage B — dynamic physical economy:** `prototype/scc_dynamic_economy.py` adds:
 - seven heterogeneous production cells: food, materials, energy, machinery, logistics, software and care;
@@ -248,9 +248,12 @@ Before inter-cell matching, each cell's own stock is netted against its own need
 - production planning, intermediate-input procurement, production and final-consumption phases;
 - local own-consumption before inter-cell matching;
 - event records, deterministic seed replay and resource-conservation checks;
+- explicit neighbour-by-neighbour request relay for the cellular regime;
+- counts of forwarded requests, offers, reservations and acceptances;
+- synthetic per-message coordination costs alongside per-transaction charges;
 - four matched coordination regimes using the same initial world and shock.
 
-The production-planning rules now differ by institutional mechanism. Central planning uses current aggregate declared final demand; the cooperative pool uses aggregate needs with a larger shared buffer; the market rule reacts to previous-period market-wide unmet orders; the cellular rule reacts only to unmet orders signalled inside the configured local neighbourhood. Intermediate input plans account for the materials-energy loop, and cellular producers' input-demand signals are restricted to reachable neighbours. This is still a stylized treatment of institutions, not a full model of real markets or democratic cooperative governance.
+The production-planning rules now differ by institutional mechanism. Central planning uses current aggregate declared final demand; the cooperative pool uses aggregate needs with a larger shared buffer; the market rule reacts to previous-period market-wide unmet orders; the cellular rule reacts only to unmet orders signalled inside the configured local neighbourhood. Intermediate input plans account for the materials-energy loop, and cellular producers' input-demand signals are restricted to reachable neighbours. Cellular messages are relayed hop by hop rather than exposing a global supplier list. The simulator charges a synthetic cost per message, but does not yet deduct message labour from productive time. This remains a stylized treatment of institutions, not a full model of real markets or democratic cooperative governance.
 
 ## 12. What these kernels do not yet model
 
