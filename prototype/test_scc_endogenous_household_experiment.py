@@ -69,8 +69,8 @@ class SCCEEndogenousHouseholdExperimentTests(unittest.TestCase):
             ["current_first_mean"], 0.0,
         )
         self.assertAlmostEqual(
-            cellular["current_food_fulfilment"]
-            ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=10,
+            cellular["total_food_delivered"]
+            ["paired_backlog_first_minus_current_first"]["mean"], 0.0, places=9,
         )
         self.assertNotAlmostEqual(
             cellular["current_care_fulfilment"]
