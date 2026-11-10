@@ -65,9 +65,10 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual((allocations[0].seller, allocations[0].buyer), ("supplier", "buyer"))
         self.assertEqual(allocations[0].distance, 2)
         self.assertEqual(sum(e["type"] == "request_forward" for e in trace), 2)
-        self.assertTrue(any(e["type"] == "offer" for e in trace))
-        self.assertTrue(any(e["type"] == "reservation" for e in trace))
-        self.assertTrue(any(e["type"] == "acceptance" for e in trace))
+        self.assertEqual(sum(e["type"] == "offer_forward" for e in trace), 2)
+        self.assertEqual(sum(e["type"] == "reservation_forward" for e in trace), 2)
+        self.assertEqual(sum(e["type"] == "acceptance_forward" for e in trace), 2)
+        self.assertEqual(len(trace), 8)
 
     def test_relay_protocol_respects_ttl_and_disconnected_networks(self):
         world = World(
