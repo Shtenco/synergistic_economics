@@ -497,6 +497,7 @@ def validate_claim_positions(holder_records, issuer_records, registry):
 
 def sector_financial_net_lending(holder_records, registry, period=None):
     """Aggregate transaction flows for exactly one period, never across periods."""
+    holder_records = tuple(holder_records)
     periods = {row.effective_period for row in holder_records}
     if period is None:
         if len(periods) > 1:
@@ -815,6 +816,9 @@ def main():
         "H": D("3"), "NFC": D("0"), "CB": D("-3"),
         "CBank": D("0"), "GOV": D("0"), "ROW": D("0"),
     }
+    assert sector_financial_net_lending(
+        (row for row in holders + [period2_holder]), registry, period=2
+    ) == period2_nl
 
     sector_nl = sector_financial_net_lending(holders, registry)
     expected = {
