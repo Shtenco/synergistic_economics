@@ -1,4 +1,10 @@
-"""A2.4.3 node-to-node physical flow mirror and consolidation controls."""
+"""A2.4.3 node-to-node physical flow mirror and consolidation controls.
+
+Each physical transfer has two endpoint postings: one source outflow and one
+receiver inflow. The pair shares an immutable flow ID and identical physical
+classification, but has opposite node roles. Internal transfers cancel only
+when both endpoint nodes are inside the chosen consolidation boundary.
+"""
 from dataclasses import dataclass
 from decimal import Decimal as D
 
@@ -8,77 +14,122 @@ class FlowError(ValueError):
 
 
 @dataclass(frozen=True)
-class FlowEndpoint:
+class FlowPosting:
     flow_id: str
+    node_id: str
+    counterparty_id: str
+    role: str
     product_id: str
     grade_id: str
     quantity: D
     unit: str
     period: str
-    sender: str
-    receiver: str
 
 
 class PhysicalFlowRegister:
     def __init__(self):
         self._flows = {}
 
-    def record(self, sender_record, receiver_record):
-        if sender_record.flow_id in self._flows:
-            raise FlowError("duplicate flow_id")
-        if sender_record.flow_id != receiver_record.flow_id:
-            raise FlowError("sender/receiver flow_id mismatch")
+    def record(self, outflow, inflow):
+        if not outflow.flow_id or outflow.flow_id in self._flows:
+            raise FlowError("missing or duplicate flow_id")
+        if outflow.role != "outflow" or inflow.role != "inflow":
+            raise FlowError("endpoint roles must be outflow then inflow")
+        if outflow.flow_id != inflow.flow_id:
+            raise FlowError("flow_id mismatch")
         for field in ("product_id", "grade_id", "quantity", "unit", "period"):
-            if getattr(sender_record, field) != getattr(receiver_record, field):
-                raise FlowError(f"sender/receiver {field} mismatch")
-        if sender_record.sender == sender_record.receiver:
+            if getattr(outflow, field) != getattr(inflow, field):
+                raise FlowError(f"endpoint {field} mismatch")
+        if outflow.node_id == inflow.node_id:
             raise FlowError("self-transfer is not a valid inter-node flow")
-        if sender_record.quantity <= 0 or not sender_record.unit:
+        if (outflow.counterparty_id != inflow.node_id
+                or inflow.counterparty_id != outflow.node_id):
+            raise FlowError("endpoint counterparty identities are not reciprocal")
+        if outflow.quantity <= 0 or not outflow.unit:
             raise FlowError("flow quantity and unit must be positive/present")
-        if sender_record.receiver != receiver_record.receiver or sender_record.sender != receiver_record.sender:
-            raise FlowError("endpoint identities differ")
-        self._flows[sender_record.flow_id] = sender_record
+        if not all((outflow.node_id, inflow.node_id, outflow.product_id,
+                    outflow.grade_id, outflow.period)):
+            raise FlowError("required flow classification is missing")
+        self._flows[outflow.flow_id] = (outflow, inflow)
 
-    def consolidated_internal_net(self, product_id, grade_id, period):
-        # Every internal transfer is an equal source and use; it cancels once.
-        selected = [f for f in self._flows.values()
-                    if (f.product_id, f.grade_id, f.period) ==
-                       (product_id, grade_id, period)]
-        return sum((f.quantity - f.quantity for f in selected), D("0"))
+    def node_net(self, node_id, product_id, grade_id, period):
+        net = D("0")
+        for outflow, inflow in self._flows.values():
+            if (outflow.product_id, outflow.grade_id, outflow.period) != (
+                    product_id, grade_id, period):
+                continue
+            if outflow.node_id == node_id:
+                net -= outflow.quantity
+            if inflow.node_id == node_id:
+                net += inflow.quantity
+        return net
+
+    def consolidated_net(self, node_ids, product_id, grade_id, period):
+        # Transfers with both endpoints inside the boundary cancel exactly.
+        return sum((self.node_net(node, product_id, grade_id, period)
+                    for node in set(node_ids)), D("0"))
 
     @property
     def flow_count(self):
         return len(self._flows)
 
 
+def posting(flow_id, node_id, counterparty_id, role, quantity,
+            product="steel", grade="S235", unit="t", period="P1"):
+    return FlowPosting(flow_id, node_id, counterparty_id, role, product, grade,
+                       D(str(quantity)), unit, period)
+
+
 def main():
     register = PhysicalFlowRegister()
-    outflow = FlowEndpoint("F-001", "steel", "S235", D("12"), "t", "P1",
-                           "smelter", "fabricator")
-    inflow = FlowEndpoint("F-001", "steel", "S235", D("12"), "t", "P1",
-                          "smelter", "fabricator")
-    register.record(outflow, inflow)
-    assert register.flow_count == 1
-    assert register.consolidated_internal_net("steel", "S235", "P1") == 0
 
-    mismatched = FlowEndpoint("F-002", "steel", "S235", D("11"), "t", "P1",
-                              "smelter", "fabricator")
+    # Internal 12 t transfer: source and receiver have opposite endpoint roles.
+    register.record(
+        posting("F-001", "smelter", "fabricator", "outflow", 12),
+        posting("F-001", "fabricator", "smelter", "inflow", 12))
+    assert register.flow_count == 1
+    assert register.node_net("smelter", "steel", "S235", "P1") == D("-12")
+    assert register.node_net("fabricator", "steel", "S235", "P1") == D("12")
+    assert register.consolidated_net(
+        {"smelter", "fabricator"}, "steel", "S235", "P1") == 0
+
+    # Export leaves the domestic boundary; it must not disappear on consolidation.
+    register.record(
+        posting("F-002", "fabricator", "ROW", "outflow", 3),
+        posting("F-002", "ROW", "fabricator", "inflow", 3))
+    assert register.consolidated_net(
+        {"smelter", "fabricator"}, "steel", "S235", "P1") == D("-3")
+
+    # Adversarial mirror failures.
     try:
-        register.record(outflow, mismatched)
+        register.record(
+            posting("F-003", "A", "B", "outflow", 4),
+            posting("F-003", "B", "A", "inflow", 5))
     except FlowError:
         pass
     else:
-        raise AssertionError("mismatched sender/receiver quantity accepted")
+        raise AssertionError("mismatched endpoint quantity accepted")
     try:
-        register.record(outflow, inflow)
+        register.record(
+            posting("F-004", "A", "B", "outflow", 4),
+            posting("F-004", "C", "A", "inflow", 4))
+    except FlowError:
+        pass
+    else:
+        raise AssertionError("non-reciprocal endpoint identity accepted")
+    try:
+        register.record(
+            posting("F-001", "smelter", "fabricator", "outflow", 12),
+            posting("F-001", "fabricator", "smelter", "inflow", 12))
     except FlowError:
         pass
     else:
         raise AssertionError("duplicate flow_id accepted")
 
     print("A2.4.3 physical flow mirror fixture: PASS")
-    print("one 12 t internal transfer recorded once; consolidated internal net=0")
-    print("mismatched quantity and duplicate flow_id rejected")
+    print("internal transfer=12 t; domestic consolidated net=0")
+    print("external export=3 t; domestic consolidated net=-3 t")
+    print("mismatched quantity, non-reciprocal endpoint and duplicate ID rejected")
 
 
 if __name__ == "__main__":
