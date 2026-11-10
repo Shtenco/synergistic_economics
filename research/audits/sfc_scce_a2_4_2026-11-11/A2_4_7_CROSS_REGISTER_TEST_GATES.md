@@ -277,3 +277,19 @@ run `42904711717` on head
 `84958a1f448d7ab89bcddcfa0a5f4155862e52fe`. The latest branch head at the
 time of this note is newer than some surfaced runs; a queued run on an older
 head does not validate the latest head. No completed exact-head PASS is claimed.
+
+
+### 6.10 Current surfaced PR jobs
+
+The PR-observable A2.4 wrapper was added in commit
+`751bbe60ca6e059d560ea5d84089f30f12aa4a56`. GitHub surfaced:
+
+| Workflow | Run | Job | Latest state |
+|---|---:|---:|---|
+| Prototype validation | 42904924813 | 130140308153 | QUEUED |
+| SCCE Stage-C2 validation | 42904924818 | 130140308848 | QUEUED |
+
+Both jobs had no conclusion or logs at the latest poll. The test snapshot
+includes the eleven-script wrapper and financial posting/mirror controls.
+Subsequent commits `01c43c6f...` and `31b12467...` are documentation-only.
+Gate 0 remains pending; no PASS is inferred from queued status.
