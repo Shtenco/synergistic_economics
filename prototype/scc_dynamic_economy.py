@@ -1022,7 +1022,8 @@ def coordination_frontier(runs: int = 20, shock: str = "compound",
         "runs": runs, "shock": shock, "periods": periods,
         "cellular_hops": cellular_hops,
         "hours_per_message_levels": list(levels),
-        "reference": "zero coordination labour hours per message",
+        "coordination_hours_per_additional_record": coordination_hours_per_additional_record,
+        "reference": "zero packet-overhead hours; per-additional-record labour remains charged",
         "frontier": frontier,
     }
 def main():
