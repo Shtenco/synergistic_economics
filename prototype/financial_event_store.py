@@ -115,6 +115,7 @@ class FinancialEventStore:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys = ON")
         connection.execute(f"PRAGMA busy_timeout = {int(self.timeout * 1000)}")
+        connection.execute("PRAGMA synchronous = FULL")
         return connection
 
     def _initialize(self) -> None:
@@ -148,6 +149,24 @@ class FinancialEventStore:
                 );
                 CREATE INDEX IF NOT EXISTS events_by_group
                     ON events(group_id, event_id);
+                CREATE TRIGGER IF NOT EXISTS event_groups_no_update
+                    BEFORE UPDATE ON event_groups
+                    BEGIN SELECT RAISE(ABORT, 'event groups are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS event_groups_no_delete
+                    BEFORE DELETE ON event_groups
+                    BEGIN SELECT RAISE(ABORT, 'event groups are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS events_no_update
+                    BEFORE UPDATE ON events
+                    BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS events_no_delete
+                    BEFORE DELETE ON events
+                    BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS journal_lines_no_update
+                    BEFORE UPDATE ON journal_lines
+                    BEGIN SELECT RAISE(ABORT, 'journal lines are append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS journal_lines_no_delete
+                    BEFORE DELETE ON journal_lines
+                    BEGIN SELECT RAISE(ABORT, 'journal lines are append-only'); END;
             """)
             connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
 
@@ -245,7 +264,51 @@ class FinancialEventStore:
             }
 
     def integrity_check(self) -> bool:
+        """Check SQLite structure, foreign keys, payload hashes and line mirrors."""
         with closing(self._connect()) as connection:
             result = connection.execute("PRAGMA integrity_check").fetchone()[0]
             foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
-        return result == "ok" and not foreign_keys
+            if result != "ok" or foreign_keys:
+                return False
+
+            groups = connection.execute(
+                "SELECT group_id, causation_id, payload_sha256, payload_json "
+                "FROM event_groups ORDER BY group_id"
+            ).fetchall()
+            for group in groups:
+                if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
+                    return False
+                envelope = json.loads(group["payload_json"])
+                if (envelope.get("group_id") != group["group_id"]
+                        or envelope.get("causation_id") != group["causation_id"]):
+                    return False
+                payload_events = envelope.get("events")
+                if not isinstance(payload_events, list) or not payload_events:
+                    return False
+                stored_events = connection.execute(
+                    "SELECT event_id, event_type, effective_period, payload_sha256, payload_json "
+                    "FROM events WHERE group_id = ? ORDER BY rowid",
+                    (group["group_id"],),
+                ).fetchall()
+                if len(stored_events) != len(payload_events):
+                    return False
+                for payload_event, stored in zip(payload_events, stored_events):
+                    event_json = _canonical_json(payload_event)
+                    if (payload_event.get("event_id") != stored["event_id"]
+                            or payload_event.get("event_type") != stored["event_type"]
+                            or payload_event.get("effective_period") != stored["effective_period"]
+                            or hashlib.sha256(event_json.encode("utf-8")).hexdigest() != stored["payload_sha256"]
+                            or event_json != stored["payload_json"]):
+                        return False
+                    stored_lines = connection.execute(
+                        "SELECT posting_json FROM journal_lines "
+                        "WHERE event_id = ? ORDER BY line_no",
+                        (stored["event_id"],),
+                    ).fetchall()
+                    payload_lines = payload_event.get("postings")
+                    if not isinstance(payload_lines, list) or len(stored_lines) != len(payload_lines):
+                        return False
+                    if [row["posting_json"] for row in stored_lines] != [
+                            _canonical_json(line) for line in payload_lines]:
+                        return False
+        return True
