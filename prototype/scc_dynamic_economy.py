@@ -289,6 +289,7 @@ class DynamicCellularEconomy:
             # Stage-B synthetic cells explicitly consent to act as relay nodes.
             cells.append(MatchCell(
                 cid, s, d, pr, bid,
+                trade_consent=self.cells[cid].spec.trade_consent,
                 relay_consent=self.cells[cid].spec.relay_consent,
                 allowed_counterparties=self.cells[cid].spec.allowed_counterparties,
             ))
