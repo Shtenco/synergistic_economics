@@ -3,7 +3,7 @@ import unittest
 from cellular_coordination import (
     Allocation, Cell, World, CoordinationError, allocate_cellular, allocate_relay_cellular, allocate_central,
     allocate_cooperative, allocate_market, default_world, evaluate,
-    monte_carlo, run_comparison, shortest_paths, _state,
+    monte_carlo, run_comparison, shortest_paths, _state, _state,
 )
 
 
@@ -91,7 +91,7 @@ class CellularCoordinationTests(unittest.TestCase):
     def test_counterparty_allowlists_are_bilateral(self):
         buyer = Cell(
             "buyer", {}, {"food": 2.0}, {"food": 2.0}, {"food": 10.0},
-            allowed_counterparties=frozenset({"other"}),
+            allowed_counterparties=frozenset(),
         )
         seller = Cell("seller", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0})
         world = World((buyer, seller), edges=(("buyer", "seller"),),
