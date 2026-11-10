@@ -105,3 +105,13 @@ All three files are committed component fixtures. Their execution in a recorded 
 5. Complete labour interval provenance, paid/unpaid classification, rights/appeal and privacy tests.
 6. Freeze A2.4.6 comparator, treatment definitions, primary outcomes, seed count, horizon, exclusions and statistical method against the actual existing regime implementation. Do not invent these parameters from an illustrative protocol.
 7. Only after Gates 0–2 pass, begin A2.4.8; only after Gate 3 may comparative claims be made. Gate 4 remains empirical validation.
+
+
+## Additional continuation — physical-flow endpoint hardening and executable CI
+
+- Physical flow fixture updated at commit `c00a8c5a61928fa2ee36f8225ef6ecd5581ff0e7`: distinct outflow/inflow postings, reciprocal counterparty validation, product/grade/quantity/unit/period mirror checks, duplicate-ID rejection, node-level net flow, explicit consolidation boundary, and external export retention.
+- Added `.github/workflows/a2-4-audit-controls.yml` at commit `9364918390ec5913aff42902eb4ed55706ab475a`. It runs nine audit scripts with Python 3.12 and compiles the audit directory first.
+- Branch comparison after these additions: 34 commits ahead of `main`, 0 behind. `main` remains unchanged. Draft PR #4 remains unmerged.
+- At the latest poll, the new commit had no surfaced PR workflow runs and combined status returned an empty status list. The two older PR jobs from the preceding head were still queued when last checked. This is **not CI success**; the new branch-push workflow still requires a completed run and logs.
+- Financial journal and labour/consent controls are implemented as component fixtures, not yet integrated institutional-sector ledgers or a legally complete rights engine.
+- A2.4.7 remains open; A2.4.8 remains blocked pending actual B8.1/B2/SCCE schema integration, financial stock-flow reconciliation, preregistration and exact-head test evidence.
