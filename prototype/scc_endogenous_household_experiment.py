@@ -62,7 +62,7 @@ def run_endogenous_household_experiment(
     max_backlog_periods: float = 1.0,
     economic_policies: Sequence[str] = POLICIES,
     household_policies: Sequence[str] = HOUSEHOLD_POLICIES,
-    backlog_service_order: str = "current_first",
+    backlog_service_order: str = "backlog_first",
 ) -> dict:
     if runs < 2:
         raise EndogenousHouseholdExperimentError("at least two paired runs are required")
@@ -203,7 +203,7 @@ def run_backlog_sensitivity(
         "priority_dispersion": priority_dispersion,
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
-        "backlog_service_order": "current_first",
+        "backlog_service_order": "backlog_first",
     }
     with_backlog = run_endogenous_household_experiment(
         **common,
@@ -386,7 +386,7 @@ def main():
             args.households_per_cell, args.priority_dispersion,
             args.essential_floor_fraction, args.backlog_retention,
             args.max_backlog_periods, economic_policies, household_policies,
-            "current_first",
+            "backlog_first",
         )
         if args.summary_only:
             result.pop("paired_runs", None)
