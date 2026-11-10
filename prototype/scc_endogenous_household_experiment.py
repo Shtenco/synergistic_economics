@@ -65,6 +65,7 @@ def run_endogenous_household_experiment(
     economic_policies: Sequence[str] = POLICIES,
     household_policies: Sequence[str] = HOUSEHOLD_POLICIES,
     backlog_service_order: str = "backlog_first",
+    max_care_queue_age_periods: int = 3,
 ) -> dict:
     if runs < 2:
         raise EndogenousHouseholdExperimentError("at least two paired runs are required")
@@ -91,6 +92,7 @@ def run_endogenous_household_experiment(
                     backlog_retention=backlog_retention,
                     max_backlog_periods=max_backlog_periods,
                     backlog_service_order=backlog_service_order,
+                    max_care_queue_age_periods=max_care_queue_age_periods,
                 )
                 model.run(periods)
                 summary = model.summary()
@@ -173,6 +175,7 @@ def run_endogenous_household_experiment(
         "backlog_retention": backlog_retention,
         "max_backlog_periods": max_backlog_periods,
         "backlog_service_order": backlog_service_order,
+        "max_care_queue_age_periods": max_care_queue_age_periods,
         "economic_policies": list(economic_policies),
         "household_policies": list(household_policies),
         "summary": summary,
@@ -206,6 +209,7 @@ def run_backlog_sensitivity(
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
         "backlog_service_order": "backlog_first",
+        "max_care_queue_age_periods": 3,
     }
     with_backlog = run_endogenous_household_experiment(
         **common,
@@ -292,6 +296,7 @@ def run_service_order_sensitivity(
         "max_backlog_periods": max_backlog_periods,
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
+        "max_care_queue_age_periods": 3,
     }
     current_first = run_endogenous_household_experiment(
         **common, backlog_service_order="current_first")
@@ -361,6 +366,7 @@ def main():
     parser.add_argument("--essential-floor-fraction", type=float, default=0.5)
     parser.add_argument("--backlog-retention", type=float, default=0.5)
     parser.add_argument("--max-backlog-periods", type=float, default=1.0)
+    parser.add_argument("--max-care-queue-age-periods", type=int, default=3)
     parser.add_argument("--economic-policies", default="market,central,cooperative,cellular")
     parser.add_argument("--household-policies",
                         default="proportional,priority_weighted,floor_priority")
@@ -392,7 +398,7 @@ def main():
             args.households_per_cell, args.priority_dispersion,
             args.essential_floor_fraction, args.backlog_retention,
             args.max_backlog_periods, economic_policies, household_policies,
-            "backlog_first",
+            "backlog_first", args.max_care_queue_age_periods,
         )
         if args.summary_only:
             result.pop("paired_runs", None)
