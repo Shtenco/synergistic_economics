@@ -241,3 +241,20 @@ Existing Prototype and Stage-C2 PR jobs remained queued without conclusions.
 Until the exact-head audit job and both existing PR jobs complete and their
 logs are inspected, Gate 0 remains pending. A missing surfaced run is not a
 pass and is not, by itself, proof that the push-triggered run did not occur.
+
+
+### 6.9 PR-observable execution of the eleven audit scripts
+
+The standalone A2.4 workflow is retained for branch-push execution only. Its
+PR trigger was removed because the workflow file is not in `main`; do not
+assume a PR event will load a workflow definition introduced only by that PR.
+
+Instead, `prototype/test_a2_4_audit_controls.py` adds eleven unittest cases
+under the path already covered by the existing default-branch
+`.github/workflows/prototype-validation.yml`. Each test launches the
+corresponding committed audit script as a subprocess and asserts zero exit
+status and a PASS marker. This reuses the established PR workflow without
+changing `main`.
+
+**Execution state:** wrapper committed; current-head PR run IDs and logs not
+yet surfaced at the last poll. G0 remains pending until exact-head completion.
