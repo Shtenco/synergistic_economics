@@ -130,3 +130,18 @@ No contribution score may automatically determine legal title, voting power, acc
 12. Personal data is minimized; capability and health-related evidence is not exposed through public aggregate signals.
 
 **Current status:** conceptual separation exists across Volumes II, III, XIII and the SCCE household model, but the complete time/consent/compensation event bridge is not implemented. A2.4.5 remains open.
+
+
+## 6. Hardened component fixture
+
+The executable fixture `audit_labour_consent.py` now rejects unknown consent
+states, any delivered service without an active consent state, delivery above
+accepted/scheduled/safety limits, overlapping time intervals, a non-positive
+period budget, negative closing capability stock, and wage settlement above
+accrued payable. It keeps capability change, service hours and wage settlement
+as separate quantities.
+
+This is still a component contract. It does not yet implement person-level
+identity/privacy controls, revocation chronology, legal basis by jurisdiction,
+appeal, safeguarding, collective bargaining, non-wage in-kind compensation or
+live SCCE service-event integration. A2.4.5 remains open.
