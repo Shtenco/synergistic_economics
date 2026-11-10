@@ -1,9 +1,11 @@
 """Adversarial controls for the durable A2.4.4 financial event store."""
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
+from threading import Barrier
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
@@ -158,6 +160,50 @@ def main():
         }
         assert rollback_store.integrity_check()
 
+        # Concurrent duplicate delivery of one group must serialize to
+        # one insert and one idempotent replay, never duplicate postings.
+        race_db = Path(directory) / "same-group-race.sqlite3"
+        race_store = FinancialEventStore(race_db)
+        same_group_barrier = Barrier(2)
+
+        def same_group_writer():
+            same_group_barrier.wait()
+            return race_store.append_group(
+                "raced-group", (loan,), causation_id="raced-cause")
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            same_group_results = list(pool.map(
+                lambda _: same_group_writer(), range(2)))
+        assert sorted(same_group_results) == [False, True]
+        assert race_store.counts() == {
+            "groups": 1, "events": 1, "journal_lines": 2,
+        }
+        assert race_store.integrity_check()
+
+        # Different transaction groups racing with the same event ID must
+        # not both win the uniqueness check.
+        cross_group_db = Path(directory) / "cross-group-race.sqlite3"
+        cross_group_store = FinancialEventStore(cross_group_db)
+        cross_group_barrier = Barrier(2)
+
+        def cross_group_writer(group_id):
+            cross_group_barrier.wait()
+            try:
+                return cross_group_store.append_group(
+                    group_id, (loan,), causation_id=group_id)
+            except FinancialEventStoreError:
+                return "event-id-conflict"
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cross_group_results = list(pool.map(
+                cross_group_writer, ("race-A", "race-B")))
+        assert cross_group_results.count(True) == 1
+        assert cross_group_results.count("event-id-conflict") == 1
+        assert cross_group_store.counts() == {
+            "groups": 1, "events": 1, "journal_lines": 2,
+        }
+        assert cross_group_store.integrity_check()
+
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
         with closing(sqlite3.connect(database)) as connection:
@@ -174,6 +220,8 @@ def main():
     print("same-content replay is idempotent; changed-content replay is rejected")
     print("cross-group event-ID reuse and binary floating-point amounts are rejected")
     print("injected mid-write failure rolls back group, events and postings together")
+    print("concurrent identical group delivery serializes to one durable insert")
+    print("concurrent cross-group event-ID collision admits exactly one winner")
 
 
 if __name__ == "__main__":
