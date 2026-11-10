@@ -25,6 +25,7 @@ from cellular_coordination import (
     allocate_cooperative,
     allocate_market,
     shortest_paths,
+    communication_paths,
 )
 
 EPS = 1e-9
@@ -341,10 +342,13 @@ class DynamicCellularEconomy:
         # orders signalled inside their configured local neighbourhood.
         plans: Dict[str, float] = {}
         input_need: Dict[str, Dict[str, float]] = {p: {} for p in INPUT_PRODUCTS}
-        distances = shortest_paths(MatchWorld(
+        planning_world = MatchWorld(
             tuple(MatchCell(cid, {}, {}, {}, {}) for cid in self.cells),
             self.edges, BASE_PRICES,
-            self.transport_cost_per_hop, self.transaction_cost))
+            self.transport_cost_per_hop, self.transaction_cost)
+        distances = (communication_paths(planning_world)
+                     if self.policy == "cellular"
+                     else shortest_paths(planning_world))
         total_final_demand = {
             p: sum(c.spec.final_demand.get(p, 0.0) * demand_mult
                    for c in self.cells.values())
