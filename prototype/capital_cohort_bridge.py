@@ -52,6 +52,8 @@ class CellCapitalService:
 
 
 def _finite_nonnegative(value, field: str) -> float:
+    if isinstance(value, bool):
+        raise CapitalBridgeError(f"{field} must be numeric, not boolean")
     try:
         number = float(value)
     except (TypeError, ValueError, OverflowError) as exc:
@@ -82,7 +84,8 @@ def validate_cohort(cohort: CapitalCohort) -> None:
         cohort.service_capacity_per_asset, "service_capacity_per_asset")
     if capacity <= 0:
         raise CapitalBridgeError("service capacity per asset must be positive")
-    if cohort.operating_status not in OPERATING_STATES:
+    if (not isinstance(cohort.operating_status, str)
+            or cohort.operating_status not in OPERATING_STATES):
         raise CapitalBridgeError("unknown operating status")
     _factor(cohort.availability, "availability")
     _factor(cohort.utilization, "utilization")
