@@ -48,5 +48,7 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock none --periods 24 --hops 2 --summary-only
       - name: Run Stage-B paired dynamic Monte Carlo (100 seeds, compound shock, two-hop local reach)
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 2 --summary-only
+      - name: Run Stage-B paired dynamic Monte Carlo (100 seeds, compound shock, three-hop local reach)
+        run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 3 --summary-only
       - name: Run Stage-B paired dynamic Monte Carlo (100 seeds, compound shock, one-hop local reach)
         run: python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 1 --summary-only
