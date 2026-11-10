@@ -183,7 +183,7 @@ class CellularCoordinationTests(unittest.TestCase):
         world = World(
             cells=(
                 Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}),
-                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}, relay_consent=True),
                 Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}),
             ),
             edges=(("buyer", "relay"), ("relay", "supplier")),
