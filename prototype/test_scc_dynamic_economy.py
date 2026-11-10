@@ -6,7 +6,7 @@ from cellular_coordination import (
 )
 from scc_dynamic_economy import (
     DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
-    coordination_sensitivity, coordination_curve,
+    coordination_sensitivity, coordination_frontier, coordination_curve,
 )
 
 
@@ -184,6 +184,28 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             cellular["0.05"]["final_fulfilment_rate"]["mean"],
             cellular["0.0"]["final_fulfilment_rate"]["mean"],
         )
+
+    def test_coordination_frontier_is_paired_and_validates_levels(self):
+        result = coordination_frontier(
+            runs=3, shock="compound", periods=8, cellular_hops=2,
+            hours_levels=(0.0, 0.01, 0.05),
+        )
+        self.assertEqual(result["runs"], 3)
+        cellular = result["frontier"]["cellular"]
+        self.assertEqual(
+            cellular["0.05"]["paired_difference_vs_zero_hours"]
+            ["fixed_price_final_consumption_index"]["n"], 3,
+        )
+        self.assertLess(
+            cellular["0.05"]["paired_difference_vs_zero_hours"]
+            ["fixed_price_final_consumption_index"]["mean"], 0,
+        )
+        self.assertGreater(
+            cellular["0.05"]["metrics"]["total_coordination_hours"]["mean"],
+            cellular["0.01"]["metrics"]["total_coordination_hours"]["mean"],
+        )
+        with self.assertRaises(DynamicEconomyError):
+            coordination_frontier(runs=3, hours_levels=(0.01, 0.05))
 
     def test_invalid_policy_rejected(self):
         with self.assertRaises(DynamicEconomyError):
