@@ -87,3 +87,42 @@ These values are not to be reverse-engineered into invented underlying economic 
 ## Boundary
 
 This finding does not authorize a unified economic engine, does not close A2.4.4, and does not establish full SFC-A…G closure. It specifies the minimum identity boundary needed before a journal fixture can credibly feed sector accounts.
+
+
+## Implementation update — synthetic entity-level fixture added
+
+The first executable control for this boundary is now present in
+`audit_entity_sector_journal.py` and is wired into both the Prototype PR
+wrapper and the branch-push A2.4 workflow.
+
+It implements:
+- an effective-dated entity registry with controlled six-sector membership;
+  overlapping assignments and unknown sector codes are rejected;
+- separate entity, institutional-sector, counterparty and issuer identities
+  on journal lines;
+- entity-level deposit holder/issuer mirror keys, including instrument ID,
+  holder entity, issuer entity, currency, maturity, denomination and valuation
+  basis;
+- entity-level holder-asset / issuer-liability position records with separate
+  T/V/O roll-forwards and exact bilateral mirrors;
+- sector financial net lending derived only after entity-level mirror
+  validation, reproducing the synthetic oracle H +7, NFC −19, CB +4, CBank 0,
+  GOV −15, ROW +23, aggregate zero;
+- positive controls for bank origination, existing-deposit transfer, supplier
+  settlement, principal repayment, interest accrual/settlement, creditor
+  write-off and separately recorded legal forgiveness;
+- negative controls for blank entity ID, unknown sector, overlapping/effective-
+  date sector reassignment, same-sector wrong holder, wrong issuer, wrong
+  currency/maturity/denomination/valuation basis, duplicate claim posting,
+  duplicate event ID, missing claim-side record and duplicate holder record.
+
+The creditor write-off control remains distinct from legal forgiveness: the
+write-off event changes the creditor's recognized asset/allowance but contains
+no debtor-liability extinguishment posting; the separate forgiveness event
+does extinguish the debtor's liability and the corresponding creditor claim.
+
+**Status remains OPEN.** This is a synthetic fixture, not the repository's
+production ledger. It does not yet migrate all journal event families to this
+schema, maintain an authoritative entity registry across the economic runtime,
+or prove that every SFC balance-sheet record originates from a verified
+economic event. Exact-head CI execution and log inspection are still required.
