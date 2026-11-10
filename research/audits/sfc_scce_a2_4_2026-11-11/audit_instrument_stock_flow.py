@@ -23,6 +23,11 @@ class Position:
     revaluation: D
     other_volume: D
     closing: D
+    instrument_id: str = ""
+    currency: str = "LCU"
+    maturity: str = "unspecified"
+    denomination: str = "nominal"
+    valuation_basis: str = "nominal"
 
 
 @dataclass(frozen=True)
@@ -34,20 +39,33 @@ class IssuerLiability:
     revaluation: D
     other_volume: D
     closing: D
+    instrument_id: str = ""
+    currency: str = "LCU"
+    maturity: str = "unspecified"
+    denomination: str = "nominal"
+    valuation_basis: str = "nominal"
 
 
 def position(instrument, holder, issuer, opening, transactions, closing,
-             revaluation=0, other_volume=0):
+             revaluation=0, other_volume=0, *, instrument_id=None,
+             currency="LCU", maturity="unspecified", denomination="nominal",
+             valuation_basis="nominal"):
     return Position(instrument, holder, issuer, D(str(opening)),
                     D(str(transactions)), D(str(revaluation)),
-                    D(str(other_volume)), D(str(closing)))
+                    D(str(other_volume)), D(str(closing)),
+                    instrument_id or instrument, currency, maturity,
+                    denomination, valuation_basis)
 
 
 def liability(instrument, issuer, opening, transactions, closing,
-              revaluation=0, other_volume=0):
+              revaluation=0, other_volume=0, *, instrument_id=None,
+              currency="LCU", maturity="unspecified", denomination="nominal",
+              valuation_basis="nominal"):
     return IssuerLiability(instrument, issuer, D(str(opening)),
                            D(str(transactions)), D(str(revaluation)),
-                           D(str(other_volume)), D(str(closing)))
+                           D(str(other_volume)), D(str(closing)),
+                           instrument_id or instrument, currency, maturity,
+                           denomination, valuation_basis)
 
 
 def validate_stock_flow(positions):
@@ -81,17 +99,25 @@ def _components(p):
             p.other_volume, p.closing)
 
 
+def _identity(p):
+    fields = (p.instrument_id, p.instrument, p.issuer, p.currency,
+              p.maturity, p.denomination, p.valuation_basis)
+    if not all(fields):
+        raise ReconciliationError("incomplete financial instrument identity")
+    return fields
+
+
 def validate_mirrors(positions, issuer_liabilities):
     """Aggregate holder records and compare every component to issuer records."""
     held = {}
     for p in positions:
-        key = (p.instrument, p.issuer)
+        key = _identity(p)
         prior = held.get(key, (D("0"),) * 5)
         held[key] = tuple(a + b for a, b in zip(prior, _components(p)))
 
     issued = {}
     for p in issuer_liabilities:
-        key = (p.instrument, p.issuer)
+        key = _identity(p)
         if key in issued:
             raise ReconciliationError(f"duplicate issuer liability record: {key}")
         issued[key] = _components(p)
@@ -184,6 +210,19 @@ def main():
     else:
         raise AssertionError("missing issuer liability record accepted")
 
+    # Same nominal amount and issuer but different currency must not be netted
+    # into the same instrument mirror. Identity dimensions are part of the key.
+    wrong_currency_liability = list(issuer_liabilities)
+    wrong_currency_liability[0] = liability(
+        "deposit", "CB", 100, 15, 115, currency="USD")
+    validate_issuer_stock_flow(wrong_currency_liability)
+    try:
+        validate_mirrors(positions, wrong_currency_liability)
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("same amount in wrong currency accepted as mirror")
+
     # Valuation-only change alters stocks, not financial net lending.
     valuation_only = [
         position("fx_deposit", "H", "CB", 100, 0, 113,
@@ -217,7 +256,8 @@ def main():
     print("10 holder positions and 7 independent issuer-liability records")
     print("opening, T, V, O and closing mirror component-by-component")
     print("sector financial NL: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23; sum=0")
-    print("negative controls: broken roll-forward, missing issuer record and equal-close T/V mismatch rejected")
+    print("identity key includes instrument ID, currency, maturity, denomination and valuation basis")
+    print("negative controls: broken roll-forward, missing issuer, T/V mismatch and wrong-currency mirror rejected")
     print("valuation-only V=10/O=3 yields zero financial NL; mixed T=7/V=10/O=3 yields +7/-7")
 
 
