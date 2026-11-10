@@ -223,8 +223,8 @@ class EntityJournal:
             if line.account in CLAIM_ACCOUNTS:
                 key = (
                     line.account, line.entity_id, line.counterparty_entity_id,
-                    line.issuer_entity_id, line.instrument_id, line.currency,
-                    line.maturity, line.denomination, line.valuation_basis,
+                    line.issuer_entity_id, line.instrument_id, line.instrument_class,
+                    line.currency, line.maturity, line.denomination, line.valuation_basis,
                 )
                 if key in posting_keys:
                     raise IdentityError(f"duplicate claim-side posting: {key}")
