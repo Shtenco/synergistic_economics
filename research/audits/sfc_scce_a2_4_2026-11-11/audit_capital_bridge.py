@@ -15,7 +15,7 @@ def main():
     net_open = sum(n * w * p0 for n, w in opening)
     additions = D("2")
     retired = D("1")
-    gfcf = additions * p1
+    gross_acquisitions = additions * p1
     cfc = sum(n * D("0.1") * p0 for n, _ in opening)
     gross_disposals = retired * p0
     net_disposals = retired * D("0.7") * p0
@@ -27,10 +27,10 @@ def main():
     net_revaluation = net_survivor_factor * (p1 - p0)
 
     gross_close = (
-        gross_open + gfcf - gross_disposals + gross_revaluation
+        gross_open + gross_acquisitions - gross_disposals + gross_revaluation
     )
     net_close = (
-        net_open + gfcf - cfc - net_disposals + net_revaluation
+        net_open + gross_acquisitions - cfc - net_disposals + net_revaluation
     )
 
     direct_gross = (D("10") + D("8") + D("5") + additions) * p1
@@ -52,7 +52,7 @@ def main():
 
     assert gross_open == D("2400")
     assert net_open == D("2200.0")
-    assert gfcf == D("210")
+    assert gross_acquisitions == D("210")
     assert cfc == D("240.0")
     assert gross_disposals == D("100")
     assert net_disposals == D("70.0")
@@ -74,7 +74,7 @@ def main():
     print(f"physical units: {physical_open} -> {physical_close}")
     print(f"gross stock: {gross_open} -> {gross_close}")
     print(f"net stock: {net_open} -> {net_close}")
-    print(f"GFCF={gfcf}; CFC={cfc}; gross disposals={gross_disposals}; "
+    print(f"gross acquisitions={gross_acquisitions}; CFC={cfc}; gross disposals={gross_disposals}; "
           f"net disposals={net_disposals}")
     print(f"revaluation gross={gross_revaluation}; net={net_revaluation}")
     print(f"capital services: {service_open} -> {service_close}")
