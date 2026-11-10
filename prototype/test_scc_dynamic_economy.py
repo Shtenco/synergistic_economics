@@ -101,6 +101,12 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
                 {r["policy"] for r in result["paired_runs"] if r["seed"] == seed},
                 {"market", "central", "cooperative", "cellular"},
             )
+        stats = result["summary"]["cellular"]["final_fulfilment_rate"]
+        self.assertEqual(stats["n"], 4)
+        self.assertLessEqual(stats["ci95_low"], stats["mean"])
+        self.assertGreaterEqual(stats["ci95_high"], stats["mean"])
+        difference = result["paired_differences_vs_market"]["cellular"]["final_fulfilment_rate"]
+        self.assertEqual(difference["n"], 4)
 
     def test_invalid_policy_rejected(self):
         with self.assertRaises(DynamicEconomyError):
