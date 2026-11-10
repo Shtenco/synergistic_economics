@@ -66,7 +66,7 @@ where \(E\) denotes essential needs and \(D\) discretionary needs.
 
 ## 4. Allocation rules
 
-Two transparent rules are implemented.
+Three transparent rules are implemented.
 
 ### 4.1 Proportional rationing
 
@@ -84,10 +84,18 @@ The second rule uses declared positive priority weights. It allocates scarce qua
 
 This is not automatically fair. The weights are policy parameters; they must be justified, disclosed and sensitivity-tested. The algorithm must never use them to remove basic rights or to value people.
 
-### 4.3 Essential-first sequence
+### 4.3 Floor-priority rationing
+
+The third rule reserves a configurable fraction of every household's essential claim before distributing the remaining essential stock by priority weights. The default floor fraction is 0.5.
+
+If available stock covers all declared floors, every household receives at least that fraction of its essential claim before the residual stock is priority-allocated. If stock is below the sum of floor claims, the floor claims themselves are rationed proportionally. The rule therefore cannot guarantee an absolute floor when physical supply is insufficient.
+
+This is a minimum-protection experiment, not a claim that 50% is the correct social minimum. The fraction must be disclosed, sensitivity-tested and subject to member governance.
+
+### 4.4 Essential-first sequence
 
 For each cell and product:
-1. allocate essential claims;
+1. allocate essential claims using the selected essential rule;
 2. subtract the physical quantity served;
 3. allocate remaining stock to discretionary claims.
 
