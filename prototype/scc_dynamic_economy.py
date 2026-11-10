@@ -690,6 +690,8 @@ class DynamicCellularEconomy:
                     raise DynamicEconomyError(f"negative stock {cid}:{p}={q}")
             if c.capital <= 0:
                 raise DynamicEconomyError("non-positive capital")
+        if any(v < -EPS for v in self.pending_coordination_hours.values()):
+            raise DynamicEconomyError("negative pending coordination labour")
         ending_resource = sum(c.stocks["raw_resource"] for c in self.cells.values())
         if abs(self.initial_resource + self.total_regenerated
                - self.total_resource_used - ending_resource) > 1e-6:
@@ -715,6 +717,7 @@ class DynamicCellularEconomy:
         return {
             "policy": self.policy, "shock": self.shock, "seed": self.seed,
             "periods": len(self.periods), "cellular_hops": self.cellular_hops,
+            "coordination_hours_per_message": self.coordination_hours_per_message,
             "cumulative_output_by_product": output,
             "cumulative_final_consumption_by_product": consumption,
             "cumulative_final_demand": total_demand,
@@ -748,10 +751,13 @@ class DynamicCellularEconomy:
 
 
 def compare(seed: int = 1, shock: str = "none", periods: int = 24,
-            cellular_hops: int = 2):
+            cellular_hops: int = 2,
+            coordination_hours_per_message: float = 0.01):
     results = {}
     for policy in POLICIES:
-        model = DynamicCellularEconomy(policy, seed, shock, cellular_hops)
+        model = DynamicCellularEconomy(
+            policy, seed, shock, cellular_hops,
+            coordination_hours_per_message=coordination_hours_per_message)
         model.run(periods)
         model.validate()
         results[policy] = model.summary()
@@ -775,12 +781,14 @@ def _confidence_summary(values: Sequence[float]):
 
 
 def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
-                cellular_hops: int = 2):
+                cellular_hops: int = 2,
+                coordination_hours_per_message: float = 0.01):
     if runs < 1:
         raise DynamicEconomyError("runs must be positive")
     paired = []
     for seed in range(1, runs + 1):
-        result = compare(seed, shock, periods, cellular_hops)
+        result = compare(seed, shock, periods, cellular_hops,
+                         coordination_hours_per_message)
         for policy, metrics in result.items():
             paired.append({"seed": seed, **metrics})
 
@@ -816,6 +824,7 @@ def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
     return {
         "runs": runs, "shock": shock, "periods": periods,
         "cellular_hops": cellular_hops,
+        "coordination_hours_per_message": coordination_hours_per_message,
         "summary": summary,
         "paired_differences_vs_market": paired_differences,
         "paired_runs": paired,
@@ -830,18 +839,23 @@ def main():
                                              "productivity_shock", "compound"), default="none")
     parser.add_argument("--periods", type=int, default=24)
     parser.add_argument("--hops", type=int, default=2)
+    parser.add_argument("--coordination-hours-per-message", type=float, default=0.01)
     parser.add_argument("--compare", action="store_true")
     parser.add_argument("--monte-carlo", type=int, default=0)
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     if args.monte_carlo:
-        result = monte_carlo(args.monte_carlo, args.shock, args.periods, args.hops)
+        result = monte_carlo(args.monte_carlo, args.shock, args.periods, args.hops,
+                             args.coordination_hours_per_message)
         if args.summary_only:
             result.pop("paired_runs", None)
     elif args.compare:
-        result = compare(args.seed, args.shock, args.periods, args.hops)
+        result = compare(args.seed, args.shock, args.periods, args.hops,
+                         args.coordination_hours_per_message)
     else:
-        model = DynamicCellularEconomy(args.policy, args.seed, args.shock, args.hops)
+        model = DynamicCellularEconomy(
+            args.policy, args.seed, args.shock, args.hops,
+            coordination_hours_per_message=args.coordination_hours_per_message)
         model.run(args.periods)
         model.validate()
         result = model.summary()
