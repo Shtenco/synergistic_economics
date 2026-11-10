@@ -2,11 +2,12 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Research design with the first C2-A1 household-demand-signal bridge implemented; persistent household feedback, time, income and endogenous production response remain unimplemented  
+**Status:** Research design with C2-A1 demand signals and a first C2-A2 in-loop household delivery/backlog prototype implemented; time, income, ownership and labour feedback remain unimplemented  
 **Parent:** [SCCE cellular engine and comparative experiment](SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md)  
 **Predecessor:** [Stage C1 household physical distribution](SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md)  
 **Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)  
-**C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`
+**C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`  
+**C2-A2 implementation:** `prototype/scc_endogenous_household_economy.py`; tests: `prototype/test_scc_endogenous_household_economy.py`
 
 ---
 
@@ -240,8 +241,8 @@ Any composite index must be secondary, with published weights and Pareto-frontie
 ## 12. Implementation sequence and gate criteria
 
 **C2-A1 — Demand signal bridge (first prototype implemented):** a reproducible synthetic household panel is generated from the existing cell demand, and only cell/product aggregates are published to the production engine. Household identifiers and priority weights are absent from the signal payload. A minimum-contributor threshold suppresses small aggregates and fails closed. The bridge must reconcile exactly to the original CellSpec demand, so the controlled Stage-B physical outcome remains unchanged. This is a source-of-demand and privacy-boundary test, not yet a new behavioural or welfare result. See `prototype/scc_household_signals.py` and `prototype/test_scc_household_signals.py`.  
-**C2-A2 — In-loop delivery bridge:** allocate each period's actual physical cell delivery to the persistent household panel inside the economic transition, while reconciling every unit and preserving household privacy.  
-**C2-A3 — Backlog dynamics:** bounded unmet-need carry-over, ageing, expiry and anti-runaway tests; ensure it does not double-count Stage-B's existing external-order feedback.  
+**C2-A2 — In-loop household delivery and bounded essential backlog (first prototype implemented):** after each Stage-B period, allocate the actual per-cell physical consumption to the persistent household panel and reconcile every product/cell quantity exactly. Unmet essential claims are carried into the next period with a configurable retention factor and per-household cap. Those claims are added to the household's own cell demand before the next production transition; the Stage-B external-order signal continues to represent unmet demand from other cells, avoiding duplicate carry-over. The allocation is an accounting decomposition of delivered goods, not a second delivery. The current accounting convention satisfies current-period need before clearing older backlog within each household; this is explicit and must be sensitivity-tested. See `prototype/scc_endogenous_household_economy.py` and its tests.  
+**C2-A3 — Backlog ageing and assurance:** distinguish age cohorts, expiry and essential-service breach duration; add emergency reserves and voluntary mutual-aid supply assurance. The present one-period aggregate backlog cap is only a first anti-runaway control.  
 **C2-B1 — Time budget:** voluntary work/care/rest allocation and time conservation.  
 **C2-B2 — Labour response:** transparent participation functions, sensitivity analysis and identical rules across regimes.  
 **C2-C1 — Household budget:** wages, transfers, ownership income, consumption spending and cash conservation.  
@@ -254,6 +255,6 @@ Do not advance to the next gate until the current gate passes physical/accountin
 
 Stage C1 establishes that distribution rules can change household lower-tail outcomes without changing aggregate physical consumption. Its 25/50/75% floor sensitivity also shows that a nominal floor may be ineffective or may leave too much residual allocation to arbitrary priority weights when supply is severely constrained.
 
-The first C2-A1 prototype now makes household demand the explicit source of cell demand while preserving the Stage-B baseline exactly. The next implementation is **C2-A2: an in-loop household delivery bridge**, followed by bounded unmet-need ageing. Only after that physical feedback passes reconciliation and replay tests should C2-B introduce voluntary time and productive participation. The first C2 stages remain physical and money-free; finance is added later as a supporting subsystem, not as a substitute for the cellular mechanism.
+C2-A1 now makes household demand the explicit source of cell demand while preserving the Stage-B baseline exactly. C2-A2 now allocates each period's physical consumption to households and carries bounded unmet essential claims into the same household's next-period cell demand. Unit tests cover exact demand and delivery reconciliation, backlog bounds, a zero-backlog equivalence control and sensitivity to household allocation rules. This is the first actual household-to-cell feedback loop, but it remains a synthetic physical model with no income, money, labour supply or ownership dynamics. The next gate is a paired multi-seed experiment over all four economic regimes, backlog parameters and household rationing rules. Only after that passes should C2-B introduce voluntary time and productive participation.
 
 **No conclusion about SCCE superiority is justified yet.** The model must earn that conclusion through matched, held-out comparisons that include material, distributional, time, ecological and institutional costs.
