@@ -530,3 +530,28 @@ The latest PR CI runs attached to the preceding code commit
 The subsequent commit updates only the finding document. Neither run has
 completed or provided logs; no PASS is claimed. The dedicated A2.4 workflow's
 exact-head execution also remains unverified.
+
+
+### Entity-level claim mirror hardening
+
+The A2.4.4 fixture now validates all recognized claim asset/liability pairs
+(deposits, loans, trade credit and accrued interest) using the full entity and
+instrument identity. A unilateral creditor write-off is the explicit
+accounting exception: it changes the creditor's recognized asset but does not
+legally extinguish the debtor's obligation. A separate legal-forgiveness event
+reduces both sides.
+
+Additional adversarial cases keep the journal globally balanced while
+substituting a different loan instrument ID, and keep the closing stock equal
+while reclassifying a transaction as revaluation. Both are rejected at the
+entity-level claim mirror.
+
+Latest code commit: `72ad94ad403463aededf59612f8bfd95a45e21bf`.
+Exact-code-head CI:
+- Prototype validation `42910370355` — QUEUED;
+- SCCE Stage-C2 validation `42910370770` — QUEUED.
+
+Latest documentation commit: `060462d1a0d186f7bdd13dc68a8eb00c06e7169f`.
+No completed logs are available and no PASS is claimed. A2.4.4 remains OPEN;
+the fixture is not yet the production financial ledger or authoritative entity
+registry.
