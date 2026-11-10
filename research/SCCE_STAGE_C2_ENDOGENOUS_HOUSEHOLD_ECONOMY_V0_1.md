@@ -2,13 +2,14 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Research design, C2-A1/C2-A2 prototypes and a corrected 20-seed paired typed-backlog experiment implemented; time, income, ownership and labour feedback remain unimplemented  
+**Status:** Research design, C2-A1/C2-A2 prototypes, a corrected 20-seed paired typed-backlog experiment and an initial C2-A3 age-cohort care queue implemented; latest queue integration is awaiting full CI validation. Time, income, ownership and labour feedback remain unimplemented  
 **Parent:** [SCCE cellular engine and comparative experiment](SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md)  
 **Predecessor:** [Stage C1 household physical distribution](SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md)  
 **Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)  
 **Corrected C2-A2 results:** [Typed household needs and care-queue experiment](SCCE_STAGE_C2_A2_TYPED_BACKLOG_RESULTS_2026-11-10.md)  
 **C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`  
 **C2-A2 implementation:** `prototype/scc_endogenous_household_economy.py`; paired experiment: `prototype/scc_endogenous_household_experiment.py`; tests: `prototype/test_scc_endogenous_household_economy.py` and `prototype/test_scc_endogenous_household_experiment.py`  
+**C2-A3 queue implementation:** `prototype/care_service_queue.py`; tests: `prototype/test_care_service_queue.py`  
 **Preliminary results:** [Corrected SCCE Stage-C2-A2 typed-backlog results](SCCE_STAGE_C2_A2_TYPED_BACKLOG_RESULTS_2026-11-10.md); the earlier generic-backlog experiment is marked superseded.
 
 ---
@@ -244,7 +245,7 @@ Any composite index must be secondary, with published weights and Pareto-frontie
 
 **C2-A1 — Demand signal bridge (first prototype implemented):** a reproducible synthetic household panel is generated from the existing cell demand, and only cell/product aggregates are published to the production engine. Household identifiers and priority weights are absent from the signal payload. A minimum-contributor threshold suppresses small aggregates and fails closed. The bridge must reconcile exactly to the original CellSpec demand, so the controlled Stage-B physical outcome remains unchanged. This is a source-of-demand and privacy-boundary test, not yet a new behavioural or welfare result. See `prototype/scc_household_signals.py` and `prototype/test_scc_household_signals.py`.  
 **C2-A2 — In-loop household delivery and typed unmet-need state (first prototype implemented):** after each Stage-B period, allocate actual per-cell physical consumption to the persistent household panel and reconcile every product/cell quantity exactly. The corrected semantics distinguish recurring consumables from queueable services: unmet food is recorded as period-specific deprivation exposure and does not become next-period food demand; delayed care-service claims may enter a bounded, per-household queue and feed the household's own cell demand. Queue service order is explicitly configurable (FIFO/backlog-first versus current-first). The Stage-B external-order signal continues to represent unmet demand from other cells. See `prototype/scc_endogenous_household_economy.py` and its tests.  
-**C2-A3 — Service-queue ageing and assurance:** distinguish age cohorts, expiry and essential-service breach duration; add emergency reserves and voluntary mutual-aid supply assurance. The present one-period care-queue cap is only a first anti-runaway control.  
+**C2-A3 — Service-queue ageing and assurance (initial queue prototype implemented):** `CareServiceQueue` stores age cohorts, serves FIFO, applies an explicit claim-retention/attrition factor, expires claims after a configured number of service opportunities, enforces a per-household cap and records overflow rather than silently adding it to future demand. The integrated household model now reports expired, attrited and unqueued care claims. Emergency reserves, queue-age-specific service priorities, essential-service breach duration and voluntary mutual-aid supply assurance remain to be implemented.  
 **C2-B1 — Time budget:** voluntary work/care/rest allocation and time conservation.  
 **C2-B2 — Labour response:** transparent participation functions, sensitivity analysis and identical rules across regimes.  
 **C2-C1 — Household budget:** wages, transfers, ownership income, consumption spending and cash conservation.  
