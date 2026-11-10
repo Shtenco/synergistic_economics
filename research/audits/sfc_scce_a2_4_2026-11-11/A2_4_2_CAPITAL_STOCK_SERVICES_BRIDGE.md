@@ -255,8 +255,14 @@ actual Stage-B SCCE engine without changing its default behavior:
   with stable cohort/cell/asset identity, vintage, age, physical quantity,
   service capacity per asset, operating state, availability, utilization and
   service quality.
-- It aggregates physical units, operating units and capital-service flow
-  separately for each of the seven SCCE cells.
+- `advance_cohort_period` applies identity-preserving state-transition,
+  final-retirement and physical-loss events. Partial transitions create
+  deterministic child-cohort IDs; repair transitions preserve physical units
+  and vintage; active cohorts age exactly once; additions enter at age zero;
+  terminal retirement records retain the retirement reason and are excluded
+  from current physical stock and service.
+- It aggregates non-retired physical units, operating units and capital-service
+  flow separately for each of the seven SCCE cells.
 - A declared positive `baseline_services[cell_id]` is required. The dimensionless
   multiplier is `current_service_flow / baseline_service_flow`.
 - All cells are validated and calculated before any `CellState.capital` value
@@ -269,9 +275,10 @@ actual Stage-B SCCE engine without changing its default behavior:
 The new `audit_scce_capital_cohort_bridge.py` fixture uses synthetic cohort
 records, maps the resulting ratios onto a real `DynamicCellularEconomy`
 instance, checks the local production proposal's response to the multiplier,
-and executes a real SCCE period. It also checks that repair downtime reduces
-service without deleting physical units, and that invalid zero-service,
-duplicate-ID and incomplete-baseline cases fail closed.
+and executes a real SCCE period. It also checks partial repair/return,
+retirement, physical loss, age progression, terminal-retirement irreversibility,
+atomic rollback, and that invalid zero-service, duplicate-ID and
+incomplete-baseline cases fail closed.
 
 **Interpretation limits:** this is a runtime adapter and synthetic integration
 test, not empirical asset data, not a calibrated capital-service baseline and
