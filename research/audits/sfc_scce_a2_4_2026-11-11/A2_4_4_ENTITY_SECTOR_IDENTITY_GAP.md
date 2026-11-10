@@ -126,3 +126,16 @@ production ledger. It does not yet migrate all journal event families to this
 schema, maintain an authoritative entity registry across the economic runtime,
 or prove that every SFC balance-sheet record originates from a verified
 economic event. Exact-head CI execution and log inspection are still required.
+
+
+The journal fixture's event-level claim check now mirrors all recognized
+asset/liability account pairs by the full entity-level instrument key, not only
+deposits. This includes loan, trade-credit and accrued-interest claims. The
+sole explicit exception is a unilateral creditor write-off event: it is
+classified separately because it reduces the creditor's recognized asset
+without legally extinguishing the debtor's obligation. Legal forgiveness is a
+different event and must reduce both the creditor claim and debtor liability.
+
+Additional adversarial controls now preserve global debit/credit balance while
+changing the loan instrument ID, or preserve closing stock while shifting
+transactions into revaluation; both must be rejected by the claim mirror.
