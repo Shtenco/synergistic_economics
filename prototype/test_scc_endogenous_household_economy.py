@@ -97,6 +97,8 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
             EndogenousHouseholdEconomy(max_backlog_periods=-1.0)
         with self.assertRaises(EndogenousHouseholdError):
             EndogenousHouseholdEconomy(household_policy="unknown")
+        with self.assertRaises(EndogenousHouseholdError):
+            EndogenousHouseholdEconomy(backlog_service_order="random")
 
 
 if __name__ == "__main__":
