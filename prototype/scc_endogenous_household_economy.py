@@ -31,6 +31,8 @@ from household_distribution import (
 
 EPS = 1e-9
 ESSENTIAL_PRODUCTS = ("food", "care")
+CARRYOVER_ESSENTIAL_PRODUCTS = ("care",)
+NONCARRYOVER_ESSENTIAL_PRODUCTS = ("food",)
 
 
 class EndogenousHouseholdError(ValueError):
@@ -42,6 +44,10 @@ class HouseholdPeriodResult:
     period: int
     current_essential_demand: float
     current_essential_served: float
+    current_food_demand: float
+    current_food_served: float
+    current_care_demand: float
+    current_care_served: float
     current_overall_demand: float
     current_overall_served: float
     total_claim_essential_demand: float
@@ -71,7 +77,7 @@ class EndogenousHouseholdEconomy:
         essential_floor_fraction: float = 0.5,
         backlog_retention: float = 0.5,
         max_backlog_periods: float = 1.0,
-        backlog_service_order: str = "current_first",
+        backlog_service_order: str = "backlog_first",
     ):
         if policy not in POLICIES:
             raise EndogenousHouseholdError("unknown economic policy")
@@ -116,13 +122,21 @@ class EndogenousHouseholdEconomy:
         if any(not members for members in self.households_by_cell.values()):
             raise EndogenousHouseholdError("every production cell needs household agents")
 
-        # Only essential claims carry over. Discretionary claims reset each period.
+        # Only delayed care-service claims carry over. Recurring food needs are
+        # period-specific: unmet food is recorded as deprivation exposure, not
+        # converted into a larger food order in the next period.
         self.essential_backlog = {
             h.household_id: {
                 p: 0.0 for p in h.essential_needs
+                if p in CARRYOVER_ESSENTIAL_PRODUCTS
             }
             for h in self.households
         }
+        self.cumulative_unmet_food = {h.household_id: 0.0 for h in self.households}
+        self._cumulative_food_need = {h.household_id: 0.0 for h in self.households}
+        self._cumulative_food_served = {h.household_id: 0.0 for h in self.households}
+        self._cumulative_care_need = {h.household_id: 0.0 for h in self.households}
+        self._cumulative_care_served = {h.household_id: 0.0 for h in self.households}
         self.engine = DynamicCellularEconomy(
             policy, seed, shock, cellular_hops, specs=self.base_specs)
         self.period_results: list[HouseholdPeriodResult] = []
@@ -155,7 +169,10 @@ class EndogenousHouseholdEconomy:
                 for p, q in base.essential_needs.items()
             }
             essential_claim = {
-                p: essential_current[p] + self.essential_backlog[base.household_id].get(p, 0.0)
+                p: essential_current[p] + (
+                    self.essential_backlog[base.household_id].get(p, 0.0)
+                    if p in CARRYOVER_ESSENTIAL_PRODUCTS else 0.0
+                )
                 for p in essential_current
             }
             discretionary_current = {
@@ -243,6 +260,8 @@ class EndogenousHouseholdEconomy:
                         f"household delivery mismatch at {cid}:{product}")
 
         current_essential_demand = current_essential_served = 0.0
+        current_food_demand = current_food_served = 0.0
+        current_care_demand = current_care_served = 0.0
         current_overall_demand = current_overall_served = 0.0
         household_current_rates = []
         claim_essential_demand = float(metrics["essential_demand"])
@@ -258,20 +277,34 @@ class EndogenousHouseholdEconomy:
             next_backlog = {}
             for product, need in state["essential"].items():
                 delivered = float(claim.essential_served.get(product, 0.0))
-                old_backlog = float(state["opening_backlog"].get(product, 0.0))
-                if self.backlog_service_order == "current_first":
-                    current_served = min(float(need), delivered)
-                    backlog_served = max(0.0, delivered - current_served)
+                if product in CARRYOVER_ESSENTIAL_PRODUCTS:
+                    old_backlog = float(state["opening_backlog"].get(product, 0.0))
+                    if self.backlog_service_order == "current_first":
+                        current_served = min(float(need), delivered)
+                        backlog_served = max(0.0, delivered - current_served)
+                    else:
+                        backlog_served = min(old_backlog, delivered)
+                        current_served = min(
+                            float(need), max(0.0, delivered - backlog_served))
+                    residual_backlog = max(0.0, old_backlog - backlog_served)
+                    current_unmet = max(0.0, float(need) - current_served)
+                    retained = self.backlog_retention * (
+                        residual_backlog + current_unmet)
+                    cap = float(base.essential_needs.get(product, 0.0)) * self.max_backlog_periods
+                    next_backlog[product] = min(cap, retained)
+                    current_care_demand += float(need)
+                    current_care_served += current_served
+                    self._cumulative_care_need[base.household_id] += float(need)
+                    self._cumulative_care_served[base.household_id] += current_served
                 else:
-                    backlog_served = min(old_backlog, delivered)
-                    current_served = min(
-                        float(need), max(0.0, delivered - backlog_served))
-                residual_backlog = max(0.0, old_backlog - backlog_served)
-                current_unmet = max(0.0, float(need) - current_served)
-                retained = self.backlog_retention * (
-                    residual_backlog + current_unmet)
-                cap = float(base.essential_needs.get(product, 0.0)) * self.max_backlog_periods
-                next_backlog[product] = min(cap, retained)
+                    # Food is a recurring period-specific need, not a queue.
+                    current_served = min(float(need), delivered)
+                    current_food_demand += float(need)
+                    current_food_served += current_served
+                    self.cumulative_unmet_food[base.household_id] += max(
+                        0.0, float(need) - current_served)
+                    self._cumulative_food_need[base.household_id] += float(need)
+                    self._cumulative_food_served[base.household_id] += current_served
                 household_e_served += current_served
                 household_total_served += current_served
             for product, need in state["discretionary"].items():
@@ -300,6 +333,10 @@ class EndogenousHouseholdEconomy:
             period=period,
             current_essential_demand=current_essential_demand,
             current_essential_served=current_essential_served,
+            current_food_demand=current_food_demand,
+            current_food_served=current_food_served,
+            current_care_demand=current_care_demand,
+            current_care_served=current_care_served,
             current_overall_demand=current_overall_demand,
             current_overall_served=current_overall_served,
             total_claim_essential_demand=claim_essential_demand,
@@ -371,6 +408,15 @@ class EndogenousHouseholdEconomy:
             "current_overall_fulfilment": (
                 current_total_served / current_total_demand
                 if current_total_demand > EPS else 1.0),
+            "current_food_fulfilment": (
+                sum(r.current_food_served for r in self.period_results)
+                / sum(r.current_food_demand for r in self.period_results)
+                if sum(r.current_food_demand for r in self.period_results) > EPS else 1.0),
+            "current_care_fulfilment": (
+                sum(r.current_care_served for r in self.period_results)
+                / sum(r.current_care_demand for r in self.period_results)
+                if sum(r.current_care_demand for r in self.period_results) > EPS else 1.0),
+            "cumulative_unmet_food_units": sum(self.cumulative_unmet_food.values()),
             "cumulative_lower_decile_current_essential_fulfilment": sorted_rates[lower_index],
             "cumulative_minimum_current_essential_fulfilment": min(sorted_rates, default=1.0),
             "cumulative_household_essential_gini": self._gini(household_rates),
@@ -379,7 +425,10 @@ class EndogenousHouseholdEconomy:
             "worst_period_minimum_current_essential_fulfilment": min(
                 r.minimum_current_essential_fulfilment for r in self.period_results),
             "ending_essential_backlog": self.period_results[-1].closing_essential_backlog,
+            "ending_care_service_backlog": self.period_results[-1].closing_essential_backlog,
             "peak_essential_backlog": max(
+                r.closing_essential_backlog for r in self.period_results),
+            "peak_care_service_backlog": max(
                 r.closing_essential_backlog for r in self.period_results),
             "physical_economy": self.engine.summary(),
         }
