@@ -1,10 +1,10 @@
 # SCCE Stage-B Preliminary Dynamic-Economy Results
 
 **Date:** 10 November 2026  
-**Version:** 0.1  
+**Version:** 0.2  
 **Status:** 100-seed synthetic simulation; preliminary mechanism evidence only  
 **Engine:** \`prototype/scc_dynamic_economy.py\`  
-**Validation:** GitHub Actions workflow, Python unit tests and paired 100-seed sweeps
+**Validation:** GitHub Actions workflow, Python unit tests, paired 100-seed sweeps, and a six-level 20-seed coordination-cost frontier
 
 ---
 
