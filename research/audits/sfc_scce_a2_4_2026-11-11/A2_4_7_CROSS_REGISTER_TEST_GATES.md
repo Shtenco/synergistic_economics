@@ -164,3 +164,16 @@ reconciliation and (ii) typed product valuation, and sharpens (iii) the release
 evidence matrix. These additions do not close A2.4.2/A2.4.3 until executed,
 and do not close A2.4.7 while the SCCE CI, financial, labour, full integration,
 comparative and empirical gates remain open.
+
+
+### 6.4 New A2.4.4/A2.4.5/A2.4.3 executable fixtures
+
+| Workstream | Fixture | Negative/positive controls | Status |
+|---|---|---|---|
+| A2.4.3 node flows | `audit_physical_flow_register.py` | sender/receiver equality, unique flow ID, one-time consolidation | COMMITTED / EXECUTION PENDING |
+| A2.4.4 journal | `audit_financial_journal.py` | balanced event postings; bank creation, non-bank transfer, payment, principal, accrual, settlement, impairment and write-off; duplicate ID rejection | COMMITTED / EXECUTION PENDING |
+| A2.4.5 labour | `audit_labour_consent.py` | interval non-overlap, no delivery without consent, delivery <= schedule/safety, wage accrual vs settlement | COMMITTED / EXECUTION PENDING |
+
+These fixtures are component controls. They do not yet constitute a complete
+financial instrument registry, full institutional-sector SFC closure, live
+SCCE integration, or a legally validated rights engine.
