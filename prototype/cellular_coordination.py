@@ -173,31 +173,113 @@ def _route_allocations(world: World, product: str,
 
 
 def allocate_central(world: World) -> List[Allocation]:
-    """Global-information benchmark: highest social priority, then shortest route."""
+    """Global min-cost-flow benchmark for the linear service-value objective.
+
+    The planner has full verified supply, demand, priority and route information.
+    It maximizes weighted served quantity minus logistics cost, subject to seller
+    stock and buyer-need constraints. It is an allocation benchmark, not a full
+    social-welfare optimizer and not a model of real-world central administration.
+    """
     supply, demand = _state(world)
     dist = shortest_paths(world)
-    allocations = []
     cells = {c.cell_id: c for c in world.cells}
-    for p in _products(world):
-        buyers = sorted(
-            (b for b, q in demand[p].items() if q > EPS),
-            key=lambda b: (-cells[b].priority.get(p, 1.0), b))
-        for buyer in buyers:
-            left = demand[p][buyer]
-            sellers = sorted(
-                (s for s, q in supply[p].items() if q > EPS and buyer in dist[s]),
-                key=lambda s: (dist[buyer][s], s))
-            for seller in sellers:
-                if left <= EPS:
-                    break
-                qty = min(left, supply[p][seller])
-                if qty > EPS:
-                    allocations.append(Allocation(p, seller, buyer, qty,
-                                                   dist[buyer][seller]))
-                    supply[p][seller] -= qty
-                    left -= qty
-    return allocations
+    allocations: List[Allocation] = []
 
+    for product in _products(world):
+        sellers = sorted(s for s, q in supply[product].items() if q > EPS)
+        buyers = sorted(b for b, q in demand[product].items() if q > EPS)
+        if not sellers or not buyers:
+            continue
+
+        # Residual graph: source -> sellers -> buyers -> sink.
+        source = 0
+        seller_node = {s: i + 1 for i, s in enumerate(sellers)}
+        buyer_offset = 1 + len(sellers)
+        buyer_node = {b: buyer_offset + i for i, b in enumerate(buyers)}
+        sink = buyer_offset + len(buyers)
+        graph = [[] for _ in range(sink + 1)]
+
+        def add_edge(u, v, capacity, cost, metadata=None):
+            forward = [v, len(graph[v]), float(capacity), float(cost),
+                       float(capacity), metadata]
+            reverse = [u, len(graph[u]), 0.0, -float(cost), 0.0, None]
+            graph[u].append(forward)
+            graph[v].append(reverse)
+            return len(graph[u]) - 1
+
+        for seller in sellers:
+            add_edge(source, seller_node[seller], supply[product][seller], 0.0)
+        for buyer in buyers:
+            add_edge(buyer_node[buyer], sink, demand[product][buyer], 0.0)
+
+        route_edges = []
+        for seller in sellers:
+            for buyer in buyers:
+                if seller == buyer or buyer not in dist[seller]:
+                    continue
+                distance = dist[seller][buyer]
+                priority = cells[buyer].priority.get(product, 1.0)
+                # Objective matches evaluate(): priority-weighted service
+                # benefit less per-unit transport cost.
+                unit_cost = (distance * world.transport_cost_per_hop) - priority
+                capacity = min(supply[product][seller], demand[product][buyer])
+                if capacity <= EPS:
+                    continue
+                edge_index = add_edge(
+                    seller_node[seller], buyer_node[buyer], capacity,
+                    unit_cost, (seller, buyer, distance))
+                route_edges.append((seller, buyer, distance,
+                                    seller_node[seller], edge_index, capacity))
+
+        # Successive shortest augmenting paths. Bellman-Ford handles negative
+        # service-benefit edges; deterministic node/edge order makes replay stable.
+        node_count = len(graph)
+        while True:
+            best = [float("inf")] * node_count
+            parent = [None] * node_count
+            best[source] = 0.0
+            for _ in range(node_count - 1):
+                changed = False
+                for u in range(node_count):
+                    if best[u] == float("inf"):
+                        continue
+                    for edge_index, edge in enumerate(graph[u]):
+                        v, _, capacity, cost, _, _ = edge
+                        candidate = best[u] + cost
+                        if capacity > EPS and candidate < best[v] - 1e-12:
+                            best[v] = candidate
+                            parent[v] = (u, edge_index)
+                            changed = True
+                if not changed:
+                    break
+            if parent[sink] is None or best[sink] >= -EPS:
+                break
+
+            amount = float("inf")
+            node = sink
+            while node != source:
+                u, edge_index = parent[node]
+                amount = min(amount, graph[u][edge_index][2])
+                node = u
+            if amount <= EPS or amount == float("inf"):
+                break
+
+            node = sink
+            while node != source:
+                u, edge_index = parent[node]
+                edge = graph[u][edge_index]
+                edge[2] -= amount
+                graph[node][edge[1]][2] += amount
+                node = u
+
+        for seller, buyer, distance, u, edge_index, initial_capacity in route_edges:
+            residual = graph[u][edge_index][2]
+            quantity = initial_capacity - residual
+            if quantity > EPS:
+                allocations.append(Allocation(product, seller, buyer,
+                                               quantity, distance))
+
+    return allocations
 
 def allocate_market(world: World) -> List[Allocation]:
     """Global bilateral market: bids rank buyers; delivered asks rank sellers."""
