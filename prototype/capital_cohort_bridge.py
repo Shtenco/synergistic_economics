@@ -23,6 +23,7 @@ OPERATING_STATES = {
     "operating", "reserve", "repair", "remanufacturing", "storage", "retired"
 }
 NON_RETIRED_STATES = OPERATING_STATES - {"retired"}
+RETIREMENT_REASONS = {"none", "planned", "failure", "obsolescence", "accident", "other"}
 
 
 @dataclass(frozen=True)
@@ -73,8 +74,9 @@ def _factor(value, field: str) -> float:
 def validate_cohort(cohort: CapitalCohort) -> None:
     if not isinstance(cohort, CapitalCohort):
         raise CapitalBridgeError("all cohort records must be CapitalCohort values")
-    if not all((cohort.cohort_id, cohort.cell_id, cohort.asset_type)):
-        raise CapitalBridgeError("cohort, cell and asset type identities are required")
+    if not all(isinstance(value, str) and value.strip() for value in (
+            cohort.cohort_id, cohort.cell_id, cohort.asset_type)):
+        raise CapitalBridgeError("cohort, cell and asset type identities must be non-empty strings")
     if (not isinstance(cohort.vintage, int) or isinstance(cohort.vintage, bool)
             or not isinstance(cohort.age, int) or isinstance(cohort.age, bool)
             or cohort.vintage < 0 or cohort.age < 0):
@@ -90,8 +92,11 @@ def validate_cohort(cohort: CapitalCohort) -> None:
     _factor(cohort.availability, "availability")
     _factor(cohort.utilization, "utilization")
     _factor(cohort.service_quality, "service_quality")
+    if (not isinstance(cohort.retirement_reason, str)
+            or cohort.retirement_reason not in RETIREMENT_REASONS):
+        raise CapitalBridgeError("unknown retirement reason")
     if cohort.operating_status == "retired":
-        if not cohort.retirement_reason or cohort.retirement_reason == "none":
+        if cohort.retirement_reason == "none":
             raise CapitalBridgeError("retired cohort requires an explicit retirement reason")
     elif cohort.retirement_reason != "none":
         raise CapitalBridgeError("non-retired cohort cannot carry a final retirement reason")
@@ -104,8 +109,9 @@ def aggregate_capital_services(
 ) -> tuple[CellCapitalService, ...]:
     """Aggregate physical units and service flows, then normalize by baseline."""
     ids = tuple(cell_ids)
-    if not ids or len(ids) != len(set(ids)) or any(not x for x in ids):
-        raise CapitalBridgeError("cell IDs must be non-empty and unique")
+    if (not ids or any(not isinstance(x, str) or not x.strip() for x in ids)
+            or len(ids) != len(set(ids))):
+        raise CapitalBridgeError("cell IDs must be non-empty strings and unique")
     known = set(ids)
     if set(baseline_services) != known:
         raise CapitalBridgeError("baseline service map must cover exactly the model cells")
@@ -149,6 +155,8 @@ def aggregate_capital_services(
         multiplier = service / baseline
         if not math.isfinite(multiplier) or multiplier <= 0:
             raise CapitalBridgeError(f"{cid} produced an invalid capital multiplier")
+        if not math.isfinite(physical[cid]) or not math.isfinite(operating[cid]):
+            raise CapitalBridgeError(f"{cid} physical/operating unit aggregate is non-finite")
         result.append(CellCapitalService(
             cid, physical[cid], operating[cid], service, baseline, multiplier))
     return tuple(result)
