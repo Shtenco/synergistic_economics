@@ -229,7 +229,9 @@ def main():
         assert rollback_store.integrity_check()
 
         # Upgrade explicit v1 and crash-interrupted v1-layout databases.
-        legacy_events = (loan, transfer)
+        # Deliberately reverse lexical event-ID order to prove that migration
+        # preserves insertion order rather than sorting by identifier.
+        legacy_events = (transfer, loan)
         for legacy_version, filename in (
                 (1, "legacy-v1.sqlite3"),
                 (0, "legacy-v1-unstamped.sqlite3")):
@@ -245,7 +247,7 @@ def main():
                     "SELECT event_id, event_index FROM events "
                     "WHERE group_id = ? ORDER BY event_index",
                     ("legacy-group",),
-                ).fetchall() == [("loan-1", 0), ("transfer-1", 1)]
+                ).fetchall() == [("transfer-1", 0), ("loan-1", 1)]
 
         # Concurrent duplicate delivery of one group must serialize to
         # one insert and one idempotent replay, never duplicate postings.
