@@ -38,7 +38,7 @@ class EntityRegistry:
                 raise IdentityError("registry rows must be SectorMembership values")
             if not isinstance(row.entity_id, str) or not row.entity_id.strip():
                 raise IdentityError("entity_id must be a non-empty stable string")
-            if row.sector not in SECTORS:
+            if not isinstance(row.sector, str) or row.sector not in SECTORS:
                 raise IdentityError(f"unknown institutional sector: {row.sector}")
             if (not isinstance(row.effective_from, int)
                     or isinstance(row.effective_from, bool)
@@ -131,9 +131,9 @@ def _claim_identity(line):
 def validate_journal_line(line, registry, period):
     if not isinstance(line, JournalLine):
         raise IdentityError("journal line has the wrong record type")
-    if line.account not in CLAIM_ACCOUNTS and not line.account:
+    if not isinstance(line.account, str) or not line.account:
         raise IdentityError("account is required")
-    if line.side not in {"D", "C"}:
+    if not isinstance(line.side, str) or line.side not in {"D", "C"}:
         raise IdentityError("journal side must be D or C")
     if not isinstance(line.amount, D) or not line.amount.is_finite() or line.amount <= 0:
         raise IdentityError("journal amount must be a finite positive Decimal")
@@ -294,6 +294,10 @@ def claim_key(row):
 def validate_claim_positions(holder_records, issuer_records, registry):
     held, issued = {}, {}
     for row in holder_records:
+        if not all(isinstance(value, str) and value.strip() for value in (
+                row.instrument_id, row.instrument_class, row.currency,
+                row.maturity, row.denomination, row.valuation_basis)):
+            raise IdentityError("holder claim has incomplete instrument identity")
         if row.side != "holder_asset":
             raise IdentityError("holder register contains a non-asset record")
         if registry.sector_of(row.entity_id, row.effective_period) != row.institutional_sector:
@@ -303,6 +307,10 @@ def validate_claim_positions(holder_records, issuer_records, registry):
         if (row.counterparty_entity_id != row.issuer_entity_id
                 or row.counterparty_sector != row.issuer_sector):
             raise IdentityError("holder-side counterparty must identify the claim issuer")
+        values = (row.opening, row.transactions, row.revaluation,
+                  row.other_volume, row.closing)
+        if any(not isinstance(value, D) or not value.is_finite() for value in values):
+            raise IdentityError("holder claim contains non-finite or non-Decimal values")
         if row.opening < 0 or row.closing < 0:
             raise IdentityError("negative holder claim position")
         if row.opening + row.transactions + row.revaluation + row.other_volume != row.closing:
@@ -316,6 +324,10 @@ def validate_claim_positions(holder_records, issuer_records, registry):
         )
 
     for row in issuer_records:
+        if not all(isinstance(value, str) and value.strip() for value in (
+                row.instrument_id, row.instrument_class, row.currency,
+                row.maturity, row.denomination, row.valuation_basis)):
+            raise IdentityError("issuer claim has incomplete instrument identity")
         if row.side != "issuer_liability":
             raise IdentityError("issuer register contains a non-liability record")
         if registry.sector_of(row.entity_id, row.effective_period) != row.institutional_sector:
@@ -325,6 +337,10 @@ def validate_claim_positions(holder_records, issuer_records, registry):
         if (row.issuer_entity_id != row.entity_id
                 or row.issuer_sector != row.institutional_sector):
             raise IdentityError("issuer liability must identify its issuer entity")
+        values = (row.opening, row.transactions, row.revaluation,
+                  row.other_volume, row.closing)
+        if any(not isinstance(value, D) or not value.is_finite() for value in values):
+            raise IdentityError("issuer claim contains non-finite or non-Decimal values")
         if row.opening < 0 or row.closing < 0:
             raise IdentityError("negative issuer liability")
         if row.opening + row.transactions + row.revaluation + row.other_volume != row.closing:
@@ -575,6 +591,24 @@ def main():
         pass
     else:
         raise AssertionError("missing issuer claim record accepted")
+
+    # Blank entity identity and unknown sector labels fail closed even when
+    # the other field is populated.
+    blank_entity = replace(
+        e1.lines[0], entity_id="", institutional_sector="CB")
+    try:
+        validate_journal_line(blank_entity, registry, p)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("blank entity ID with populated sector accepted")
+    unknown_sector = replace(e1.lines[0], institutional_sector="UNKNOWN")
+    try:
+        validate_journal_line(unknown_sector, registry, p)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("unknown institutional-sector code accepted")
 
     # Same-sector holder mismatch in a balanced deposit journal must fail.
     bad_e2_lines = tuple(
