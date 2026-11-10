@@ -5,7 +5,7 @@
 - Audit branch: `audit/sfc-scce-a2-4-continuation-20261111`.
 - No unified economic engine is assembled.
 - No SFC financial layer is integrated into SCCE.
-- The only prototype-path modification on the audit branch is a test-only deterministic SCCE fixture in `prototype/test_scc_endogenous_household_economy.py`; production model and queue implementation are unchanged. No production code or canonical `main` changes.
+- The audit branch adds test fixtures and an explicit opt-in adapter `prototype/capital_cohort_bridge.py`; it does not alter the existing SCCE production step, queue implementation or default scalar-capital path. Canonical `main` remains unchanged.
 
 ## Current position
 - Six-sector synthetic SFC: arithmetic and mirror positions close under the source's stated assumptions.
@@ -425,3 +425,18 @@ The exact branch head after these changes is
 been surfaced by the commit-run query. The preceding exact-head PR runs
 `42906225088` (Prototype) and `42906225115` (SCCE Stage-C2) were queued for
 the prior code state; they do not verify this adapter. No PASS is claimed.
+
+
+## 11 November continuation — cohort lifecycle contract and atomic SCCE mapping
+
+A further review found that the first cohort adapter revision had conflated the B8.1 active operating-state vocabulary with final retirement. The adapter now distinguishes:
+- active B8.1 states: operating, reserve, diagnostics, repair, remanufacturing and storage;
+- a terminal `retired` audit record with a required reason, excluded from current physical stock and capital services.
+
+The new `advance_cohort_period` contract preserves partial transitions by deterministic child-cohort IDs, treats physical loss and final retirement as separate quantity-reducing events, increments age once for surviving active cohorts, leaves new additions at age zero, and prevents reactivation or further events on a terminally retired cohort. A partial retirement fixture checks opening 10 units, retirement 3, closing physical stock 7, a 7-unit active remainder and a 3-unit terminal record. Retired records retain their age at retirement.
+
+The SCCE mapping adapter now preflights every target cell and rolls back prior assignments if a later write fails. A negative control injects a second-cell write failure and verifies the first cell's original capital value is restored. The test also verifies that a cell with zero current service is rejected rather than assigned an epsilon multiplier, because the existing SCCE validator requires positive capital.
+
+The dedicated audit workflow now explicitly executes `audit_scce_capital_cohort_bridge.py`; the existing Prototype unittest wrapper also includes it. This is still synthetic adapter-level integration: the SCCE engine does not yet persist cohort records or call `advance_cohort_period` as part of its normal lifecycle. The declared baseline service flow remains synthetic, and B8.1 material/ownership/component passports are not yet fully mapped into this service adapter.
+
+**Execution status:** committed code and tests are present, but no exact-head CI PASS is claimed. The relevant workflows must complete on the latest branch head and their logs must be inspected. A2.4.2 remains OPEN; A2.4.4 entity/sector identity remains OPEN; Gate 0 is not closed.
