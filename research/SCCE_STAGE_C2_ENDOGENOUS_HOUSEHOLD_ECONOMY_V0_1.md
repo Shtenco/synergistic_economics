@@ -2,13 +2,14 @@
 
 **Date:** 10 November 2026  
 **Version:** 0.1  
-**Status:** Research design, C2-A1/C2-A2 prototypes and a 20-seed paired preliminary experiment implemented; time, income, ownership and labour feedback remain unimplemented  
+**Status:** Research design, C2-A1/C2-A2 prototypes and a corrected 20-seed paired typed-backlog experiment implemented; time, income, ownership and labour feedback remain unimplemented  
 **Parent:** [SCCE cellular engine and comparative experiment](SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md)  
 **Predecessor:** [Stage C1 household physical distribution](SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md)  
 **Preliminary evidence:** [Stage C1 household distribution results](SCCE_STAGE_C1_PRELIMINARY_RESULTS_2026-11-10.md)  
+**Corrected C2-A2 results:** [Typed household needs and care-queue experiment](SCCE_STAGE_C2_A2_TYPED_BACKLOG_RESULTS_2026-11-10.md)  
 **C2-A1 implementation:** `prototype/scc_household_signals.py`; tests: `prototype/test_scc_household_signals.py`  
 **C2-A2 implementation:** `prototype/scc_endogenous_household_economy.py`; paired experiment: `prototype/scc_endogenous_household_experiment.py`; tests: `prototype/test_scc_endogenous_household_economy.py` and `prototype/test_scc_endogenous_household_experiment.py`  
-**Preliminary results:** [SCCE Stage-C2-A2 results](SCCE_STAGE_C2_A2_PRELIMINARY_RESULTS_2026-11-10.md)
+**Preliminary results:** [Corrected SCCE Stage-C2-A2 typed-backlog results](SCCE_STAGE_C2_A2_TYPED_BACKLOG_RESULTS_2026-11-10.md); the earlier generic-backlog experiment is marked superseded.
 
 ---
 
@@ -256,6 +257,6 @@ Do not advance to the next gate until the current gate passes physical/accountin
 
 Stage C1 establishes that distribution rules can change household lower-tail outcomes without changing aggregate physical consumption. Its 25/50/75% floor sensitivity also shows that a nominal floor may be ineffective or may leave too much residual allocation to arbitrary priority weights when supply is severely constrained.
 
-C2-A1 makes household demand the explicit source of cell demand while preserving the Stage-B baseline exactly. The first C2-A2 experiment carried both food and care shortfalls forward; a service-order sensitivity then showed that the current-need fulfilment metric could change dramatically without any change in physical deliveries. That exposed a semantic error: recurring food needs must not be treated as a queue of future food orders. The corrected C2-A2 prototype now records unmet food as period-specific deprivation and carries only delayed care services as a bounded queue. The earlier generic-backlog result file is retained but marked superseded. The typed model must now pass unit tests and a fresh paired experiment with food and care reported separately. Only then should C2-A3 add queue ageing, expiry and explicit supply assurance, followed by C2-B voluntary time and productive participation.
+C2-A1 makes household demand the explicit source of cell demand while preserving the Stage-B baseline exactly. C2-A2 now records unmet food as period-specific deprivation and carries only delayed care services as a bounded queue. The corrected typed model has passed its focused unit-test suite and a fresh 20-seed paired experiment across all four production regimes and three household allocation rules. The results show a real trade-off: cooperative coordination leads on aggregate consumption and overall current fulfilment, cellular coordination has a much stronger lower tail than the market control but incurs a large coordination-labour burden, and the market arm's average fulfilment coexists with a severe lower-tail deficit in this synthetic panel. Queue-service attribution changes current-care metrics without changing physical deliveries, so the next gate is age-cohort queue accounting and explicit service-priority events—not another aggregate score. Proceed to C2-A3 with queue ageing, expiry and supply assurance, then C2-B voluntary time and productive participation.
 
 **No conclusion about SCCE superiority is justified yet.** The model must earn that conclusion through matched, held-out comparisons that include material, distributional, time, ecological and institutional costs.
