@@ -152,6 +152,44 @@ def main():
         else:
             raise AssertionError("malformed cohort numeric/lifecycle field accepted")
 
+    # A malformed later target cell must not leave earlier cells mutated.
+    class RejectingCell:
+        def __init__(self):
+            self._capital = 1.0
+
+        @property
+        def capital(self):
+            return self._capital
+
+        @capital.setter
+        def capital(self, value):
+            if value != 1.0:
+                raise RuntimeError("synthetic write rejection")
+            self._capital = value
+
+    class FakeModel:
+        pass
+
+    fake = FakeModel()
+    fake.cells = {
+        "a": type("Cell", (), {"capital": 1.0})(),
+        "b": RejectingCell(),
+    }
+    fake_cohorts = (
+        CapitalCohort("a-1", "a", "machine", 2020, 6, 10, 10,
+                      "operating", .9, .8, .95),
+        CapitalCohort("b-1", "b", "machine", 2020, 6, 10, 10,
+                      "operating", .9, .8, .95),
+    )
+    try:
+        apply_capital_cohorts(fake, fake_cohorts, {"a": 68.4, "b": 68.4})
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("write failure in later cell was accepted")
+    close(fake.cells["a"].capital, 1.0, "rollback of first cell")
+    close(fake.cells["b"].capital, 1.0, "unchanged rejecting cell")
+
     # Duplicate identities and incomplete baselines are rejected.
     try:
         aggregate_capital_services(
@@ -173,6 +211,7 @@ def main():
     print("B8.1 active-state vocabulary enforced; final retirement is a separate stock-removal event")
     print("repair downtime reduces service, not physical stock; utilization scales service")
     print("service index maps atomically to CellState.capital before a real SCCE step")
+    print("negative control: later-cell write failure rolls back earlier capital updates")
     print("local production proposal responds proportionally to the applied capital multiplier")
     print("negative controls: zero service, retired pseudo-state, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
 
