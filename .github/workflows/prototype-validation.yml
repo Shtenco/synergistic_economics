@@ -56,3 +56,5 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --coordination-sensitivity --monte-carlo 20 --shock compound --periods 24 --hops 2
       - name: Run paired Stage-B coordination-labour response frontier (20 seeds, six levels)
         run: python prototype/scc_dynamic_economy.py --coordination-frontier --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
+      - name: Run Stage-C1 household distribution experiment (20 paired seeds)
+        run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --summary-only
