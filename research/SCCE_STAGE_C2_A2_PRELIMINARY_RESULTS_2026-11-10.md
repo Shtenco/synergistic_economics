@@ -38,7 +38,7 @@ The Stage-B external-order signal continues to represent unmet demand from other
 
 All regimes use the same seed-specific production cells, household panel, initial stocks, needs, priorities, technology, shock path and time horizon. Paired comparisons use the same seeds.
 
-The backlog is a **physical unmet-need record**, not money, debt, a token balance or a financial liability. It carries no interest and does not create purchasing power.
+The backlog is a **physical unmet-need record**, not money, debt, a token balance or a financial liability. It carries no interest and does not create purchasing power. Only essential needs are carried forward; discretionary claims reset each period. For this prototype, food and care are classified as essential, while machinery, logistics and software final-demand claims are classified as discretionary. This classification is a modelling convenience, not an empirical household consumption taxonomy.
 
 ### Current-first accounting convention
 
@@ -113,7 +113,7 @@ The results suggest that the cellular local transition responds differently to h
 ## 7. Limitations
 
 - 20 seeds are exploratory, not sufficient for a superiority claim.
-- Household needs, priority weights and production coefficients are synthetic.
+- Household needs, priority weights and production coefficients are synthetic; food and care are the only essential products in this prototype.
 - The market regime is the Stage-B physical market-matching mechanism; it does **not** yet include household wages, income, wealth, prices paid, budget constraints or purchasing power. It is not a complete ordinary market economy.
 - The central and cooperative regimes are stylized allocation controls, not fully specified real-world institutions with governance, enforcement and information costs.
 - No wages, voluntary labour supply, household time use, ownership income, money, credit, debt service, household production or migration are modelled.
