@@ -41,6 +41,12 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             summary = model.summary()
             self.assertGreater(summary["fixed_price_gross_output_index"], 0)
             self.assertGreater(summary["cumulative_final_consumption"], 0)
+            self.assertGreater(summary["total_messages"], 0)
+            self.assertGreater(summary["total_communication_cost"], 0)
+            self.assertGreaterEqual(
+                summary["total_coordination_cost"],
+                summary["total_communication_cost"],
+            )
             self.assertGreaterEqual(summary["ending_raw_resource"], 0)
             self.assertAlmostEqual(
                 summary["initial_raw_resource"] + summary["regenerated_raw_resource"],
