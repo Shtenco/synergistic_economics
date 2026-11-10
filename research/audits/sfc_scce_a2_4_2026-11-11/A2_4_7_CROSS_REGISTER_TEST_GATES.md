@@ -111,3 +111,56 @@ A2.4.8 may begin as a paper/numerical integration experiment only after:
 The end-to-end test does not authorize an integrated runtime. The runtime boundary is a separate decision after Gate 2 and the relevant Gate 3 evidence.
 
 **Current status:** test contract is specified, but the full suite and CI gate are not closed. A2.4.7 remains open.
+
+
+## 6. Operational acceptance matrix (no implicit PASS)
+
+A gate is PASS only when its evidence is present on the audit branch and the
+relevant command/test has actually been executed against the committed source.
+A specification, hand calculation, or script that has merely been written is
+not execution evidence.
+
+| Gate / workstream | Minimum executable evidence | Current disposition |
+|---|---|---|
+| G0-A: SCCE queue | deterministic expiry and overflow integration fixture; all primitive queue tests | **PENDING CI** — replacement fixture committed as `bea7d625`; both required workflows still need successful runs |
+| G0-B: capital | same-cohort script, exact expected output, negative-input rejection | **IMPLEMENTED / EXECUTION PENDING** — `audit_same_cohort_capital.py` |
+| G0-C: product | typed registry/valuation script; mismatched unit and grade rejected; quantity invariant under price change | **IMPLEMENTED / EXECUTION PENDING** — `audit_product_valuation_adapter.py` |
+| G0-D: financial | balanced journal fixtures for origination, transfer, payment, accrual, settlement, default, impairment and write-off | **SPECIFIED ONLY** — not implemented |
+| G0-E: labour/rights | interval-overlap, consent, delivery, compensation accrual/settlement and rights non-inference tests | **SPECIFIED ONLY** — not implemented |
+| G1: interface closure | all A2.4.1–A2.4.7 interfaces pass, typed conversions explicit, no balancing plug | **OPEN** |
+| G2: end-to-end | one frozen period with linked physical, capital, labour and financial event IDs; all stock/flow and mirror identities close | **NOT STARTED** |
+| G3: comparative | preregistered matched-seed regimes, paired outcomes, uncertainty, sensitivity and adverse effects | **NOT STARTED** |
+| G4: empirical | provenance, calibration, held-out observations, identification and external validation for each claimed effect | **NOT STARTED** |
+
+### 6.1 Required command evidence
+
+For each executable control, record:
+- exact commit SHA;
+- interpreter/runtime version;
+- exact command;
+- exit code;
+- stdout/stderr;
+- source-file SHA-256;
+- expected-output comparison;
+- timestamp and runner identity.
+
+For CI, record workflow run ID, workflow name, head SHA, conclusion, and links
+to every job log. A green job on a different head SHA does not satisfy the gate.
+
+### 6.2 Failure semantics
+
+- Missing evidence is **PENDING**, not PASS.
+- A script that is not invoked is **IMPLEMENTED / EXECUTION PENDING**.
+- A failing required test blocks the gate even if unrelated tests pass.
+- A test may be quarantined only with a documented defect, owner, impact boundary
+  and explicit release exception; no silent skip or weakened assertion.
+- A deterministic synthetic control proves arithmetic/contract behavior only.
+  It does not establish model validity, causal synergy, or empirical fit.
+
+### 6.3 Current three-task closure boundary
+
+This continuation adds executable controls for (i) same-cohort capital
+reconciliation and (ii) typed product valuation, and sharpens (iii) the release
+evidence matrix. These additions do not close A2.4.2/A2.4.3 until executed,
+and do not close A2.4.7 while the SCCE CI, financial, labour, full integration,
+comparative and empirical gates remain open.
