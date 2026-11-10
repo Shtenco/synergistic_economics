@@ -58,3 +58,7 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --coordination-frontier --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
       - name: Run Stage-C1 household distribution experiment (20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.5 --summary-only
+      - name: Run Stage-C1 household floor sensitivity (25 percent floor, 20 paired seeds)
+        run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.25 --summary-only
+      - name: Run Stage-C1 household floor sensitivity (75 percent floor, 20 paired seeds)
+        run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.75 --summary-only
