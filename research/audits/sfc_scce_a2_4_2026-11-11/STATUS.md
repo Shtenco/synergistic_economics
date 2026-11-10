@@ -5,7 +5,7 @@
 - Audit branch: `audit/sfc-scce-a2-4-continuation-20261111`.
 - No unified economic engine is assembled.
 - No SFC financial layer is integrated into SCCE.
-- Existing prototype code is not modified in this audit branch; this branch adds independent controls and findings only.
+- The only prototype-path modification on the audit branch is a test-only deterministic SCCE fixture in `prototype/test_scc_endogenous_household_economy.py`; production model and queue implementation are unchanged. No production code or canonical `main` changes.
 
 ## Current position
 - Six-sector synthetic SFC: arithmetic and mirror positions close under the source's stated assumptions.
