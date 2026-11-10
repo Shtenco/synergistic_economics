@@ -101,7 +101,27 @@ The compound-shock cellular results show a sharp dependence on communication/del
 
 This is not a small tuning effect. One-hop cells become trapped in local shortages while useful production and demand exist elsewhere. Extending reach across the network recovers much of the lost consumption. However, three-hop reach is not yet a real federation: it is a radius setting in a single-process simulator. Cells now have separate trade consent, counterparty allowlists and relay-forwarding consent, but the model still lacks a federation charter, message delay, edge capacity, dispute protocol and independent cell runtime.
 
-## 7. What these results do and do not show
+## 7. Coordination-cost response frontier
+
+A separate 20-seed paired experiment varies the fixed packet-overhead labour while keeping the additional-record cost at 0.002 labour-hours per record beyond the first record in a packet. The compound shock, two-hop cellular topology, production rules and random seeds are held constant.
+
+| Packet overhead (hours) | Final fulfilment | Essential fulfilment | Consumption index | Total coordination labour |
+|---:|---:|---:|---:|---:|
+| 0.0000 | 46.05% | 42.64% | 754.15 | 2.16 h |
+| 0.0025 | 46.05% | 42.64% | 754.15 | 28.53 h |
+| 0.0050 | 46.05% | 42.64% | 754.15 | 54.90 h |
+| 0.0100 | 46.05% | 42.64% | 754.15 | 107.65 h |
+| 0.0200 | 45.62% | 41.85% | 746.97 | 214.84 h |
+| 0.0500 | 38.06% | 34.13% | 617.44 | 527.38 h |
+
+Paired differences against zero packet overhead:
+- At 0.0100 hours per packet, the measured production/consumption outcomes do not change in this 20-seed sample, although coordination labour rises to 107.65 hours. The additional-record cost remains active even at zero packet overhead.
+- At 0.0200 hours, final fulfilment falls by **0.43 percentage points** (95% paired CI −0.61 to −0.24); the consumption index falls by 7.18 (CI −10.37 to −4.00).
+- At 0.0500 hours, final fulfilment falls by **7.99 points** (CI −8.22 to −7.77); essential fulfilment falls by 8.51 points (CI −8.86 to −8.17); the consumption index falls by 136.71 (CI −140.43 to −133.00).
+
+**Interpretation:** the current default packet-overhead assumption of 0.01 hours is below the point at which this particular seven-cell simulation becomes labour-constrained. At 0.02 hours, the first measurable output loss appears; at 0.05 hours, the coordination burden materially damages production and essential consumption. This is not a universal economic threshold: it depends on the synthetic labour coefficients, topology, demand, production recipes and protocol. The frontier must be recalibrated and repeated on larger networks.
+
+## 8. What these results do and do not show
 
 ### Supported by the present model
 1. The dynamic physical prototype executes four distinct coordination rules on matched initial worlds.
@@ -123,7 +143,7 @@ The results do not establish that:
 
 The current model excludes money, credit, wages, ownership, investment, household income, employment, working-time choice, public goods, technology diffusion and most ecological externalities. Cellular message forwarding is counted hop by hop and its synthetic labour requirement is deducted from production capacity. Non-cellular message counts remain estimates rather than full protocol traces; governance and enforcement effort remain incomplete. No conclusion about positive-sum prosperity is justified until these are modelled and calibrated.
 
-## 8. Immediate research implications
+## 9. Immediate research implications
 
 1. **Do not treat one-hop locality as the canonical SCCE design.** Cells need bounded multi-hop relay, explicit consent to forward traffic, and voluntary federation rules.
 2. **Separate communication topology from logistics topology.** A request can propagate through several cells while the physical shipment follows a different route.
@@ -135,7 +155,7 @@ The current model excludes money, credit, wages, ownership, investment, househol
 8. **Integrate financial and ownership layers only after the physical layer is stable.** Cash conservation is necessary but not evidence of additional real output.
 9. **Add independent-cell execution and larger networks.** Test 20, 50, 100 and 500 cells, network-density variation, edge failures and communication delays.
 
-## 9. Decision
+## 10. Decision
 
 The first dynamic comparison does **not** show that SCCE is already superior. The strongest result so far is diagnostic: local economic cells need a carefully designed multi-hop/federation layer and explicit essential-service protection. The cooperative-pool control currently leads the stylized model on aggregate consumption; the market control retains an advantage on essential fulfilment during the compound shock; the cellular model improves its aggregate performance as its reach expands, but still does not win.
 
