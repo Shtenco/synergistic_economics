@@ -113,15 +113,19 @@ def allocate_households(
     for h in households:
         if h.cell_id not in known_cells:
             raise HouseholdDistributionError("household references unknown cell")
-        if h.essential_priority <= 0 or h.discretionary_priority <= 0:
-            raise HouseholdDistributionError("household priorities must be positive")
-        if any(float(q) < 0 for q in h.essential_needs.values()):
-            raise HouseholdDistributionError("negative essential need")
-        if any(float(q) < 0 for q in h.discretionary_needs.values()):
-            raise HouseholdDistributionError("negative discretionary need")
+        if (not math.isfinite(float(h.essential_priority))
+                or not math.isfinite(float(h.discretionary_priority))
+                or h.essential_priority <= 0 or h.discretionary_priority <= 0):
+            raise HouseholdDistributionError("household priorities must be finite and positive")
+        if any(not math.isfinite(float(q)) or float(q) < 0
+               for q in h.essential_needs.values()):
+            raise HouseholdDistributionError("essential need must be finite and non-negative")
+        if any(not math.isfinite(float(q)) or float(q) < 0
+               for q in h.discretionary_needs.values()):
+            raise HouseholdDistributionError("discretionary need must be finite and non-negative")
     for cid, stocks in cell_supply.items():
-        if any(float(q) < -EPS for q in stocks.values()):
-            raise HouseholdDistributionError("negative cell supply")
+        if any(not math.isfinite(float(q)) or float(q) < -EPS for q in stocks.values()):
+            raise HouseholdDistributionError("cell supply must be finite and non-negative")
 
     by_cell: Dict[str, list[Household]] = {cid: [] for cid in known_cells}
     for h in households:
@@ -367,13 +371,13 @@ def validate_household_allocation(
         if a.cell_id != h.cell_id:
             raise HouseholdDistributionError("cross-cell household allocation")
         for p, q in a.essential_served.items():
-            if q < -EPS:
+            if not math.isfinite(float(q)) or q < -EPS:
                 raise HouseholdDistributionError("negative essential allocation")
             household_used[(h.household_id, "essential", p)] = (
                 household_used.get((h.household_id, "essential", p), 0.0) + q)
             used[(a.cell_id, p)] = used.get((a.cell_id, p), 0.0) + q
         for p, q in a.discretionary_served.items():
-            if q < -EPS:
+            if not math.isfinite(float(q)) or q < -EPS:
                 raise HouseholdDistributionError("negative discretionary allocation")
             household_used[(h.household_id, "discretionary", p)] = (
                 household_used.get((h.household_id, "discretionary", p), 0.0) + q)
