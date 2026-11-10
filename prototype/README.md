@@ -70,6 +70,22 @@ python -m unittest discover -s prototype -p 'test_*.py' -v
 
 This is a local allocation/coordination kernel, not yet a complete dynamic economy. Its service-value metrics are diagnostic and must not be interpreted as GDP or empirical welfare.
 
+## Prototype 4 — Stage-B Dynamic SCCE Physical Economy
+
+- [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption and four coordination regimes.
+- [test_scc_dynamic_economy.py](test_scc_dynamic_economy.py) — production, determinism, self-trade, resource stock-flow and paired-regime tests.
+- [Stage-B design and limitations](../research/SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md#part-iii--stage-a-kernel-and-its-scope)
+
+Run from the repository root:
+
+```bash
+python prototype/scc_dynamic_economy.py --compare --shock none --periods 24 --hops 2
+python prototype/scc_dynamic_economy.py --compare --shock compound --periods 24 --hops 2
+python prototype/scc_dynamic_economy.py --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
+```
+
+Stage B is a physical production-and-consumption layer. It does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
