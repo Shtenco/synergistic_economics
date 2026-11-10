@@ -72,6 +72,16 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(sum(e["type"] == "acceptance_forward" for e in trace), 2)
         self.assertEqual(len(trace), 8)
 
+    def test_new_cells_default_to_no_external_trade_or_relay(self):
+        cell = Cell("new-cell", {}, {}, {"food": 1.0}, {"food": 1.0})
+        self.assertFalse(cell.trade_consent)
+        self.assertFalse(cell.relay_consent)
+
+    def test_synthetic_default_world_explicitly_opts_in(self):
+        world = default_world(11)
+        self.assertTrue(all(cell.trade_consent for cell in world.cells))
+        self.assertTrue(all(cell.relay_consent for cell in world.cells))
+
     def test_every_allocation_regime_requires_bilateral_consent(self):
         cells = (
             Cell("buyer", {}, {"food": 3.0}, {"food": 2.0}, {"food": 10.0}, trade_consent=True),
