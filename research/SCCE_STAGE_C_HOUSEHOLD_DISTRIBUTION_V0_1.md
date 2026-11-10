@@ -88,7 +88,7 @@ This is not automatically fair. The weights are policy parameters; they must be 
 
 The third rule reserves a configurable fraction of every household's essential claim before distributing the remaining essential stock by priority weights. The default floor fraction is 0.5.
 
-If available stock covers all declared floors, every household receives at least that fraction of its essential claim before the residual stock is priority-allocated. If stock is below the sum of floor claims, the floor claims themselves are rationed proportionally. The rule therefore cannot guarantee an absolute floor when physical supply is insufficient.
+If available stock covers all declared floors, every household receives at least that fraction of its essential claim before the residual essential stock is priority-allocated. If stock is below the sum of floor claims, the floor claims themselves are rationed proportionally, so every household receives the same fraction of its declared floor. Remaining essential claims and discretionary claims are then allocated by their declared priority weights. The rule therefore cannot guarantee an absolute floor when physical supply is insufficient.
 
 This is a minimum-protection experiment, not a claim that 50% is the correct social minimum. The fraction must be disclosed, sensitivity-tested and subject to member governance.
 
