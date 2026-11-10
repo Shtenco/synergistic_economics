@@ -26,15 +26,28 @@ class CareServiceQueueTests(unittest.TestCase):
         self.assertAlmostEqual(queue.total_quantity, 0.0)
 
     def test_retention_attrition_and_capacity_overflow_are_explicit(self):
-        queue = CareServiceQueue(capacity=1.0, max_age_periods=3, retention=0.5)
-        first = queue.advance_and_add(2.0, period=1)
+        capped = CareServiceQueue(capacity=1.0, max_age_periods=3, retention=1.0)
+        first = capped.advance_and_add(2.0, period=1)
         self.assertAlmostEqual(first["accepted_new"], 1.0)
         self.assertAlmostEqual(first["overflow"], 1.0)
-        second = queue.advance_and_add(0.0, period=2)
-        self.assertAlmostEqual(second["attrited"], 0.5)
-        self.assertAlmostEqual(queue.total_quantity, 0.5)
-        self.assertAlmostEqual(queue.overflow_quantity, 1.0)
-        self.assertAlmostEqual(queue.attrited_quantity, 0.5)
+        self.assertAlmostEqual(first["attrited"], 0.0)
+        self.assertAlmostEqual(capped.overflow_quantity, 1.0)
+
+        decaying = CareServiceQueue(capacity=3.0, max_age_periods=3, retention=0.5)
+        admission = decaying.advance_and_add(1.0, period=1)
+        self.assertAlmostEqual(admission["accepted_new"], 0.5)
+        self.assertAlmostEqual(admission["attrited"], 0.5)
+        next_period = decaying.advance_and_add(0.0, period=2)
+        self.assertAlmostEqual(next_period["attrited"], 0.25)
+        self.assertAlmostEqual(decaying.total_quantity, 0.25)
+        self.assertAlmostEqual(decaying.attrited_quantity, 0.75)
+
+    def test_zero_retention_is_a_true_no_queue_control(self):
+        queue = CareServiceQueue(capacity=2.0, max_age_periods=3, retention=0.0)
+        result = queue.advance_and_add(1.5, period=1)
+        self.assertAlmostEqual(result["accepted_new"], 0.0)
+        self.assertAlmostEqual(result["attrited"], 1.5)
+        self.assertAlmostEqual(queue.total_quantity, 0.0)
 
     def test_invalid_queue_parameters_and_service_are_rejected(self):
         with self.assertRaises(CareQueueError):
