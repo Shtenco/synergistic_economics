@@ -102,7 +102,8 @@ class DynamicCellularEconomy:
                  specs: Sequence[CellSpec] | None = None,
                  transport_cost_per_hop: float = 0.035,
                  transaction_cost: float = 0.12,
-                 message_cost_per_message: float = 0.002):
+                 message_cost_per_message: float = 0.002,
+                 communication_edges: Sequence[tuple[str, str]] | None = None):
         if policy not in POLICIES:
             raise DynamicEconomyError("unknown policy: " + policy)
         if cellular_hops < 1:
@@ -127,6 +128,12 @@ class DynamicCellularEconomy:
             ("cell-7", "cell-1"), ("cell-1", "cell-4"),
             ("cell-3", "cell-6"),
         )
+        self.communication_edges = tuple(
+            communication_edges if communication_edges is not None else self.edges)
+        known_ids = set(self.cells)
+        if any(a not in known_ids or b not in known_ids or a == b
+               for a, b in self.communication_edges):
+            raise DynamicEconomyError("invalid communication edge")
         self.transport_cost_per_hop = transport_cost_per_hop
         self.transaction_cost = transaction_cost
         self.message_cost_per_message = message_cost_per_message
@@ -263,7 +270,8 @@ class DynamicCellularEconomy:
             bid = {p: BASE_PRICES[p] * (1.0 + .10 * pr[p]) for p in PRODUCTS}
             cells.append(MatchCell(cid, s, d, pr, bid))
         return MatchWorld(tuple(cells), self.edges, BASE_PRICES,
-                          self.transport_cost_per_hop, self.transaction_cost)
+                          self.transport_cost_per_hop, self.transaction_cost,
+                          self.communication_edges)
 
     def _allocate(self, world: MatchWorld, trace: list[dict] | None = None) -> list[Allocation]:
         if self.policy == "market":
@@ -345,7 +353,8 @@ class DynamicCellularEconomy:
         planning_world = MatchWorld(
             tuple(MatchCell(cid, {}, {}, {}, {}) for cid in self.cells),
             self.edges, BASE_PRICES,
-            self.transport_cost_per_hop, self.transaction_cost)
+            self.transport_cost_per_hop, self.transaction_cost,
+            self.communication_edges)
         distances = (communication_paths(planning_world)
                      if self.policy == "cellular"
                      else shortest_paths(planning_world))
