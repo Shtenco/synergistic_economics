@@ -242,3 +242,19 @@ transfer if holder-level liability movements are omitted. The instrument
 stock-flow fixture computes sector financial net lending from transactions
 (T) only; revaluation (V) and other-volume changes (O) affect stocks
 but do not generate financial net lending.
+
+
+## 11 November continuation — independent issuer-side T/V/O control
+
+`audit_instrument_stock_flow.py` now has seven independent issuer-liability
+records in addition to ten holder positions. It checks both sides' own
+stock-flow roll-forwards and compares opening, T, V, O and closing component
+by component. A negative control preserves the closing total while moving one
+unit from T to V; the mismatch is rejected. A second negative control removes
+an issuer record.
+
+A separate local Decimal check of this component logic passed. The committed
+script still requires execution through the exact-head CI wrapper; no CI PASS
+is claimed. Full SFC-A…G remains open because currency, maturity, legal
+instrument subtypes, equity, trade credit and multi-period event linkage are
+not yet fully represented.
