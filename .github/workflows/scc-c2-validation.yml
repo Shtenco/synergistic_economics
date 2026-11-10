@@ -34,7 +34,7 @@ jobs:
           python -m unittest discover -s prototype -p 'test_*.py' -v
       - name: Run paired C2-A2 household feedback experiment (20 seeds)
         run: |
-          python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --max-care-queue-age-periods 3 --summary-only
+          python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 1.0 --max-backlog-periods 1.0 --max-care-queue-age-periods 3 --summary-only
       - name: Run C2-A2 zero-backlog control (20 seeds)
         run: |
           python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0 --max-backlog-periods 0 --household-policies proportional --summary-only
