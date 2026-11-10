@@ -358,3 +358,17 @@ claimed.
 - Prototype and Stage-C2 runs visible at the previous head
   `42faf56e895fd5a6c8f74cfaa747f0a2dd0c94ea`: queued.
 - No completed exact-head CI logs are available. Do not mark Gate 0 as passed.
+
+
+### Exact-head refresh after status update
+
+The status note above was committed, producing audit branch HEAD
+`a55a6ad66aa3726721945191497290a626f23ccc`. The latest visible CI runs
+are attached to its parent code commit `59409a3654934fd7ec2893cdf4325cda090abc26`:
+- A2.4 audit controls: `42905879020` — queued;
+- Prototype validation: `42905887114` — queued;
+- SCCE Stage-C2 validation: `42905887072` — queued.
+
+The newest status-only commit does not alter test code, but exact-head
+verification still requires confirming the workflow's tested checkout and
+completed result. No PASS is claimed.
