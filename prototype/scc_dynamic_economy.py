@@ -88,6 +88,7 @@ class PeriodResult:
     logistics_cost: float
     coordination_cost: float
     message_count: int
+    message_records: int
     communication_cost: float
     coordination_hours: float
     raw_resource_used: float
@@ -105,7 +106,8 @@ class DynamicCellularEconomy:
                  transaction_cost: float = 0.12,
                  message_cost_per_message: float = 0.002,
                  communication_edges: Sequence[tuple[str, str]] | None = None,
-                 coordination_hours_per_message: float = 0.01):
+                 coordination_hours_per_message: float = 0.01,
+                 coordination_hours_per_additional_record: float = 0.002):
         if policy not in POLICIES:
             raise DynamicEconomyError("unknown policy: " + policy)
         if cellular_hops < 1:
@@ -140,8 +142,10 @@ class DynamicCellularEconomy:
         self.transaction_cost = transaction_cost
         self.message_cost_per_message = message_cost_per_message
         self.coordination_hours_per_message = coordination_hours_per_message
+        self.coordination_hours_per_additional_record = coordination_hours_per_additional_record
         if (transaction_cost < 0 or message_cost_per_message < 0
-                or coordination_hours_per_message < 0):
+                or coordination_hours_per_message < 0
+                or coordination_hours_per_additional_record < 0):
             raise DynamicEconomyError("coordination costs cannot be negative")
         self.pending_coordination_hours = {cid: 0.0 for cid in self.cells}
         self.periods: list[PeriodResult] = []
@@ -153,6 +157,7 @@ class DynamicCellularEconomy:
         self.total_logistics = 0.0
         self.total_coordination = 0.0
         self.total_messages = 0
+        self.total_message_records = 0
         self.total_communication_cost = 0.0
         self.total_coordination_hours = 0.0
         self._validate_specs()
@@ -326,18 +331,21 @@ class DynamicCellularEconomy:
     def _message_load(self, messages: Sequence[dict]) -> Dict[str, float]:
         load = {cid: 0.0 for cid in self.cells}
         unit = self.coordination_hours_per_message
+        record_unit = self.coordination_hours_per_additional_record
         for message in messages:
+            message_effort = unit + record_unit * max(
+                0, int(message.get("records", 1)) - 1)
             sender = message.get("sender")
             receiver = message.get("receiver")
             sender_is_cell = sender in self.cells
             receiver_is_cell = receiver in self.cells
             if sender_is_cell and receiver_is_cell:
-                load[sender] += unit * 0.5
-                load[receiver] += unit * 0.5
+                load[sender] += message_effort * 0.5
+                load[receiver] += message_effort * 0.5
             elif sender_is_cell:
-                load[sender] += unit
+                load[sender] += message_effort
             elif receiver_is_cell:
-                load[receiver] += unit
+                load[receiver] += message_effort
         return load
 
     def _apply_allocations(self, allocations: Sequence[Allocation],
@@ -487,6 +495,7 @@ class DynamicCellularEconomy:
             input_world, input_allocations,
             input_trace if self.policy == "cellular" else None)
         input_messages = len(input_message_trace)
+        input_message_records = sum(int(m.get("records", 1)) for m in input_message_trace)
         input_message_load = self._message_load(input_message_trace)
         input_coordination_hours = sum(input_message_load.values())
         for cid, load in input_message_load.items():
@@ -573,6 +582,7 @@ class DynamicCellularEconomy:
             final_world, final_allocations,
             final_trace if self.policy == "cellular" else None)
         final_messages = len(final_message_trace)
+        final_message_records = sum(int(m.get("records", 1)) for m in final_message_trace)
         final_message_load = self._message_load(final_message_trace)
         final_coordination_hours = sum(final_message_load.values())
         for cid, load in final_message_load.items():
@@ -644,12 +654,14 @@ class DynamicCellularEconomy:
         logistics = input_logistics + final_logistics
         coordination = input_coordination + final_coordination
         message_count = input_message_count + final_message_count
+        message_records = input_message_records + final_message_records
         communication_cost = input_communication_cost + final_communication_cost
         coordination_hours = input_coordination_hours + final_coordination_hours
         self.total_coordination_hours += coordination_hours
         self.total_logistics += logistics
         self.total_coordination += coordination
         self.total_messages += message_count
+        self.total_message_records += message_records
         self.total_communication_cost += communication_cost
         fixed_gross = sum(output_by_product.get(p, 0.0) * BASE_PRICES[p]
                           for p in output_by_product)
@@ -661,7 +673,7 @@ class DynamicCellularEconomy:
             essential_fulfilment, weighted_fulfilment,
             max(0.0, total_demand - sum(served_by_cell.values())),
             total_input_shortage, logistics, coordination, message_count,
-            communication_cost, coordination_hours, raw_used, resource_stock,
+            message_records, communication_cost, coordination_hours, raw_used, resource_stock,
             fixed_gross, fixed_consumption, gini,
         )
         self.periods.append(result)
@@ -718,6 +730,7 @@ class DynamicCellularEconomy:
             "policy": self.policy, "shock": self.shock, "seed": self.seed,
             "periods": len(self.periods), "cellular_hops": self.cellular_hops,
             "coordination_hours_per_message": self.coordination_hours_per_message,
+            "coordination_hours_per_additional_record": self.coordination_hours_per_additional_record,
             "cumulative_output_by_product": output,
             "cumulative_final_consumption_by_product": consumption,
             "cumulative_final_demand": total_demand,
@@ -733,6 +746,7 @@ class DynamicCellularEconomy:
             "total_logistics_cost": self.total_logistics,
             "total_coordination_cost": self.total_coordination,
             "total_messages": self.total_messages,
+            "total_message_records": self.total_message_records,
             "total_communication_cost": self.total_communication_cost,
             "total_coordination_hours": self.total_coordination_hours,
             "ending_pending_coordination_hours": sum(self.pending_coordination_hours.values()),
@@ -835,7 +849,8 @@ def monte_carlo(runs: int = 100, shock: str = "none", periods: int = 24,
 def coordination_sensitivity(runs: int = 20, shock: str = "compound",
                              periods: int = 24, cellular_hops: int = 2,
                              base_hours: float = 0.01,
-                             stress_hours: float = 0.05):
+                             stress_hours: float = 0.05,
+                             additional_record_hours: float = 0.002):
     """Paired same-seed comparison of two coordination-time assumptions."""
     base = monte_carlo(runs, shock, periods, cellular_hops, base_hours)
     stress = monte_carlo(runs, shock, periods, cellular_hops, stress_hours)
