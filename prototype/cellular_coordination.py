@@ -101,6 +101,26 @@ def shortest_paths(world: World) -> Dict[str, Dict[str, int]]:
     return distances
 
 
+
+def communication_paths(world: World) -> Dict[str, Dict[str, int]]:
+    """Shortest hop counts on the message-relay graph, not the delivery graph."""
+    graph = {c.cell_id: set() for c in world.cells}
+    for a, b in (world.communication_edges or world.edges):
+        graph[a].add(b)
+        graph[b].add(a)
+    distances = {}
+    for origin in graph:
+        dist = {origin: 0}
+        queue = deque([origin])
+        while queue:
+            node = queue.popleft()
+            for nxt in sorted(graph[node]):
+                if nxt not in dist:
+                    dist[nxt] = dist[node] + 1
+                    queue.append(nxt)
+        distances[origin] = dist
+    return distances
+
 def _weighted_waterfill(needs: Mapping[str, float],
                         weights: Mapping[str, float],
                         capacity: float) -> Dict[str, float]:
