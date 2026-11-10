@@ -24,8 +24,8 @@ class CareServiceQueue:
 
     A lot created at the end of period t is age 0 at the start of t+1. It gets
     service opportunities during the next max_age_periods periods and expires
-    after its final opportunity. Retention models cancellation/obsolescence of
-    outstanding claims; it is not a health or welfare discount.
+    after its final opportunity. Retention is the survival fraction at queue admission and per waiting period;
+    it models cancellation/obsolescence, not a health or welfare discount.
     """
 
     def __init__(
@@ -97,9 +97,14 @@ class CareServiceQueue:
 
         self.lots = sorted(
             aged, key=lambda lot: (-lot.age_periods, lot.created_period))
+        # Retention is the survival fraction of an unmet claim entering the
+        # queue and of each outstanding lot at every subsequent period.
+        surviving_new = float(new_unmet) * self.retention
+        attrited_new = float(new_unmet) - surviving_new
         remaining_capacity = max(0.0, self.capacity - self.total_quantity)
-        accepted = min(float(new_unmet), remaining_capacity)
-        overflow = float(new_unmet) - accepted
+        accepted = min(surviving_new, remaining_capacity)
+        overflow = surviving_new - accepted
+        attrited += attrited_new
         if accepted > EPS:
             self.lots.append(CareQueueLot(accepted, 0, period))
         self.expired_quantity += expired
