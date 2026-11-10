@@ -326,7 +326,7 @@ class DynamicCellularEconomy:
                 input_demand[p][cid] = shortage
         input_world = self._matching_world(input_supply, input_demand)
         input_allocations = self._allocate(input_world)
-        _, _, input_logistics, input_coordination = self._apply_allocations(
+        _, input_seller_deliveries, input_logistics, input_coordination = self._apply_allocations(
             input_allocations, period, "intermediate.input.delivery")
 
         # Production is constrained by the inputs actually on hand. No input or
@@ -402,8 +402,10 @@ class DynamicCellularEconomy:
             cell_served = served_by_cell[cid]
             unmet_by_cell[cid] = max(0.0, cell_demand - cell_served)
             c.cumulative_unmet_final += unmet_by_cell[cid]
-            c.last_external_orders = seller_product_deliveries.get(
-                (cid, c.spec.output), 0.0)
+            c.last_external_orders = (
+                input_seller_deliveries.get((cid, c.spec.output), 0.0)
+                + seller_product_deliveries.get((cid, c.spec.output), 0.0)
+            )
 
         final_consumption = {
             p: own_consumption[p] + sum(a.quantity for a in final_allocations if a.product == p)
