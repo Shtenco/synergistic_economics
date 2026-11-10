@@ -40,6 +40,14 @@ def _must_reject(call, message):
 def main():
     with tempfile.TemporaryDirectory() as directory:
         database = Path(directory) / "financial-events.sqlite3"
+        _must_reject(
+            lambda: FinancialEventStore(":memory:"),
+            "non-persistent in-memory database was accepted",
+        )
+        _must_reject(
+            lambda: FinancialEventStore(database, timeout=float("nan")),
+            "non-finite SQLite timeout was accepted",
+        )
         loan = _event("loan-1", "nonbank_loan_origination", (
             _posting("loan_asset", "D", "19", "lender-1"),
             _posting("loan_liability", "C", "19", "borrower-1"),
