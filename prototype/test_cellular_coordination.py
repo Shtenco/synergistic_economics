@@ -53,7 +53,8 @@ class CellularCoordinationTests(unittest.TestCase):
         world = World(
             cells=(
                 Cell("buyer", {}, {"food": 4.0}, {"food": 2.0}, {"food": 10.0}),
-                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0},
+                     relay_consent=True),
                 Cell("supplier", {"food": 5.0}, {}, {"food": 1.0}, {"food": 10.0}),
             ),
             edges=(("buyer", "relay"), ("relay", "supplier")),
@@ -117,7 +118,8 @@ class CellularCoordinationTests(unittest.TestCase):
         world = World(
             cells=(
                 Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}),
-                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0},
+                     relay_consent=True),
                 Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}),
             ),
             edges=(("buyer", "supplier"),),
@@ -136,7 +138,8 @@ class CellularCoordinationTests(unittest.TestCase):
                      relay_consent=False),
                 Cell("buyer-b", {}, {"food": 2.0}, {"food": 1.0}, {"food": 5.0},
                      relay_consent=False),
-                Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 5.0},
+                     relay_consent=True),
                 Cell("supplier", {"food": 4.0}, {}, {"food": 1.0}, {"food": 5.0}),
             ),
             edges=(("buyer-a", "relay"), ("buyer-b", "relay"), ("relay", "supplier")),
