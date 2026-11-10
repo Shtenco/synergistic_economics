@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
       - name: Run C2 household signal and feedback tests
         run: |
-          python -m unittest discover -s prototype -p 'test_scc_household*.py' -v
+          python -m unittest discover -s prototype -p 'test_*.py' -v
       - name: Run paired C2-A2 household feedback experiment (20 seeds)
         run: |
           python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only
