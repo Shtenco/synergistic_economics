@@ -32,7 +32,7 @@ A household is represented by:
 
 Essential and discretionary claims are separate even when they concern the same product. This allows the rule to protect a minimum food requirement before distributing additional food as discretionary consumption.
 
-The current model does not infer household need from protected personal attributes. Priority is an explicit synthetic model parameter and must not be interpreted as a measure of a person's worth. The experiment uses a reproducible synthetic household panel; the default priority dispersion is 0.4 around a common baseline, not an empirical estimate.
+The current model does not infer household need from protected personal attributes. Priority is an explicit synthetic model parameter and must not be interpreted as a measure of a person's worth. Product classification is also synthetic: Stage B currently labels food, care, machinery, logistics and software as final-demand outputs. Stage C1 treats food and care as essential and the remaining declared final-demand products as discretionary only for this prototype. A calibrated household basket must reclassify capital equipment and business services rather than assume that every Stage-B final-demand product is ordinary household consumption. The experiment uses a reproducible synthetic household panel; the default priority dispersion is 0.4 around a common baseline, not an empirical estimate.
 
 ## 3. Distribution boundary
 
