@@ -64,11 +64,28 @@ class CellularCoordinationTests(unittest.TestCase):
         self.assertEqual(len(allocations), 1)
         self.assertEqual((allocations[0].seller, allocations[0].buyer), ("supplier", "buyer"))
         self.assertEqual(allocations[0].distance, 2)
+        self.assertEqual(allocations[0].communication_hops, 2)
         self.assertEqual(sum(e["type"] == "request_forward" for e in trace), 2)
         self.assertEqual(sum(e["type"] == "offer_forward" for e in trace), 2)
         self.assertEqual(sum(e["type"] == "reservation_forward" for e in trace), 2)
         self.assertEqual(sum(e["type"] == "acceptance_forward" for e in trace), 2)
         self.assertEqual(len(trace), 8)
+
+    def test_message_relay_and_physical_delivery_use_separate_graphs(self):
+        world = World(
+            cells=(
+                Cell("buyer", {}, {"food": 2.0}, {"food": 1.0}, {"food": 10.0}),
+                Cell("relay", {}, {}, {"food": 1.0}, {"food": 10.0}),
+                Cell("supplier", {"food": 2.0}, {}, {"food": 1.0}, {"food": 10.0}),
+            ),
+            edges=(("buyer", "supplier"),),
+            prices={"food": 4.0},
+            communication_edges=(("buyer", "relay"), ("relay", "supplier")),
+        )
+        allocations = allocate_relay_cellular(world, max_hops=2)
+        self.assertEqual(len(allocations), 1)
+        self.assertEqual(allocations[0].communication_hops, 2)
+        self.assertEqual(allocations[0].distance, 1)
 
     def test_relay_protocol_respects_ttl_and_disconnected_networks(self):
         world = World(
