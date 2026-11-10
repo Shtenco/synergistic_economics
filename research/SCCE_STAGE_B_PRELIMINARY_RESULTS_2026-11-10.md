@@ -48,7 +48,7 @@ The fixed-price indices are not GDP, value added, income, profit, utility or emp
 
 100 paired seeds, 24 periods, two-hop local reach for the cellular arm.
 
-| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Messages | Coordination cost |
+| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Market | 51.78% | 51.65–51.91% | 51.15% | 51.03–51.27% | 51.62% | 0.360 | 706.11 | 1,644 | 68.47 |
 | Central | 56.40% | 55.97–56.83% | 54.84% | 54.52–55.16% | 55.66% | 0.235 | 771.81 | 1,549 | 75.91 |
