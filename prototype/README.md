@@ -95,10 +95,11 @@ Stage B is a physical production-and-consumption layer. Cellular production plan
 ## Prototype 5 — Stage-C1 Household Physical Distribution
 
 - [household_distribution.py](household_distribution.py) — distributes goods already available inside each cell among that cell's households; supports proportional and priority-weighted max-min rationing, essential-first sequencing and household-level distribution metrics.
-- [test_household_distribution.py](test_household_distribution.py) — tests physical stock conservation, household need bounds, no cross-cell pooling, lower-tail metrics and priority rules.
+- [scc_household_bridge.py](scc_household_bridge.py) — creates reproducible synthetic household profiles from each Stage-B cell's declared demand and disaggregates the period's already-consumed physical quantities; it is explicitly post-hoc and does not create a second goods flow.
+- [test_household_distribution.py](test_household_distribution.py) and [test_scc_household_bridge.py](test_scc_household_bridge.py) — test stock conservation, household need bounds, no cross-cell pooling, lower-tail metrics, and exact reconciliation of household essential service to Stage-B consumption.
 - [Stage-C1 design and limitations](../research/SCCE_STAGE_C_HOUSEHOLD_DISTRIBUTION_V0_1.md) — money-free household layer and integration boundary with Stage B.
 
-The Stage-C1 kernel is deliberately separate from Stage B for now. Stage B determines physical goods delivered to a cell; Stage C1 distributes cell-held goods among its own households. The two layers must not double-count deliveries or create physical quantities. Household income, wages, ownership, money and credit are not yet implemented.
+The Stage-C1 kernel remains separate from Stage B's production and matching decisions. A tested post-hoc bridge now reads Stage-B per-cell demand and consumption snapshots and decomposes the already-consumed quantities among synthetic household profiles. It does not feed back into production or create a second delivery. A future endogenous integration must preserve the same no-double-counting boundary. Household income, wages, ownership, money and credit are not yet implemented.
 
 ## Validation
 
