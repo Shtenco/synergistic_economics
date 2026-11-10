@@ -168,6 +168,17 @@ class HouseholdDistributionTests(unittest.TestCase):
             self.assertAlmostEqual(metrics["essential_served"], 11.0)
             self.assertAlmostEqual(metrics["overall_served"], 14.0)
 
+    def test_tiny_negative_floating_residue_is_clamped_but_not_material_shortage(self):
+        household = Household("h", "cell-a", {"food": 1.0}, {})
+        supply = {"cell-a": {"food": -1e-12}}
+        allocations = allocate_households((household,), supply)
+        self.assertAlmostEqual(allocations[0].essential_served["food"], 0.0)
+        self.assertTrue(validate_household_allocation(
+            (household,), supply, allocations))
+        with self.assertRaises(HouseholdDistributionError):
+            allocate_households(
+                (household,), {"cell-a": {"food": -1e-4}})
+
     def test_unknown_policy_rejected(self):
         with self.assertRaises(HouseholdDistributionError):
             allocate_households(self.households, self.supply, "central")
