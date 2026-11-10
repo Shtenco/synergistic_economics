@@ -14,7 +14,7 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         world = World(
             cells=(
                 Cell("a", {"food": 10.0}, {"food": 7.0}, {"food": 1.0}, {"food": 20.0}),
-                Cell("b", {}, {"food": 3.0}, {"food": 1.0}, {"food": 20.0}),
+                Cell("b", {}, {}, {"food": 1.0}, {"food": 20.0}),
             ),
             edges=(("a", "b"),),
             prices={"food": 4.0},
