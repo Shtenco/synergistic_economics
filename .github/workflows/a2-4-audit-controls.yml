@@ -7,12 +7,6 @@ on:
     paths:
       - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - ".github/workflows/a2-4-audit-controls.yml"
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
-      - ".github/workflows/a2-4-audit-controls.yml"
 
 permissions:
   contents: read
