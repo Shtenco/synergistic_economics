@@ -50,6 +50,7 @@ Volumes VII–XV progressively develop the theory of reproducible economic capac
 - **[Stage A — Typed Ontology and State-Space Audit](research/STAGE_A_TYPED_ONTOLOGY_AUDIT_2026-11-10.md)** — extended review of Volumes I–XV, distinguishing stocks, flows, rights, relations and measurement profiles.
 - **[Stage A2 — Complete Typed Crosswalk Across Volumes](research/STAGE_A2_COMPLETE_TYPED_CROSSWALK_2026-11-10.md)** — maps local state representations in Volumes I, IV, VIII, IX, XII, XIV and XV, identifying information loss and 16 integration issues.
 - **[Stage B — Physical and Capital Balance Audit](research/STAGE_B_PHYSICAL_AND_CAPITAL_BALANCE_AUDIT_2026-11-10.md)** — reviews physical flows, production, intermediate use, capital, capital services, CFC and ecological constraints against the existing integrated balance and SFC architecture.
+- **[Stage B2 — Multicommodity Physical Balance Test](research/STAGE_B2_MULTICOMMODITY_PHYSICAL_CLOSURE_TEST_2026-11-10.md)** — a synthetic natural-unit closure test for steel, grain, electricity, fuel, scrap and equipment, including mass and energy conversion balances.
 - **[Repository audit, 9 November 2026](research/REPOSITORY_AUDIT_2026-11-09_RU.md)** — scope, checks, corrected issues, remaining model limitations and validation status.
 
 ## Canonical data contracts
