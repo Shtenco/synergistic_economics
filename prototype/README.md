@@ -54,7 +54,7 @@ Prototype 2 currently uses immediate cash settlement. Trade credit, maturity sch
 
 ## Prototype 3 — SCCE Cellular Coordination Kernel
 
-- [cellular_coordination.py](cellular_coordination.py) — Stage-A local-neighbour matching protocol with market, central benchmark, cooperative-pool and cellular regimes.
+- [cellular_coordination.py](cellular_coordination.py) — Stage-A local-neighbour matching protocol, including explicit request relay, offers, reservations and acceptances; market, central min-cost-flow, cooperative-pool and cellular regimes.
 - [test_cellular_coordination.py](test_cellular_coordination.py) — invariants for supply/demand bounds, local hop limits, disconnected components, determinism, stress cases and paired Monte Carlo structure.
 - [Model and experiment specification](../research/SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md) — cellular state transition, local messages, reservations, consent, fair comparison, outcome vector and research roadmap.
 - [Preliminary Stage-A benchmark results](../research/SCCE_STAGE_A_PRELIMINARY_BENCHMARK_2026-11-10.md) — paired 100-seed results for baseline, compound, supply-crisis and demand-surge scenarios.
@@ -72,7 +72,7 @@ This is a local allocation/coordination kernel, not yet a complete dynamic econo
 
 ## Prototype 4 — Stage-B Dynamic SCCE Physical Economy
 
-- [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption and four coordination regimes.
+- [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption, explicit cellular message relay and per-message coordination-cost accounting.
 - [test_scc_dynamic_economy.py](test_scc_dynamic_economy.py) — production, determinism, self-trade, resource stock-flow and paired-regime tests.
 - [100-seed Stage-B results](../research/SCCE_STAGE_B_PRELIMINARY_RESULTS_2026-11-10.md) — paired baseline and compound-shock comparisons, confidence intervals and hop-radius sensitivity.
 - [Stage-B design and limitations](../research/SCCE_CELLULAR_ENGINE_AND_COMPARATIVE_EXPERIMENT_V0_2.md#part-iii--stage-a-kernel-and-its-scope)
@@ -88,7 +88,7 @@ python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --per
 python prototype/scc_dynamic_economy.py --monte-carlo 100 --shock compound --periods 24 --hops 3 --summary-only
 ```
 
-Stage B is a physical production-and-consumption layer. It does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
+Stage B is a physical production-and-consumption layer. Cellular requests are now relayed neighbour by neighbour, and the simulator records forwarded requests, offers, reservations, acceptances and a synthetic per-message cost. This cost is not yet deducted from labour hours and excludes governance, failed bargaining, enforcement and dispute resolution. Stage B does not yet model money, credit, wages, ownership, capital investment, household income, or measured utility. Fixed-price output and consumption are transparent physical-value indices, not GDP or empirical welfare. The existing seven-cell financial prototype remains unchanged.
 
 ## Validation
 
