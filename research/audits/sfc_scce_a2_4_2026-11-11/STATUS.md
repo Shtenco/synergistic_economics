@@ -440,3 +440,15 @@ The SCCE mapping adapter now preflights every target cell and rolls back prior a
 The dedicated audit workflow now explicitly executes `audit_scce_capital_cohort_bridge.py`; the existing Prototype unittest wrapper also includes it. This is still synthetic adapter-level integration: the SCCE engine does not yet persist cohort records or call `advance_cohort_period` as part of its normal lifecycle. The declared baseline service flow remains synthetic, and B8.1 material/ownership/component passports are not yet fully mapped into this service adapter.
 
 **Execution status:** committed code and tests are present, but no exact-head CI PASS is claimed. The relevant workflows must complete on the latest branch head and their logs must be inspected. A2.4.2 remains OPEN; A2.4.4 entity/sector identity remains OPEN; Gate 0 is not closed.
+
+
+### Exact-head CI snapshot — 11 November 2026
+
+Latest branch HEAD at this status update: `9114daeddda6bf408f2e76fc17f5a932e52c1b77`.
+
+The exact-head runs surfaced by GitHub are:
+- Prototype validation `42909262122` — **QUEUED**;
+- SCCE Stage-C2 validation `42909261882` — **QUEUED**;
+- A2.4 audit control fixtures `42909252997` — **QUEUED**.
+
+Each run has a queued job and no assigned runner, conclusion, execution steps or logs. Older runs target ancestor commits and cannot verify the latest changes. No code execution PASS is claimed. The A2.4 workflow now includes the live cohort-to-SCCE adapter script; its exact-head execution is still pending.
