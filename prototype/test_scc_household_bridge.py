@@ -107,9 +107,12 @@ class SCCHouseholdBridgeTests(unittest.TestCase):
             economic_policies=("cellular",),
         )
         paired = result["paired_priority_weighted_minus_proportional"]["cellular"]
-        self.assertEqual(paired["overall_fulfilment"]["n"], 3)
-        self.assertAlmostEqual(paired["overall_fulfilment"]["mean"], 0.0, places=10)
-        self.assertAlmostEqual(paired["essential_fulfilment"]["mean"], 0.0, places=10)
+        for rule in ("priority_weighted", "floor_priority"):
+            self.assertEqual(paired[rule]["overall_fulfilment"]["n"], 3)
+            self.assertAlmostEqual(
+                paired[rule]["overall_fulfilment"]["mean"], 0.0, places=10)
+            self.assertAlmostEqual(
+                paired[rule]["essential_fulfilment"]["mean"], 0.0, places=10)
 
     def test_invalid_household_count_rejected(self):
         with self.assertRaises(HouseholdBridgeError):
