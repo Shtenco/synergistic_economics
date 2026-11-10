@@ -189,6 +189,26 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         self.assertEqual(view.tradeable_neighbour_ids, ("cell-1",))
         self.assertAlmostEqual(view.neighbour_input_demand, 0.36)
 
+    def test_local_input_signal_obeys_bilateral_counterparty_allowlists(self):
+        specs = list(DynamicCellularEconomy.default_specs(33))
+        specs[1] = replace(
+            specs[1], allowed_counterparties=frozenset({"cell-1"}))
+        model = DynamicCellularEconomy(
+            "cellular", seed=33, shock="none", cellular_hops=1,
+            specs=tuple(specs),
+            communication_edges=(
+                ("cell-1", "cell-2"), ("cell-2", "cell-3"),
+            ),
+        )
+        plans = {"cell-1": 2.0, "cell-3": 3.0}
+        labour = {cid: 100.0 for cid in model.cells}
+        world = model._matching_world({}, {})
+        view = model._cell_local_view(
+            "cell-2", 1.0, 1.0, labour, plans, communication_paths(world))
+        self.assertEqual(view.neighbour_ids, ("cell-1", "cell-3"))
+        self.assertEqual(view.tradeable_neighbour_ids, ("cell-1",))
+        self.assertAlmostEqual(view.neighbour_input_demand, 0.36)
+
     def test_cellular_output_rule_uses_local_need_or_neighbour_input_signal(self):
         base = dict(
             cell_id="test", inventory=0.0, local_final_need=2.0,
