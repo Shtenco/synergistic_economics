@@ -15,6 +15,12 @@ CLAIM_ACCOUNTS = {
     "trade_receivable_asset", "trade_payable_liability",
     "interest_receivable_asset", "interest_payable_liability",
 }
+EVENT_TYPES = {
+    "bank_loan_origination", "nonbank_deposit_transfer",
+    "supplier_settlement", "principal_repayment",
+    "interest_accrual", "interest_settlement",
+    "creditor_writeoff", "legal_forgiveness",
+}
 
 
 class IdentityError(ValueError):
@@ -234,8 +240,8 @@ class EntityJournal:
         if (not isinstance(event.event_id, str) or not event.event_id.strip()
                 or event.event_id in self.events):
             raise IdentityError("missing or duplicate event ID")
-        if not isinstance(event.event_type, str) or not event.event_type:
-            raise IdentityError("event type is required")
+        if event.event_type not in EVENT_TYPES:
+            raise IdentityError(f"unknown or unsupported event type: {event.event_type}")
         if not isinstance(event.lines, tuple) or not event.lines:
             raise IdentityError("event lines must be a non-empty immutable tuple")
 
@@ -260,10 +266,27 @@ class EntityJournal:
 
         if debit != credit:
             raise IdentityError(f"unbalanced event {event.event_id}: {debit} != {credit}")
-        # A unilateral creditor write-off is an accounting recognition event:
-        # it does not extinguish the debtor's legal claim. All other recognized
-        # claim movements must have an entity-level asset/liability mirror.
-        if event.event_type != "creditor_writeoff":
+        # A unilateral creditor write-off is a narrowly typed accounting
+        # recognition event: one loan-asset credit against one loss-allowance
+        # debit. It does not extinguish the debtor's legal claim. All other
+        # recognized claim movements must have an entity-level mirror.
+        if event.event_type == "creditor_writeoff":
+            loan_credits = [
+                line for line in event.lines
+                if line.account == "loan_asset" and line.side == "C"
+            ]
+            allowance_debits = [
+                line for line in event.lines
+                if line.account == "loss_allowance" and line.side == "D"
+            ]
+            if (len(loan_credits) != 1 or len(allowance_debits) != 1
+                    or len(event.lines) != 2
+                    or loan_credits[0].amount != allowance_debits[0].amount
+                    or loan_credits[0].entity_id != allowance_debits[0].entity_id):
+                raise IdentityError(
+                    "creditor write-off must be one loan-asset credit against "
+                    "one equal loss-allowance debit; debtor obligation remains")
+        else:
             claim_holder_issuer_deltas(event)
         if any(line.account in {"deposit_asset", "deposit_liability"}
                for line in event.lines):
