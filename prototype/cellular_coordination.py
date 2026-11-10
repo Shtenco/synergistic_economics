@@ -417,6 +417,7 @@ def run_comparison(seed: int = 1, shock: str = "none",
 
 def monte_carlo(seeds: Iterable[int] = range(1, 101),
                 shock: str = "none", cellular_hops: int = 1):
+    seeds = tuple(seeds)
     rows = []
     for seed in seeds:
         result = run_comparison(seed, shock, cellular_hops)
@@ -430,7 +431,7 @@ def monte_carlo(seeds: Iterable[int] = range(1, 101),
     summary = {}
     for (regime, metric), values in grouped.items():
         summary.setdefault(regime, {})[metric] = sum(values) / len(values)
-    return {"runs": len(list(seeds)) if not isinstance(seeds, range) else len(seeds),
+    return {"runs": len(seeds),
             "shock": shock, "cellular_hops": cellular_hops,
             "summary": summary, "rows": rows}
 
