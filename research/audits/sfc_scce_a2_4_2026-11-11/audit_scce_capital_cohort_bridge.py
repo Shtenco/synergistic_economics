@@ -186,19 +186,55 @@ def main():
     if {cid: cell.capital for cid, cell in untouched.cells.items()} != original:
         raise AssertionError("failed cohort mapping partially mutated engine capital")
 
-    # B8.1 does not retain a final "retired" state in the active cohort
-    # register. Retirement is a quantity-removal transition; reject attempts
-    # to smuggle a retired asset back into the physical stock snapshot.
+    # A partial final retirement creates an auditable terminal child record,
+    # subtracts only the retired quantity from physical stock, and does not
+    # age the retired record after its retirement event.
+    opening = (CapitalCohort(
+        "retire-source", "cell-1", "machine", 2020, 6, 10, 10,
+        "operating", .9, .8, .95),)
+    retirement = CohortEvent(
+        "retire-event-1", "retire-source", "final_retirement",
+        3, "operating", "retired", "planned")
+    advanced = advance_cohort_period(opening, (retirement,), (), period=2026)
+    close(advanced.opening_physical_units, 10.0, "retirement opening units")
+    close(advanced.final_retirements, 3.0, "partial final retirement")
+    close(advanced.closing_physical_units, 7.0, "retirement closing units")
+    active = [x for x in advanced.closing_cohorts if x.operating_status != "retired"]
+    retired = [x for x in advanced.closing_cohorts if x.operating_status == "retired"]
+    if len(active) != 1 or len(retired) != 1:
+        raise AssertionError("partial retirement did not preserve active and terminal cohorts")
+    close(active[0].quantity, 7.0, "active residual quantity")
+    close(retired[0].quantity, 3.0, "retired child quantity")
+    if active[0].age != 7 or retired[0].age != 6:
+        raise AssertionError("cohort ageing across retirement boundary is incorrect")
+    if retired[0].retirement_reason != "planned":
+        raise AssertionError("retirement reason was not preserved")
+
+    # Retired tombstones are excluded from the physical/service aggregate.
+    # A retired-only cell has zero current service and must fail closed rather
+    # than being mapped to an epsilon multiplier.
     try:
         aggregate_capital_services(
-            tuple(model.cells),
-            (replace(cohorts[0], operating_status="retired",
+            ("cell-1",),
+            (replace(opening[0], operating_status="retired",
                      retirement_reason="planned"),),
-            baseline)
+            {"cell-1": 68.4})
     except CapitalBridgeError:
         pass
     else:
-        raise AssertionError("retired pseudo-state accepted as an active cohort")
+        raise AssertionError("retired-only cohort generated capital services")
+
+    # A terminally retired cohort cannot be transitioned back into operation.
+    try:
+        advance_cohort_period(
+            advanced.closing_cohorts,
+            (CohortEvent("reactivate-1", retired[0].cohort_id,
+                         "state_transition", 1, "retired", "operating"),),
+            (), period=2027)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("terminal retirement was reversible")
 
     # Malformed numeric and lifecycle fields are rejected explicitly.
     for malformed in (
@@ -264,12 +300,12 @@ def main():
     print("A2.4.2/B8.1 cohort-to-SCCE runtime adapter: PASS")
     print("identity-preserving lifecycle: age, repair, component split, retirement and physical-loss flows reconcile")
     print("physical units remain distinct from operating units and service flow")
-    print("B8.1 active-state vocabulary enforced; final retirement is a separate stock-removal event")
+    print("B8.1 active states and terminal retirement records are distinct; retired tombstones do not enter physical/service stock")
     print("repair downtime reduces service, not physical stock; utilization scales service")
     print("service index maps atomically to CellState.capital before a real SCCE step")
     print("negative control: later-cell write failure rolls back earlier capital updates")
     print("local production proposal responds proportionally to the applied capital multiplier")
-    print("negative controls: zero service, retired pseudo-state, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
+    print("negative controls: zero service, terminal reactivation, duplicate cohort ID, incomplete baseline, boolean quantity, NaN factor and invalid retirement reason rejected")
 
 
 if __name__ == "__main__":
