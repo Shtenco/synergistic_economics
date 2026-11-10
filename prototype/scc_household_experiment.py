@@ -11,7 +11,7 @@ from scc_dynamic_economy import DynamicCellularEconomy, POLICIES
 from scc_household_bridge import summarize_periods_to_households
 
 
-HOUSEHOLD_POLICIES = ("proportional", "priority_weighted")
+HOUSEHOLD_POLICIES = ("proportional", "priority_weighted", "floor_priority")
 METRICS = (
     "essential_fulfilment",
     "overall_fulfilment",
@@ -50,6 +50,7 @@ def run_household_distribution_experiment(
     cellular_hops: int = 2,
     households_per_cell: int = 10,
     priority_dispersion: float = 0.4,
+    essential_floor_fraction: float = 0.5,
     economic_policies: Sequence[str] = POLICIES,
 ) -> dict:
     """Compare household rationing rules on identical Stage-B consumption.
@@ -66,6 +67,8 @@ def run_household_distribution_experiment(
         raise ValueError("households_per_cell must be positive")
     if not 0.0 <= priority_dispersion < 1.0:
         raise ValueError("priority_dispersion must be in [0, 1)")
+    if not 0.0 <= essential_floor_fraction <= 1.0:
+        raise ValueError("essential_floor_fraction must be in [0, 1]")
 
     rows = []
     for economic_policy in economic_policies:
@@ -86,6 +89,7 @@ def run_household_distribution_experiment(
                     policy=household_policy,
                     seed=seed * 100_000,
                     priority_dispersion=priority_dispersion,
+                    essential_floor_fraction=essential_floor_fraction,
                 )
 
             for household_policy in HOUSEHOLD_POLICIES:
@@ -117,12 +121,15 @@ def run_household_distribution_experiment(
                 for metric in METRICS
             }
         paired[economic_policy] = {
-            metric: _summary([
-                by_rule["priority_weighted"][seed][metric]
-                - by_rule["proportional"][seed][metric]
-                for seed in range(1, runs + 1)
-            ])
-            for metric in METRICS
+            rule: {
+                metric: _summary([
+                    by_rule[rule][seed][metric]
+                    - by_rule["proportional"][seed][metric]
+                    for seed in range(1, runs + 1)
+                ])
+                for metric in METRICS
+            }
+            for rule in ("priority_weighted", "floor_priority")
         }
 
     return {
@@ -132,6 +139,7 @@ def run_household_distribution_experiment(
         "cellular_hops": cellular_hops,
         "households_per_cell": households_per_cell,
         "priority_dispersion": priority_dispersion,
+        "essential_floor_fraction": essential_floor_fraction,
         "economic_policies": list(economic_policies),
         "household_policies": list(HOUSEHOLD_POLICIES),
         "summary": summary,
@@ -150,13 +158,15 @@ def main():
     parser.add_argument("--hops", type=int, default=2)
     parser.add_argument("--households-per-cell", type=int, default=10)
     parser.add_argument("--priority-dispersion", type=float, default=0.4)
+    parser.add_argument("--essential-floor-fraction", type=float, default=0.5)
     parser.add_argument("--economic-policies", default="market,central,cooperative,cellular")
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     policies = tuple(x.strip() for x in args.economic_policies.split(",") if x.strip())
     result = run_household_distribution_experiment(
         args.runs, args.shock, args.periods, args.hops,
-        args.households_per_cell, args.priority_dispersion, policies,
+        args.households_per_cell, args.priority_dispersion,
+        args.essential_floor_fraction, policies,
     )
     if args.summary_only:
         result.pop("paired_runs", None)
