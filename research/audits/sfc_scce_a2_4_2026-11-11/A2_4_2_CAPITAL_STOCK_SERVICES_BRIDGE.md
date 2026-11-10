@@ -244,3 +244,41 @@ A repair event can alter availability and condition without creating a financial
 12. The same cohort dataset reproduces physical count, service flow, gross stock, net stock and all adjustment terms.
 
 **Current status:** the conceptual pieces exist in B8.1, B4 and the integrated framework; the complete same-cohort cross-register test is newly specified here but not yet implemented in the economic runtime or empirically calibrated. A2.4.2 is therefore **partially specified, not closed**.
+
+
+## 10. Runtime adapter into the existing SCCE capital multiplier
+
+A separate adapter now connects explicit B8.1-style cohort service flows to the
+actual Stage-B SCCE engine without changing its default behavior:
+
+- `prototype/capital_cohort_bridge.py` accepts immutable asset-cohort rows
+  with stable cohort/cell/asset identity, vintage, age, physical quantity,
+  service capacity per asset, operating state, availability, utilization and
+  service quality.
+- It aggregates physical units, operating units and capital-service flow
+  separately for each of the seven SCCE cells.
+- A declared positive `baseline_services[cell_id]` is required. The dimensionless
+  multiplier is `current_service_flow / baseline_service_flow`.
+- All cells are validated and calculated before any `CellState.capital` value
+  is changed. A zero-service cell is rejected atomically because the current
+  engine's own `validate()` requires strictly positive scalar capital.
+- The adapter must be called before each `model.step(period)` for which the
+  cohort service state is authoritative. Callers that do not invoke it retain
+  the original scalar default of 1.0.
+
+The new `audit_scce_capital_cohort_bridge.py` fixture uses synthetic cohort
+records, maps the resulting ratios onto a real `DynamicCellularEconomy`
+instance, checks the local production proposal's response to the multiplier,
+and executes a real SCCE period. It also checks that repair downtime reduces
+service without deleting physical units, and that invalid zero-service,
+duplicate-ID and incomplete-baseline cases fail closed.
+
+**Interpretation limits:** this is a runtime adapter and synthetic integration
+test, not empirical asset data, not a calibrated capital-service baseline and
+not a full B8.1 asset lifecycle. The SCCE engine still does not own or evolve
+the cohort register. A future integration must persist cohort transitions
+(acquisition, ageing, repair completion, component replacement, retirement,
+physical loss), validate the opening-to-closing physical stock identity, and
+derive baseline service flows from measured or explicitly calibrated evidence.
+The scalar multiplier remains a compatibility boundary, not a monetary capital
+stock and not a substitute for asset quantities or capital-service units.
