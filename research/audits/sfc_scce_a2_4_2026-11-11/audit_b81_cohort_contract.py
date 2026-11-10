@@ -68,6 +68,8 @@ def validate_cohort(cohort):
         raise CohortError("availability, utilization and quality must be in [0,1]")
     if not cohort.material_vector:
         raise CohortError("material_vector is required")
+    if not cohort.data_quality or not isinstance(cohort.repair_history, tuple):
+        raise CohortError("data_quality and immutable repair_history are required")
     for material in cohort.material_vector:
         if not material.material_id or material.mass_per_unit < 0:
             raise CohortError("invalid material passport")
@@ -80,7 +82,7 @@ def apply_period(opening_states, moves, additions, retirements, physical_losses)
     states = {k: D(str(v)) for k, v in opening_states.items()}
     if set(states) - STATES or any(v < 0 for v in states.values()):
         raise CohortError("invalid opening state counts")
-    closing = dict(states)
+    closing = {state: states.get(state, D("0")) for state in STATES}
 
     for source, destination, quantity in moves:
         quantity = D(str(quantity))
@@ -166,6 +168,8 @@ def main():
     replacement = ComponentCohort(
         "machine", "motor", 2026, 0, D("1"),
         (Material("copper", D("12"), "kg"),))
+    assert replacement.host_asset_type == cohort.asset_type
+    assert replacement.quantity > 0 and replacement.vintage > cohort.vintage
     assert host_age_after_period == 7
     assert replacement.vintage == 2026 and replacement.age == 0
     assert cohort.vintage == 2020
