@@ -483,3 +483,50 @@ No completed logs are available; no PASS is claimed. The dedicated A2.4
 branch-push workflow runs the capital-cohort adapter script, but its completed
 exact-head result has not been verified. A2.4.2 remains OPEN and the adapter
 remains opt-in; the SCCE period loop does not yet own the cohort register.
+
+
+## 11 November continuation — entity/sector/issuer identity fixture
+
+A2.4.4's previously documented identity gap now has a separate executable
+synthetic control, `audit_entity_sector_journal.py`, wired into the
+14-case Prototype wrapper and the branch-push A2.4 workflow.
+
+The fixture:
+- separates stable entity IDs from the controlled H/NFC/CB/CBank/GOV/ROW
+  sector membership and resolves membership by effective period;
+- validates entity, counterparty and issuer identities independently;
+- checks entity-level deposit holder/issuer mirrors using the full instrument
+  identity, not a sector label;
+- validates ten holder claims against ten independently represented issuer
+  liabilities, including each side's opening/T/V/O/closing roll-forward;
+- derives the sector financial-NL vector only after entity-level mirrors close
+  and reproduces H +7, NFC −19, CB +4, CBank 0, GOV −15, ROW +23;
+- tests bank origination, existing-deposit transfer, supplier settlement,
+  principal repayment, interest accrual/settlement, creditor write-off and
+  separate legal forgiveness;
+- rejects blank/unknown entity-sector identities, overlapping sector
+  assignments, retrospective reassignment, same-sector wrong holder, wrong
+  issuer, wrong currency/maturity/denomination/valuation, duplicate claim
+  postings/events, missing claim-side records and duplicate holder records.
+
+The write-off event does not extinguish the debtor's legal obligation; the
+separate forgiveness event does. Sector totals are not reverse-engineered into
+invented event provenance: the six-sector vector remains a separate
+entity-level position oracle.
+
+**Status:** the identity interface has a synthetic executable fixture, but
+A2.4.4 remains OPEN. The existing journal fixture has not been migrated to this
+schema, there is no authoritative entity registry in the economic runtime,
+and financial events are not yet the sole source of SFC positions.
+
+Current branch HEAD: `90826603ba4afb9ba3c0a86bdfa8fb4e2b618cb2`;
+125 commits ahead of `main`, 0 behind; 29 changed files.
+
+The latest PR CI runs attached to the preceding code commit
+`c7b1b3fd6fb64585e581219fb49e5ef41fd60765` are:
+- Prototype validation `42910141232` — QUEUED;
+- SCCE Stage-C2 validation `42910141028` — QUEUED.
+
+The subsequent commit updates only the finding document. Neither run has
+completed or provided logs; no PASS is claimed. The dedicated A2.4 workflow's
+exact-head execution also remains unverified.
