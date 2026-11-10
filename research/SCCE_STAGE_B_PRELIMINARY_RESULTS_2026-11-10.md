@@ -48,7 +48,7 @@ The fixed-price indices are not GDP, value added, income, profit, utility or emp
 
 100 paired seeds, 24 periods, two-hop local reach for the cellular arm.
 
-| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Coordination labour hours | Coordination labour hours |
+| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Coordination labour hours |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | Market | 51.78% | 51.65–51.91% | 51.15% | 51.03–51.27% | 51.62% | 0.360 | 706.11 | 1,644 | 68.47 | 16.44 |
 | Central | 56.40% | 55.97–56.83% | 54.84% | 54.52–55.16% | 55.66% | 0.235 | 771.81 | 1,885 | 76.58 | 18.85 |
@@ -66,8 +66,8 @@ Paired mean differences versus the market arm:
 
 The compound shock combines a food-demand increase, reduced resource regeneration and lower productivity. 100 paired seeds, 24 periods.
 
-| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index |
-|---|---:|---:|---:|---:|---:|---:|---:|
+| Regime | Final fulfilment | 95% CI | Essential fulfilment | 95% CI | Weighted fulfilment | Cell Gini | Final-consumption index | Messages | Coordination cost | Coordination labour hours |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | Market | 47.50% | 47.35–47.64% | 46.67% | 46.49–46.86% | 47.23% | 0.426 | 761.23 | 1,612 | 66.50 | 16.12 |
 | Central | 46.22% | 46.01–46.42% | 44.12% | 43.90–44.33% | 45.53% | 0.317 | 747.99 | 1,814 | 72.12 | 18.14 |
 | Cooperative | 51.21% | 51.06–51.35% | 45.60% | 45.44–45.76% | 48.22% | 0.150 | 826.42 | 2,858 | 116.72 | 28.58 |
