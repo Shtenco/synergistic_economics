@@ -160,3 +160,10 @@ surfaced a dedicated audit-workflow run ID. The connector's
 not expose branch-push runs. The two existing PR validation runs
 `42904160933` (Prototype) and `42904160781` (Stage-C2) remained queued,
 without job conclusions or logs. No CI PASS is claimed.
+
+
+## A2.4.4 additional journal integrity correction
+
+- Replaced tautological constant assertions in `audit_financial_journal.py` with derived signed-balance calculations over actual journal lines. The fixture now verifies deposit-asset and bank deposit-liability changes for loan origination, non-bank credit transfer, supplier payment, principal repayment and interest settlement.
+- `audit_instrument_stock_flow.py` now explicitly computes sector financial net lending from transaction flows (T), excluding revaluation (V) and other-volume changes (O). Added valuation-only and mixed T/V/O negative/positive controls.
+- These controls are committed but await execution in the exact-head audit workflow. No production financial runtime is claimed.
