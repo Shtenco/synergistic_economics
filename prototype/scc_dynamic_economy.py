@@ -20,7 +20,7 @@ from cellular_coordination import (
     Cell as MatchCell,
     World as MatchWorld,
     Allocation,
-    allocate_cellular,
+    allocate_relay_cellular,
     allocate_central,
     allocate_cooperative,
     allocate_market,
@@ -86,6 +86,8 @@ class PeriodResult:
     input_shortage_units: float
     logistics_cost: float
     coordination_cost: float
+    message_count: int
+    communication_cost: float
     raw_resource_used: float
     raw_resource_stock: float
     fixed_price_gross_output: float
@@ -98,7 +100,8 @@ class DynamicCellularEconomy:
                  shock: str = "none", cellular_hops: int = 2,
                  specs: Sequence[CellSpec] | None = None,
                  transport_cost_per_hop: float = 0.035,
-                 transaction_cost: float = 0.12):
+                 transaction_cost: float = 0.12,
+                 message_cost_per_message: float = 0.002):
         if policy not in POLICIES:
             raise DynamicEconomyError("unknown policy: " + policy)
         if cellular_hops < 1:
@@ -125,6 +128,9 @@ class DynamicCellularEconomy:
         )
         self.transport_cost_per_hop = transport_cost_per_hop
         self.transaction_cost = transaction_cost
+        self.message_cost_per_message = message_cost_per_message
+        if transaction_cost < 0 or message_cost_per_message < 0:
+            raise DynamicEconomyError("coordination costs cannot be negative")
         self.periods: list[PeriodResult] = []
         self.events: list[dict] = []
         self.event_keys: set[str] = set()
@@ -133,6 +139,8 @@ class DynamicCellularEconomy:
         self.total_resource_used = 0.0
         self.total_logistics = 0.0
         self.total_coordination = 0.0
+        self.total_messages = 0
+        self.total_communication_cost = 0.0
         self._validate_specs()
 
     @staticmethod
@@ -256,20 +264,44 @@ class DynamicCellularEconomy:
         return MatchWorld(tuple(cells), self.edges, BASE_PRICES,
                           self.transport_cost_per_hop, self.transaction_cost)
 
-    def _allocate(self, world: MatchWorld) -> list[Allocation]:
+    def _allocate(self, world: MatchWorld, trace: list[dict] | None = None) -> list[Allocation]:
         if self.policy == "market":
             return allocate_market(world)
         if self.policy == "central":
             return allocate_central(world)
         if self.policy == "cooperative":
             return allocate_cooperative(world)
-        return allocate_cellular(world, max_hops=self.cellular_hops, max_rounds=12)
+        return allocate_relay_cellular(
+            world, max_hops=self.cellular_hops, max_rounds=12, trace=trace)
+
+    def _message_count(self, world: MatchWorld, allocations: Sequence[Allocation],
+                       trace: Sequence[dict] | None = None) -> int:
+        if self.policy == "cellular":
+            return len(trace or ())
+        active_buyers = sum(
+            1 for c in world.cells if any(q > EPS for q in c.demand.values()))
+        active_sellers = sum(
+            1 for c in world.cells if any(q > EPS for q in c.supply.values()))
+        active_cells = len({
+            c.cell_id for c in world.cells
+            if any(q > EPS for q in c.demand.values())
+            or any(q > EPS for q in c.supply.values())
+        })
+        trades = len(allocations)
+        if self.policy == "market":
+            return active_buyers + active_sellers + 2 * trades
+        if self.policy == "central":
+            return active_cells + 2 * trades
+        return 2 * active_cells + 2 * trades
 
     def _apply_allocations(self, allocations: Sequence[Allocation],
-                           period: int, stage: str):
+                           period: int, stage: str, message_count: int = 0):
         by_product = {p: 0.0 for p in PRODUCTS}
         by_seller_product: Dict[tuple[str, str], float] = {}
-        logistics = coordination = 0.0
+        logistics = 0.0
+        coordination = self.transaction_cost * len(allocations)
+        communication_cost = self.message_cost_per_message * message_count
+        coordination += communication_cost
         for a in allocations:
             if a.seller == a.buyer:
                 raise DynamicEconomyError("self-trade is forbidden")
@@ -283,12 +315,12 @@ class DynamicCellularEconomy:
             key = (a.seller, a.product)
             by_seller_product[key] = by_seller_product.get(key, 0.0) + a.quantity
             logistics += a.quantity * a.distance * self.transport_cost_per_hop
-            coordination += self.transaction_cost
             self._record(stage, {"product": a.product, "seller": a.seller,
                                  "buyer": a.buyer, "quantity": round(a.quantity, 10),
                                  "distance": a.distance},
                          f"{stage}:{period}:{a.product}:{a.seller}:{a.buyer}")
-        return by_product, by_seller_product, logistics, coordination
+        return (by_product, by_seller_product, logistics, coordination,
+                message_count, communication_cost)
 
     def step(self, period: int) -> PeriodResult:
         demand_mult, resource_mult, productivity_mult = self._shock_values(period)
@@ -391,9 +423,14 @@ class DynamicCellularEconomy:
         }
         input_world = self._matching_world(
             input_supply, input_demand, input_priorities)
-        input_allocations = self._allocate(input_world)
-        _, input_seller_deliveries, input_logistics, input_coordination = self._apply_allocations(
-            input_allocations, period, "intermediate.input.delivery")
+        input_trace: list[dict] = []
+        input_allocations = self._allocate(
+            input_world, input_trace if self.policy == "cellular" else None)
+        input_messages = self._message_count(
+            input_world, input_allocations, input_trace)
+        (_, input_seller_deliveries, input_logistics, input_coordination,
+         input_message_count, input_communication_cost) = self._apply_allocations(
+            input_allocations, period, "intermediate.input.delivery", input_messages)
         input_served = {(p, cid): 0.0 for p in INPUT_PRODUCTS for cid in self.cells}
         for allocation in input_allocations:
             input_served[(allocation.product, allocation.buyer)] += allocation.quantity
@@ -461,9 +498,14 @@ class DynamicCellularEconomy:
         final_supply = {p: {cid: c.stocks[p] for cid, c in self.cells.items()}
                         for p in FINAL_PRODUCTS}
         final_world = self._matching_world(final_supply, final_demand, priority_by_cell)
-        final_allocations = self._allocate(final_world)
-        _, seller_product_deliveries, final_logistics, final_coordination = self._apply_allocations(
-            final_allocations, period, "final.goods.delivery")
+        final_trace: list[dict] = []
+        final_allocations = self._allocate(
+            final_world, final_trace if self.policy == "cellular" else None)
+        final_messages = self._message_count(
+            final_world, final_allocations, final_trace)
+        (_, seller_product_deliveries, final_logistics, final_coordination,
+         final_message_count, final_communication_cost) = self._apply_allocations(
+            final_allocations, period, "final.goods.delivery", final_messages)
         for a in final_allocations:
             buyer = self.cells[a.buyer]
             buyer.stocks[a.product] = max(0.0, buyer.stocks[a.product] - a.quantity)
@@ -527,8 +569,12 @@ class DynamicCellularEconomy:
         gini = self._gini(cell_rates)
         logistics = input_logistics + final_logistics
         coordination = input_coordination + final_coordination
+        message_count = input_message_count + final_message_count
+        communication_cost = input_communication_cost + final_communication_cost
         self.total_logistics += logistics
         self.total_coordination += coordination
+        self.total_messages += message_count
+        self.total_communication_cost += communication_cost
         fixed_gross = sum(output_by_product.get(p, 0.0) * BASE_PRICES[p]
                           for p in output_by_product)
         fixed_consumption = sum(final_consumption[p] * BASE_PRICES[p]
@@ -538,8 +584,9 @@ class DynamicCellularEconomy:
             period, output_by_product, final_consumption, final_demand_totals,
             essential_fulfilment, weighted_fulfilment,
             max(0.0, total_demand - sum(served_by_cell.values())),
-            total_input_shortage, logistics, coordination, raw_used,
-            resource_stock, fixed_gross, fixed_consumption, gini,
+            total_input_shortage, logistics, coordination, message_count,
+            communication_cost, raw_used, resource_stock, fixed_gross,
+            fixed_consumption, gini,
         )
         self.periods.append(result)
         return result
@@ -606,6 +653,8 @@ class DynamicCellularEconomy:
             "fixed_price_final_consumption_index": sum(r.fixed_price_final_consumption for r in self.periods),
             "total_logistics_cost": self.total_logistics,
             "total_coordination_cost": self.total_coordination,
+            "total_messages": self.total_messages,
+            "total_communication_cost": self.total_communication_cost,
             "total_raw_resource_used": self.total_resource_used,
             "initial_raw_resource": self.initial_resource,
             "regenerated_raw_resource": self.total_regenerated,
