@@ -262,9 +262,10 @@ class DynamicCellularEconomy:
             return allocate_cooperative(world)
         return allocate_cellular(world, max_hops=self.cellular_hops, max_rounds=12)
 
-    def _apply_allocations(self, allocations: Sequence[Allocation]):
+    def _apply_allocations(self, allocations: Sequence[Allocation],
+                           period: int, stage: str):
         by_product = {p: 0.0 for p in PRODUCTS}
-        by_seller = {cid: 0.0 for cid in self.cells}
+        by_seller_product: Dict[tuple[str, str], float] = {}
         logistics = coordination = 0.0
         for a in allocations:
             if a.seller == a.buyer:
@@ -276,10 +277,15 @@ class DynamicCellularEconomy:
             seller.stocks[a.product] -= a.quantity
             buyer.stocks[a.product] += a.quantity
             by_product[a.product] += a.quantity
-            by_seller[a.seller] += a.quantity
+            key = (a.seller, a.product)
+            by_seller_product[key] = by_seller_product.get(key, 0.0) + a.quantity
             logistics += a.quantity * a.distance * self.transport_cost_per_hop
             coordination += self.transaction_cost
-        return by_product, by_seller, logistics, coordination
+            self._record(stage, {"product": a.product, "seller": a.seller,
+                                 "buyer": a.buyer, "quantity": round(a.quantity, 10),
+                                 "distance": a.distance},
+                         f"{stage}:{period}:{a.product}:{a.seller}:{a.buyer}")
+        return by_product, by_seller_product, logistics, coordination
 
     def step(self, period: int) -> PeriodResult:
         demand_mult, resource_mult, productivity_mult = self._shock_values(period)
@@ -320,7 +326,8 @@ class DynamicCellularEconomy:
                 input_demand[p][cid] = shortage
         input_world = self._matching_world(input_supply, input_demand)
         input_allocations = self._allocate(input_world)
-        _, _, input_logistics, input_coordination = self._apply_allocations(input_allocations)
+        _, _, input_logistics, input_coordination = self._apply_allocations(
+            input_allocations, period, "intermediate.input.delivery")
 
         # Production is constrained by the inputs actually on hand. No input or
         # output is created by the matching protocol itself.
@@ -382,25 +389,21 @@ class DynamicCellularEconomy:
                         for p in FINAL_PRODUCTS}
         final_world = self._matching_world(final_supply, final_demand, priority_by_cell)
         final_allocations = self._allocate(final_world)
-        _, seller_deliveries, final_logistics, final_coordination = self._apply_allocations(final_allocations)
+        _, seller_product_deliveries, final_logistics, final_coordination = self._apply_allocations(
+            final_allocations, period, "final.goods.delivery")
         for a in final_allocations:
             buyer = self.cells[a.buyer]
             buyer.stocks[a.product] = max(0.0, buyer.stocks[a.product] - a.quantity)
             served_by_cell[a.buyer] += a.quantity
             priority = buyer.spec.priorities.get(a.product, 1.0)
             weighted_served += a.quantity * priority
-            self._record("delivery", {"product": a.product, "seller": a.seller,
-                                      "buyer": a.buyer, "quantity": round(a.quantity, 10)},
-                         f"delivery:{period}:{a.product}:{a.seller}:{a.buyer}")
         for cid, c in self.cells.items():
             cell_demand = sum(demand_by_cell[cid].values())
             cell_served = served_by_cell[cid]
             unmet_by_cell[cid] = max(0.0, cell_demand - cell_served)
             c.cumulative_unmet_final += unmet_by_cell[cid]
-            c.cumulative_input_shortage += sum(
-                max(0.0, input_need[p][cid] - min(c.stocks[p], input_need[p][cid]))
-                for p in INPUT_PRODUCTS)
-            c.last_external_orders = seller_deliveries.get(cid, 0.0)
+            c.last_external_orders = seller_product_deliveries.get(
+                (cid, c.spec.output), 0.0)
 
         final_consumption = {
             p: own_consumption[p] + sum(a.quantity for a in final_allocations if a.product == p)
@@ -461,8 +464,10 @@ class DynamicCellularEconomy:
                     raise DynamicEconomyError(f"negative stock {cid}:{p}={q}")
             if c.capital <= 0:
                 raise DynamicEconomyError("non-positive capital")
-        if self.total_resource_used > self.initial_resource + self.total_regenerated + EPS:
-            raise DynamicEconomyError("raw resource conservation violated")
+        ending_resource = sum(c.stocks["raw_resource"] for c in self.cells.values())
+        if abs(self.initial_resource + self.total_regenerated
+               - self.total_resource_used - ending_resource) > 1e-6:
+            raise DynamicEconomyError("raw resource stock-flow identity violated")
         for period in self.periods:
             if not 0 <= period.essential_fulfilment <= 1 + EPS:
                 raise DynamicEconomyError("essential fulfilment outside [0,1]")
@@ -504,6 +509,9 @@ class DynamicCellularEconomy:
                 c.stocks[p] * BASE_PRICES[p] for c in self.cells.values() for p in PRODUCTS
             ),
             "events": len(self.events),
+            "event_log_digest": __import__("hashlib").sha256(
+                json.dumps(self.events, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
         }
 
 
