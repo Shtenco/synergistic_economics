@@ -3,7 +3,7 @@ from dataclasses import replace
 
 from cellular_coordination import (
     Cell, World, allocate_cellular, allocate_relay_cellular, allocate_central,
-    allocate_cooperative, allocate_market,
+    allocate_cooperative, allocate_market, communication_paths,
 )
 from scc_dynamic_economy import (
     DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
