@@ -246,7 +246,11 @@ def summarize_periods_to_households(
         for cell_id, products in period.final_consumption_by_cell.items():
             target = aggregate_cell_supply.setdefault(cell_id, {})
             for product, quantity in products.items():
-                target[product] = target.get(product, 0.0) + float(quantity)
+                quantity = float(quantity)
+                if quantity < -1e-8:
+                    raise HouseholdBridgeError(
+                        f"negative cumulative household supply {cell_id}:{product}={quantity}")
+                target[product] = target.get(product, 0.0) + max(0.0, quantity)
 
     households = tuple(
         Household(
