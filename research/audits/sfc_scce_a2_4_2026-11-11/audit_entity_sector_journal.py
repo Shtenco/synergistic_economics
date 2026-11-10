@@ -240,7 +240,8 @@ class EntityJournal:
         if (not isinstance(event.event_id, str) or not event.event_id.strip()
                 or event.event_id in self.events):
             raise IdentityError("missing or duplicate event ID")
-        if event.event_type not in EVENT_TYPES:
+        if (not isinstance(event.event_type, str)
+                or event.event_type not in EVENT_TYPES):
             raise IdentityError(f"unknown or unsupported event type: {event.event_type}")
         if not isinstance(event.lines, tuple) or not event.lines:
             raise IdentityError("event lines must be a non-empty immutable tuple")
