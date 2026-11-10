@@ -89,6 +89,17 @@ With backlog-first service, 0.5 retention and a one-period cap, compared with th
 
 The care queue increases measured final consumption in all four regimes, but the current-needs and lower-tail outcomes do not improve uniformly. The cellular arm in particular produces more final consumption while current food and current care fulfilment fall in this parameterization. The cooperative arm's changes in current fulfilment are small, while the market arm's lower-decile outcome deteriorates.
 
+The decomposition of the paired change (care queue minus zero-queue control) is important:
+
+| Regime | Change in current food fulfilment (95% paired CI) | Change in current care fulfilment (95% paired CI) | Change in combined essential fulfilment (95% paired CI) | Change in lower-decile fulfilment (95% paired CI) | Change in essential Gini (95% paired CI) |
+|---|---:|---:|---:|---:|---:|
+| Cellular | −0.60 pp (−0.96 to −0.25) | −12.09 pp (−12.94 to −11.24) | −2.80 pp (−2.97 to −2.64) | −2.78 pp (−3.10 to −2.47) | +0.01752 (+0.01328 to +0.02176) |
+| Central | +1.45 pp (+0.45 to +2.46) | −2.27 pp (−5.43 to +0.90) | +0.73 pp (+0.16 to +1.31) | −0.35 pp (−0.87 to +0.17) | +0.01620 (+0.00480 to +0.02760) |
+| Cooperative | −0.03 pp (−0.07 to +0.01) | +0.28 pp (+0.17 to +0.39) | +0.03 pp (−0.001 to +0.053) | −0.05 pp (−0.11 to +0.01) | +0.00099 (+0.00028 to +0.00171) |
+| Market | +0.22 pp (−0.08 to +0.53) | +1.50 pp (+0.95 to +2.05) | +0.47 pp (+0.20 to +0.73) | −1.68 pp (−1.93 to −1.43) | +0.00527 (+0.00288 to +0.00766) |
+
+
+
 This demonstrates why the final-consumption index cannot stand in for well-being: some additional deliveries clear older care claims rather than satisfying current-period needs. Report current food, current care, care-queue clearance and deprivation exposure separately.
 
 ## 6. Queue-service order: an attribution and priority sensitivity
