@@ -103,16 +103,16 @@ This is not a small tuning effect. One-hop cells become trapped in local shortag
 
 ## 7. Coordination-cost response frontier
 
-A separate 20-seed paired experiment varies the fixed packet-overhead labour while keeping the additional-record cost at 0.002 labour-hours per record beyond the first record in a packet. The compound shock, two-hop cellular topology, production rules and random seeds are held constant.
+A separate 20-seed paired experiment varies fixed packet-overhead labour while keeping additional-record processing at 0.002 labour-hours per record beyond the first record in a packet. The compound shock, two-hop cellular topology, production rules and random seeds are held constant. All confidence intervals are 95% normal-approximation intervals; comparisons against the zero-packet-overhead reference use within-seed paired differences.
 
-| Packet overhead (hours) | Final fulfilment | Essential fulfilment | Consumption index | Total coordination labour |
-|---:|---:|---:|---:|---:|
-| 0.0000 | 46.05% | 42.64% | 754.15 | 2.16 h |
-| 0.0025 | 46.05% | 42.64% | 754.15 | 28.53 h |
-| 0.0050 | 46.05% | 42.64% | 754.15 | 54.90 h |
-| 0.0100 | 46.05% | 42.64% | 754.15 | 107.65 h |
-| 0.0200 | 45.62% | 41.85% | 746.97 | 214.84 h |
-| 0.0500 | 38.06% | 34.13% | 617.44 | 527.38 h |
+| Packet overhead (hours/packet) | Final fulfilment | 95% CI | Essential fulfilment | Consumption index | Total coordination labour |
+|---:|---:|---:|---:|---:|---:|
+| 0.0000 | 46.05% | 45.72–46.38% | 42.64% | 754.15 | 2.16 h |
+| 0.0025 | 46.05% | 45.72–46.38% | 42.64% | 754.15 | 28.53 h |
+| 0.0050 | 46.05% | 45.72–46.38% | 42.64% | 754.15 | 54.90 h |
+| 0.0100 | 46.05% | 45.72–46.38% | 42.64% | 754.15 | 107.65 h |
+| 0.0200 | 45.62% | 45.30–45.95% | 41.85% | 746.97 | 214.84 h |
+| 0.0500 | 38.06% | 37.90–38.21% | 34.13% | 617.44 | 527.38 h |
 
 Paired differences against zero packet overhead:
 - At 0.0100 hours per packet, the measured production/consumption outcomes do not change in this 20-seed sample, although coordination labour rises to 107.65 hours. The additional-record cost remains active even at zero packet overhead.
