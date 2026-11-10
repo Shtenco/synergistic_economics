@@ -150,10 +150,13 @@ def advance_cohort_period(
             raise CapitalBridgeError(f"duplicate opening cohort ID: {cohort.cohort_id}")
         records[cohort.cohort_id] = cohort
 
+    used_cohort_ids = set(records)
     opening_units = sum(
         float(row.quantity) for row in records.values()
         if row.operating_status != "retired"
     )
+    if not math.isfinite(opening_units):
+        raise CapitalBridgeError("opening physical cohort stock is non-finite")
     seen_event_ids = set()
     retired_quantity = 0.0
     lost_quantity = 0.0
@@ -166,6 +169,8 @@ def advance_cohort_period(
             raise CapitalBridgeError("event and cohort IDs must be non-empty strings")
         if event.event_id in seen_event_ids:
             raise CapitalBridgeError(f"duplicate cohort event ID: {event.event_id}")
+        if not isinstance(event.event_type, str):
+            raise CapitalBridgeError("cohort event type must be a string")
         seen_event_ids.add(event.event_id)
         if event.cohort_id not in records:
             raise CapitalBridgeError(f"event references unknown cohort: {event.cohort_id}")
@@ -177,19 +182,22 @@ def advance_cohort_period(
             raise CapitalBridgeError("event quantity must be positive and not exceed cohort quantity")
 
         if event.event_type == "state_transition":
-            if (event.to_status not in NON_RETIRED_STATES
+            if (not isinstance(event.to_status, str)
+                    or event.to_status not in NON_RETIRED_STATES
                     or event.to_status == source.operating_status
-                    or event.reason):
+                    or event.reason != ""):
                 raise CapitalBridgeError("invalid non-retirement state transition")
             retirement_reason = "none"
         elif event.event_type == "final_retirement":
             if (event.to_status != "retired"
+                    or not isinstance(event.reason, str)
                     or event.reason not in RETIREMENT_REASONS - {"none"}):
                 raise CapitalBridgeError("final retirement requires retired state and explicit reason")
             retirement_reason = event.reason
             retired_quantity += quantity
         elif event.event_type == "physical_loss":
             if (event.to_status is not None
+                    or not isinstance(event.reason, str)
                     or event.reason not in {"accident", "catastrophe", "disaster", "other"}):
                 raise CapitalBridgeError("physical loss requires an explicit loss reason and no destination")
             lost_quantity += quantity
@@ -206,8 +214,9 @@ def advance_cohort_period(
         if remaining > 0:
             records[source.cohort_id] = replace(source, quantity=remaining)
             child_id = f"{source.cohort_id}::event::{event.event_id}"
-            if child_id in records:
+            if child_id in used_cohort_ids:
                 raise CapitalBridgeError(f"derived cohort ID collision: {child_id}")
+            used_cohort_ids.add(child_id)
             records[child_id] = replace(
                 source, cohort_id=child_id, quantity=quantity,
                 operating_status=event.to_status,
@@ -221,13 +230,14 @@ def advance_cohort_period(
     addition_quantity = 0.0
     for cohort in additions:
         validate_cohort(cohort)
-        if cohort.cohort_id in records or cohort.cohort_id in addition_ids:
+        if cohort.cohort_id in used_cohort_ids or cohort.cohort_id in addition_ids:
             raise CapitalBridgeError(f"duplicate addition cohort ID: {cohort.cohort_id}")
         if cohort.vintage != period or cohort.age != 0:
             raise CapitalBridgeError("new additions must use current-period vintage and age zero")
         if cohort.operating_status == "retired":
             raise CapitalBridgeError("new additions cannot enter already retired")
         addition_ids.add(cohort.cohort_id)
+        used_cohort_ids.add(cohort.cohort_id)
         addition_quantity += float(cohort.quantity)
         records[cohort.cohort_id] = cohort
 
@@ -243,6 +253,8 @@ def advance_cohort_period(
         if row.operating_status != "retired"
     )
     expected = opening_units + addition_quantity - retired_quantity - lost_quantity
+    if not math.isfinite(closing_units) or not math.isfinite(expected):
+        raise CapitalBridgeError("closing or expected physical cohort stock is non-finite")
     if not math.isclose(closing_units, expected, rel_tol=1e-12, abs_tol=1e-12):
         raise CapitalBridgeError(
             f"physical cohort stock-flow mismatch: closing={closing_units}, expected={expected}")
