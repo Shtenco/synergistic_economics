@@ -919,6 +919,62 @@ def coordination_curve(runs: int = 20, shock: str = "compound",
         "hours_per_message": list(levels),
         "curve": result,
     }
+
+
+def coordination_frontier(runs: int = 20, shock: str = "compound",
+                          periods: int = 24, cellular_hops: int = 2,
+                          hours_levels: Sequence[float] = (
+                              0.0, 0.0025, 0.005, 0.01, 0.02, 0.05)):
+    """Paired same-seed response curve over coordination labour intensity."""
+    levels = tuple(float(x) for x in hours_levels)
+    if not levels or any(x < 0 for x in levels) or len(set(levels)) != len(levels):
+        raise DynamicEconomyError("coordination levels must be unique and non-negative")
+    if 0.0 not in levels:
+        raise DynamicEconomyError("frontier must include the zero-hour reference")
+    if runs < 2:
+        raise DynamicEconomyError("frontier requires at least two paired seeds")
+
+    metric_keys = (
+        "final_fulfilment_rate", "mean_essential_fulfilment",
+        "mean_weighted_fulfilment", "fixed_price_final_consumption_index",
+        "fixed_price_gross_output_index", "total_coordination_hours",
+    )
+    observations = {}
+    for level in levels:
+        result = monte_carlo(runs, shock, periods, cellular_hops, level)
+        observations[level] = {
+            (row["seed"], row["policy"]): row for row in result["paired_runs"]
+        }
+
+    reference = observations[0.0]
+    frontier = {}
+    for policy in POLICIES:
+        frontier[policy] = {}
+        for level in levels:
+            rows = [observations[level][(seed, policy)]
+                    for seed in range(1, runs + 1)]
+            ref_rows = [reference[(seed, policy)]
+                        for seed in range(1, runs + 1)]
+            frontier[policy][str(level)] = {
+                "metrics": {
+                    metric: _confidence_summary([row[metric] for row in rows])
+                    for metric in metric_keys
+                },
+                "paired_difference_vs_zero_hours": {
+                    metric: _confidence_summary([
+                        rows[i][metric] - ref_rows[i][metric]
+                        for i in range(runs)
+                    ])
+                    for metric in metric_keys
+                },
+            }
+    return {
+        "runs": runs, "shock": shock, "periods": periods,
+        "cellular_hops": cellular_hops,
+        "hours_per_message_levels": list(levels),
+        "reference": "zero coordination labour hours per message",
+        "frontier": frontier,
+    }
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--policy", choices=POLICIES, default="cellular")
