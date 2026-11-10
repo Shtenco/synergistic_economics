@@ -268,3 +268,24 @@ fixture is committed at
 A separate local Decimal verification of the component logic passed for all
 seven issuer records, ten holder positions and both adversarial controls.
 This is not yet execution of the committed file by exact-head CI.
+
+
+### Period-scoped entity and issuer identity
+
+A multi-period review found that the synthetic claim mirror key omitted
+`effective_period`. As a result, the same instrument could not be represented
+as separate position records in successive periods, and a holder record from
+one period could potentially be compared with an issuer record from another.
+
+The key now includes the effective period. The fixture verifies that:
+- the same instrument can be mirrored independently in periods 1 and 2;
+- a period-1 holder record cannot be matched by a period-2 issuer liability;
+- sector financial net lending refuses to silently aggregate records spanning
+  multiple periods and requires an explicit period selector;
+- period-scoped aggregation uses transactions (T) only, and supports
+  single-pass iterables without consuming them during period detection.
+
+This closes a period-identity ambiguity in the synthetic fixture. It does not
+yet validate continuity between one period's closing stock and the next
+period's opening stock, nor does it turn the fixture into a persistent
+multi-period financial ledger. Exact-head execution remains pending.
