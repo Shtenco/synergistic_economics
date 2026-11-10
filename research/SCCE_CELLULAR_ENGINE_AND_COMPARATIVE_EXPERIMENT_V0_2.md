@@ -259,6 +259,8 @@ It is not yet a full dynamic economy. It currently omits:
 
 The current "service value" is a diagnostic allocation metric, not GDP, profit, income, utility or measured social welfare. It must not be reported as empirical prosperity.
 
+The Stage-A market comparator is deliberately thin: bids are synthetic priority-linked willingness-to-pay values, and it does not yet impose cash budgets, strategic bidding, market power, entry/exit, inventory finance or bargaining. The central comparator is a deterministic full-information greedy priority allocator, not a mathematically solved social-planner optimum. These labels describe four prototype coordination rules, not fully specified real-world institutional systems. Stronger market, cooperative and optimization baselines are required before any substantive institutional conclusion.
+
 The existing seven-cell and general input-output prototypes remain intact. The cellular engine is an additional coordination layer intended to be integrated only after its local protocol and comparative design have been validated.
 
 # Part IV — Fair comparative experiment
