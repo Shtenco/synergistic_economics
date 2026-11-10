@@ -53,7 +53,7 @@ def run_household_distribution_experiment(
     essential_floor_fraction: float = 0.5,
     economic_policies: Sequence[str] = POLICIES,
 ) -> dict:
-    """Compare household rationing rules on identical Stage-B consumption.
+    """Compare three household rationing rules on identical Stage-B consumption.
 
     Each Stage-B world is simulated once per seed/economic policy. Both
     household rules then receive exactly the same per-cell physical consumption
@@ -143,7 +143,7 @@ def run_household_distribution_experiment(
         "economic_policies": list(economic_policies),
         "household_policies": list(HOUSEHOLD_POLICIES),
         "summary": summary,
-        "paired_priority_weighted_minus_proportional": paired,
+        "paired_alternative_minus_proportional": paired,
         "paired_runs": rows,
     }
 
