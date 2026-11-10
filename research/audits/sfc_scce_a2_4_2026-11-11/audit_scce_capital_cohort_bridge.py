@@ -273,7 +273,7 @@ def main():
                       "operating", .9, .8, .95),
     )
     try:
-        apply_capital_cohorts(fake, fake_cohorts, {"a": 68.4, "b": 68.4})
+        apply_capital_cohorts(fake, fake_cohorts, {"a": 136.8, "b": 136.8})
     except CapitalBridgeError:
         pass
     else:
@@ -298,7 +298,7 @@ def main():
         raise AssertionError("incomplete baseline map accepted")
 
     print("A2.4.2/B8.1 cohort-to-SCCE runtime adapter: PASS")
-    print("identity-preserving lifecycle: age, repair, component split, retirement and physical-loss flows reconcile")
+    print("identity-preserving lifecycle: age, repair, partial retirement and physical-loss flows reconcile")
     print("physical units remain distinct from operating units and service flow")
     print("B8.1 active states and terminal retirement records are distinct; retired tombstones do not enter physical/service stock")
     print("repair downtime reduces service, not physical stock; utilization scales service")
