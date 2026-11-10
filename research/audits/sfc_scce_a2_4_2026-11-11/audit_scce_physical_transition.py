@@ -7,6 +7,7 @@ final consumption. It also validates the engine's event sequence and resource
 stock-flow identity after every period.
 """
 from collections import defaultdict
+import math
 from pathlib import Path
 import sys
 
@@ -86,8 +87,8 @@ def main():
                 raise AssertionError(f"unknown product in event: {product}")
 
             quantity = float(payload.get("quantity", -1.0))
-            if quantity < 0:
-                raise AssertionError("negative event quantity")
+            if not math.isfinite(quantity) or quantity < 0:
+                raise AssertionError("event quantity must be finite and non-negative")
 
             if event["type"] == "production":
                 cell_id = payload.get("cell")
@@ -103,10 +104,15 @@ def main():
                 distance = float(payload.get("distance", -1.0))
                 if seller not in model.cells or buyer not in model.cells:
                     raise AssertionError("delivery references unknown cell")
-                if seller == buyer or distance < 0:
+                if (seller == buyer or not math.isfinite(distance)
+                        or distance < 0):
                     raise AssertionError("invalid inter-cell delivery endpoints")
-                if key_parts[0] != event["type"]:
-                    raise AssertionError("delivery key/type mismatch")
+                expected_key = (
+                    f"{event['type']}:{period}:{product}:{seller}:{buyer}"
+                )
+                if event["key"] != expected_key:
+                    raise AssertionError(
+                        f"delivery key/payload mismatch: {event['key']} != {expected_key}")
                 outgoing[(seller, product)] += quantity
                 incoming[(buyer, product)] += quantity
 
@@ -120,6 +126,8 @@ def main():
                 f"production event coverage mismatch: {production_cells}")
 
         for product, quantity in result.output_by_product.items():
+            if not math.isfinite(float(quantity)):
+                raise AssertionError(f"non-finite period output: {product}")
             close(f"period {period} output event mirror {product}",
                   production_by_product[product], quantity)
 
