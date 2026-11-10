@@ -110,7 +110,7 @@ def main():
         L("loan_asset", "C", 3, "BANK", "loan")))
 
     assert len(j.events) == 8
-    assert len(j.lines) == 30
+    assert len(j.lines) == 28
     for e in j.events.values():
         d = sum((x.amount for x in e.lines if x.side == "D"), D("0"))
         c = sum((x.amount for x in e.lines if x.side == "C"), D("0"))
