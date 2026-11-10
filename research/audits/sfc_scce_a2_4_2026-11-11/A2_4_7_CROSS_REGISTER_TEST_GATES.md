@@ -125,8 +125,8 @@ not execution evidence.
 | G0-A: SCCE queue | deterministic expiry and overflow integration fixture; all primitive queue tests | **PENDING CI** — replacement fixture committed as `bea7d625`; both required workflows still need successful runs |
 | G0-B: capital | same-cohort script, exact expected output, negative-input rejection | **IMPLEMENTED / EXECUTION PENDING** — `audit_same_cohort_capital.py` |
 | G0-C: product | typed registry/valuation script; mismatched unit and grade rejected; quantity invariant under price change | **IMPLEMENTED / EXECUTION PENDING** — `audit_product_valuation_adapter.py` |
-| G0-D: financial | balanced journal fixtures for origination, transfer, payment, accrual, settlement, default, impairment and write-off | **SPECIFIED ONLY** — not implemented |
-| G0-E: labour/rights | interval-overlap, consent, delivery, compensation accrual/settlement and rights non-inference tests | **SPECIFIED ONLY** — not implemented |
+| G0-D: financial | balanced journal fixtures for origination, transfer, payment, accrual, settlement, default, impairment and write-off | **IMPLEMENTED / EXECUTION PENDING** — `audit_financial_journal.py`; component journal only, not full instrument/SFC reconciliation |
+| G0-E: labour/rights | interval-overlap, consent, delivery, compensation accrual/settlement and rights non-inference tests | **IMPLEMENTED / EXECUTION PENDING** — `audit_labour_consent.py`; component fixture, not a complete rights engine |
 | G1: interface closure | all A2.4.1–A2.4.7 interfaces pass, typed conversions explicit, no balancing plug | **OPEN** |
 | G2: end-to-end | one frozen period with linked physical, capital, labour and financial event IDs; all stock/flow and mirror identities close | **NOT STARTED** |
 | G3: comparative | preregistered matched-seed regimes, paired outcomes, uncertainty, sensitivity and adverse effects | **NOT STARTED** |
@@ -177,3 +177,25 @@ comparative and empirical gates remain open.
 These fixtures are component controls. They do not yet constitute a complete
 financial instrument registry, full institutional-sector SFC closure, live
 SCCE integration, or a legally validated rights engine.
+
+
+### 6.5 Executable audit workflow and physical-flow correction — 11 November 2026
+
+A branch-scoped GitHub Actions workflow was added at
+`.github/workflows/a2-4-audit-controls.yml`. It runs on pushes to this audit
+branch and can be manually dispatched. It compiles the audit directory and
+executes nine standard-library controls: six-sector SFC, capital bridge,
+same-cohort capital, product dimensions, typed valuation, physical flow
+endpoints, financial events, double-entry journal and labour/consent.
+
+The physical-flow fixture was strengthened before execution: sender and
+receiver are now distinct endpoint postings with reciprocal counterparty IDs
+and opposite roles. Consolidation is calculated over an explicit node set;
+an internal transfer cancels only when both nodes are inside that set, while
+an external export remains visible as a domestic net outflow.
+
+**Evidence status:** workflow configuration and fixture are committed, but
+this document does not record a completed run, exit codes or logs. All nine
+scripts remain **IMPLEMENTED / EXECUTION PENDING** until a completed workflow
+on the exact commit SHA is inspected. An empty combined-status response is
+not a pass.
