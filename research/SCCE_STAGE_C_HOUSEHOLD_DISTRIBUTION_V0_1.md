@@ -122,7 +122,7 @@ The test suite also checks that priority-weighted allocation changes the distrib
 
 ## 7. Integration with Stage B
 
-The module is intentionally a separate layer, but a direct data boundary now exists: Stage B's `PeriodResult.final_consumption_by_cell` exposes the physical quantities already counted as final consumption in each cell. The adapter `allocate_period_households(...)` accepts that field and disaggregates it among household agents.
+The module remains separate from Stage-B production and matching, but a tested data bridge now exists. Stage B exposes per-cell final demand and per-cell physical consumption in each `PeriodResult`. The bridge in `prototype/scc_household_bridge.py` constructs reproducible synthetic household profiles whose product totals exactly reconcile to each cell's Stage-B demand, then allocates the already-consumed Stage-B quantities to those households. It checks total demand, total physical consumption and essential food/care service against Stage B.
 
 The integration preserves the boundary:
 - Stage B determines what goods reach each cell and records cell-level consumption;
@@ -131,7 +131,7 @@ The integration preserves the boundary:
 - household disaggregation is not counted as an inter-cell trade or a second delivery;
 - aggregate household quantities must reconcile exactly to the Stage-B cell totals.
 
-The adapter is tested against a Stage-B-shaped period result. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
+Two paired experiments are available. `prototype/household_distribution_experiment.py` aggregates the full 24-period horizon before household rationing; it is a cumulative resource-adequacy view and permits intertemporal aggregation. `prototype/scc_household_experiment.py` distributes each period separately, preserving the timing of shortages and avoiding cross-period pooling. The latter varies synthetic household-priority dispersion and compares proportional with priority-weighted allocation on identical per-period supplies and household profiles. Full in-loop household demand feedback into Stage-B production planning is not yet implemented.
 
 Experiments should compare:
 - proportional versus priority-weighted distribution;
