@@ -648,7 +648,7 @@ V_t=\{X\in\Omega_t:\exists u\in U(X)
 Новые эмпирические работы требуют особенно строгого обращения с временными и территориальными границами. Исследование Requena-i-Mora и Brockington (2026) анализирует материальный след 105 стран за 1970–2022 годы и показывает, насколько выводы о разъединении зависят от временного окна, географического масштаба и сравнения с экологическими пределами. Это не следует превращать в универсальное доказательство невозможности любого будущего разъединения; это аргумент против выборочного и короткого измерения.
 
 Для B7 источники и точки проверки:
-- UNEP International Resource Panel, *Global Resources Outlook 2024*: https://www.unep.org/en/resources/Global-Resource-Outlook-2024
+- UNEP International Resource Panel, *Global Resources Outlook 2024*: https://www.unep.org/en/publications/report/global-resources-outlook-2024
 - IPCC AR6 WGIII, Chapter 3 — Mitigation pathways compatible with long-term goals: https://www.ipcc.ch/report/ar6/wg3/chapter/chapter-3/
 - Requena-i-Mora & Brockington (2026), *Evaluating decoupling evidence: Examining timeframes, geographic scales, and planetary boundaries*, Global Environmental Change 98, 103150: https://doi.org/10.1016/j.gloenvcha.2026.103150
 - Haberl et al. (2020), systematic review, Part II: https://doi.org/10.1088/1748-9326/ab842a
