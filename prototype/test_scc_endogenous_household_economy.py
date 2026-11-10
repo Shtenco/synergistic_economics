@@ -99,6 +99,37 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
         self.assertGreaterEqual(a["ending_essential_backlog"], 0.0)
         self.assertGreaterEqual(b["ending_essential_backlog"], 0.0)
 
+    def test_care_queue_age_expiry_and_overflow_are_accounted(self):
+        expiring = EndogenousHouseholdEconomy(
+            "cellular", seed=67, shock="compound", cellular_hops=2,
+            households_per_cell=8, priority_dispersion=0.4,
+            household_policy="proportional", backlog_retention=1.0,
+            max_backlog_periods=1.0, max_care_queue_age_periods=1,
+        )
+        expiring.run(12)
+        self.assertGreater(
+            expiring.summary()["cumulative_expired_care_claim_units"], 0.0,
+        )
+        self.assertTrue(expiring.validate())
+        for distribution in expiring.summary()["care_queue_age_distribution"]:
+            self.assertIn(int(distribution), (0,))
+
+        capped = EndogenousHouseholdEconomy(
+            "cellular", seed=71, shock="compound", cellular_hops=2,
+            households_per_cell=8, priority_dispersion=0.4,
+            household_policy="proportional", backlog_retention=1.0,
+            max_backlog_periods=0.01, max_care_queue_age_periods=3,
+        )
+        capped.run(12)
+        self.assertGreater(
+            capped.summary()["cumulative_unqueued_care_claim_units"], 0.0,
+        )
+        self.assertLessEqual(
+            capped.summary()["ending_essential_backlog"],
+            sum(h.essential_needs.get("care", 0.0) for h in capped.households) * 0.01
+            + 1e-7,
+        )
+
     def test_invalid_backlog_parameters_are_rejected(self):
         with self.assertRaises(EndogenousHouseholdError):
             EndogenousHouseholdEconomy(backlog_retention=1.1)
@@ -108,6 +139,8 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
             EndogenousHouseholdEconomy(household_policy="unknown")
         with self.assertRaises(EndogenousHouseholdError):
             EndogenousHouseholdEconomy(backlog_service_order="random")
+        with self.assertRaises(EndogenousHouseholdError):
+            EndogenousHouseholdEconomy(max_care_queue_age_periods=0)
 
 
 if __name__ == "__main__":
