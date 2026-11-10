@@ -50,6 +50,25 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
             for c in model.cells.values():
                 self.assertTrue(all(v >= -1e-9 for v in c.stocks.values()))
 
+    def test_global_planner_uses_aggregate_declared_demand(self):
+        central = DynamicCellularEconomy("central", seed=2, shock="none")
+        cellular = DynamicCellularEconomy("cellular", seed=2, shock="none", cellular_hops=1)
+        central.step(1)
+        cellular.step(1)
+        central_food = central.cells["cell-1"].output_this_period
+        cellular_food = cellular.cells["cell-1"].output_this_period
+        self.assertGreater(central_food, cellular_food)
+
+    def test_local_reach_changes_cellular_information_boundary(self):
+        local = DynamicCellularEconomy("cellular", seed=12, shock="none", cellular_hops=1)
+        federated_reach = DynamicCellularEconomy("cellular", seed=12, shock="none", cellular_hops=2)
+        local.run(10)
+        federated_reach.run(10)
+        self.assertNotEqual(
+            local.summary()["fixed_price_gross_output_index"],
+            federated_reach.summary()["fixed_price_gross_output_index"],
+        )
+
     def test_same_seed_same_policy_is_reproducible(self):
         a = DynamicCellularEconomy("cellular", seed=19, shock="compound", cellular_hops=2)
         b = DynamicCellularEconomy("cellular", seed=19, shock="compound", cellular_hops=2)
