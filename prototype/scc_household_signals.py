@@ -143,6 +143,9 @@ def household_demand_specs(
     products = sorted({p for spec in base_specs for p in spec.final_demand})
     rebuilt = signals_to_cell_demand(
         snapshot, [spec.cell_id for spec in base_specs], products)
+    cell_ids = [spec.cell_id for spec in base_specs]
+    if len(cell_ids) != len(set(cell_ids)):
+        raise HouseholdSignalError("cell ids must be unique")
     updated_specs = tuple(
         replace(spec, final_demand={
             product: rebuilt[spec.cell_id][product]
@@ -150,10 +153,11 @@ def household_demand_specs(
         })
         for spec in base_specs
     )
+    updated_by_id = {spec.cell_id: spec for spec in updated_specs}
     for spec in base_specs:
         for product, original in spec.final_demand.items():
-            if abs(updated_specs[[x.cell_id for x in updated_specs].index(spec.cell_id)]
-                   .final_demand[product] - float(original)) > 1e-8:
+            if abs(updated_by_id[spec.cell_id].final_demand[product]
+                   - float(original)) > 1e-8:
                 raise HouseholdSignalError(
                     f"household demand does not reconcile at {spec.cell_id}:{product}")
     return updated_specs, households, snapshot
