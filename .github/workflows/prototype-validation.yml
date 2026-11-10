@@ -28,3 +28,7 @@ jobs:
         run: python prototype/io_economy.py --scenario baseline --periods 12
       - name: Run compound input-output simulation
         run: python prototype/io_economy.py --scenario compound_shock --periods 12
+      - name: Run paired SCCE cellular comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock none --hops 1 --summary-only
+      - name: Run paired SCCE cellular stress comparison (100 seeds)
+        run: python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 2 --summary-only
