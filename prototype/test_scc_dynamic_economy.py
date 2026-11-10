@@ -6,6 +6,7 @@ from cellular_coordination import (
 )
 from scc_dynamic_economy import (
     DynamicCellularEconomy, DynamicEconomyError, compare, monte_carlo,
+    coordination_sensitivity,
 )
 
 
@@ -144,6 +145,26 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         model.run(8)
         self.assertTrue(model.validate())
         self.assertGreaterEqual(model.summary()["total_messages"], 0)
+
+    def test_paired_coordination_sensitivity_uses_same_seeds(self):
+        result = coordination_sensitivity(
+            runs=3, shock="compound", periods=8, cellular_hops=2,
+            base_hours=0.01, stress_hours=0.05,
+        )
+        self.assertEqual(result["runs"], 3)
+        cellular = result["sensitivity"]["cellular"]
+        self.assertEqual(
+            cellular["fixed_price_final_consumption_index"]["paired_stress_minus_base"]["n"],
+            3,
+        )
+        self.assertLess(
+            cellular["fixed_price_final_consumption_index"]["paired_stress_minus_base"]["mean"],
+            0,
+        )
+        self.assertGreater(
+            cellular["total_coordination_hours"]["paired_stress_minus_base"]["mean"],
+            0,
+        )
 
     def test_invalid_policy_rejected(self):
         with self.assertRaises(DynamicEconomyError):
