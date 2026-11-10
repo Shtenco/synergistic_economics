@@ -41,6 +41,7 @@ class Allocation:
     buyer: str
     quantity: float
     distance: int
+    communication_hops: int = 0
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class World:
     prices: Mapping[str, float]
     transport_cost_per_hop: float = 0.04
     transaction_cost: float = 0.15
+    communication_edges: Tuple[Tuple[str, str], ...] | None = None
 
     def __post_init__(self):
         ids = [c.cell_id for c in self.cells]
@@ -61,6 +63,9 @@ class World:
                 raise CoordinationError("invalid network edge")
         if self.transport_cost_per_hop < 0 or self.transaction_cost < 0:
             raise CoordinationError("coordination costs cannot be negative")
+        for a, b in (self.communication_edges or ()):
+            if a not in known or b not in known or a == b:
+                raise CoordinationError("invalid communication edge")
         products = set(self.prices)
         if not products:
             raise CoordinationError("at least one product is required")
@@ -398,9 +403,11 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
         raise CoordinationError("max_hops and max_rounds must be positive")
     supply, demand = _state(world)
     graph = {c.cell_id: set() for c in world.cells}
-    for a, b in world.edges:
+    communication_edges = world.communication_edges or world.edges
+    for a, b in communication_edges:
         graph[a].add(b)
         graph[b].add(a)
+    delivery_distances = shortest_paths(world)
     cells = {c.cell_id: c for c in world.cells}
     allocations: List[Allocation] = []
     message_trace = trace if trace is not None else []
@@ -451,7 +458,9 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                             if (neighbour != buyer
                                     and available[neighbour] > EPS
                                     and neighbour not in tried[buyer]):
-                                offers.append((depth, neighbour, next_path))
+                                if neighbour in delivery_distances[buyer]:
+                                    offers.append((depth, delivery_distances[buyer][neighbour],
+                                                   neighbour, next_path))
                     if offers:
                         break
                     frontier = next_frontier
@@ -460,11 +469,11 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
 
                 if not offers:
                     continue
-                distance, seller, path = min(
-                    offers, key=lambda item: (item[0], item[1], tuple(item[2])))
+                communication_hops, delivery_distance, seller, path = min(
+                    offers, key=lambda item: (item[0], item[1], item[2], tuple(item[3])))
                 tried[buyer].add(seller)
                 requests[seller][buyer] = remaining[buyer]
-                request_paths[(seller, buyer)] = (distance, path)
+                request_paths[(seller, buyer)] = (communication_hops, delivery_distance, path)
                 relay_message("offer_forward", product, round_index,
                               path, available[seller])
 
@@ -483,9 +492,10 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                     quantity = granted[buyer]
                     if quantity <= EPS:
                         continue
-                    distance, path = request_paths[(seller, buyer)]
+                    communication_hops, delivery_distance, path = request_paths[(seller, buyer)]
                     allocations.append(Allocation(
-                        product, seller, buyer, quantity, distance))
+                        product, seller, buyer, quantity, delivery_distance,
+                        communication_hops))
                     available[seller] -= quantity
                     remaining[buyer] -= quantity
                     moved += quantity
