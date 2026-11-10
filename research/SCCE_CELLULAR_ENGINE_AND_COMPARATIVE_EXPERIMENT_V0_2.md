@@ -250,10 +250,10 @@ Before inter-cell matching, each cell's own stock is netted against its own need
 - event records, deterministic seed replay and resource-conservation checks;
 - explicit neighbour-by-neighbour request relay for the cellular regime;
 - counts of forwarded requests, offers, reservations and acceptances;
-- synthetic per-message coordination costs alongside per-transaction charges;
+- synthetic per-message charges and explicit labour-time consumption for coordination;
 - four matched coordination regimes using the same initial world and shock.
 
-The production-planning rules now differ by institutional mechanism. Central planning uses current aggregate declared final demand; the cooperative pool uses aggregate needs with a larger shared buffer; the market rule reacts to previous-period market-wide unmet orders; the cellular rule reacts only to unmet orders signalled inside the configured local neighbourhood. Intermediate input plans account for the materials-energy loop, and cellular producers' input-demand signals are restricted to reachable neighbours. Cellular messages are relayed hop by hop rather than exposing a global supplier list. The simulator charges a synthetic cost per message, but does not yet deduct message labour from productive time. This remains a stylized treatment of institutions, not a full model of real markets or democratic cooperative governance.
+The production-planning rules now differ by institutional mechanism. Central planning uses current aggregate declared final demand; the cooperative pool uses aggregate needs with a larger shared buffer; the market rule reacts to previous-period market-wide unmet orders; the cellular rule reacts only to unmet orders signalled inside the configured local neighbourhood. Intermediate input plans account for the materials-energy loop, and cellular producers' input-demand signals are restricted to reachable neighbours. Cellular messages are relayed hop by hop rather than exposing a global supplier list. Message handling consumes a configurable amount of cell labour: input-procurement messages reduce the current period's production labour budget, while final-goods coordination reduces next period's available labour. The default is 0.01 labour-hours per message and is subject to sensitivity analysis. This is still a stylized proxy; governance, meeting time, failed bargaining beyond recorded requests, enforcement and dispute resolution are not fully modelled.
 
 ## 12. What these kernels do not yet model
 
