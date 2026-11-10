@@ -680,7 +680,9 @@ Added a standard-library SQLite prototype:
   group ID and event-ID reuse across groups are rejected;
 - event envelope, event rows and all posting rows are committed in one
   `BEGIN IMMEDIATE` transaction;
-- SQLite WAL and `synchronous=FULL` are configured;
+- file-backed storage is required; SQLite WAL mode and
+  `synchronous=FULL` are configured and verified; non-finite/non-positive
+  lock timeouts are rejected;
 - database triggers reject UPDATE/DELETE of committed group, event and
   posting rows;
 - integrity verification checks SQLite structure, foreign keys, payload
@@ -688,10 +690,11 @@ Added a standard-library SQLite prototype:
 
 Added `audit_financial_event_store.py` and included it in the prototype CI
 wrapper, which now executes fifteen separate A2.4 audit scripts. The wrapper
-sets `PYTHONHASHSEED=0` for deterministic subprocess execution. Negative
-controls cover restart replay, changed group payload, global event-ID reuse,
-binary floating-point amount rejection, immutable rows, injected mid-write
-rollback and detection of out-of-band posting corruption.
+sets `PYTHONHASHSEED=0` and `PYTHONIOENCODING=utf-8` for deterministic,
+stable subprocess logs. Negative controls cover restart replay, changed group
+payload, global event-ID reuse, binary floating-point amount rejection,
+in-memory database rejection, non-finite timeout rejection, immutable rows,
+injected mid-write rollback and detection of out-of-band posting corruption.
 
 Commits for this continuation:
 - `578bf4ee96faca3a7d44b7a5fdb68e975dc4d2a3` — initial SQLite event store;
@@ -705,8 +708,13 @@ Commits for this continuation:
 - `f9cb598e290c625de87052d0da94d26f34ca9678` — fail-closed integrity handling;
 - `ec58bdb52af01173232054effc02d1eef616956e` — out-of-band posting-corruption
   detection;
-- `90177269dc33a5a100369c19cc79d5cc02d6adc2` — deterministic CI subprocess
-  environment.
+- `ef1058823a653a0d33a4e959e2c79fa9f5944fb8` — require file-backed SQLite,
+  verify WAL/FULL mode and reject invalid timeout values;
+- `66cd1fa827636751361b76bed3804ecf507fdb72b` — test invalid persistence
+  configuration;
+- `229ef9c32d235e9542f2e7400598616d5c778792` — document durability
+  prerequisites and configuration controls;
+- `0e9db5f1d3538094e3afe11ba29266b115ac5edf` — deterministic UTF-8 CI logs.
 
 **Scope boundary:** the store is a single-host SQLite component prototype. It
 is downstream of accounting validation and does not replace
