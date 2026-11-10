@@ -34,6 +34,7 @@ class Cell:
     bid: Mapping[str, float]
     trade_consent: bool = True
     allowed_counterparties: frozenset[str] | None = None
+    relay_consent: bool = True
 
 
 @dataclass(frozen=True)
@@ -500,7 +501,6 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                                 continue
                             visited.add(neighbour)
                             next_path = path + [neighbour]
-                            next_frontier.append((neighbour, next_path))
                             raw_message_trace.append({
                                 "type": "request_forward", "product": product,
                                 "round": round_index, "origin": buyer,
@@ -514,6 +514,10 @@ def allocate_relay_cellular(world: World, max_hops: int = 1,
                                 if neighbour in delivery_distances[buyer]:
                                     offers.append((depth, delivery_distances[buyer][neighbour],
                                                    neighbour, next_path))
+                            # A cell may receive a request but only forwards it
+                            # when it has explicitly consented to relay traffic.
+                            if cells[neighbour].relay_consent:
+                                next_frontier.append((neighbour, next_path))
                     if offers:
                         break
                     frontier = next_frontier
