@@ -1003,12 +1003,17 @@ def main():
     parser.add_argument("--monte-carlo", type=int, default=0)
     parser.add_argument("--coordination-sensitivity", action="store_true")
     parser.add_argument("--coordination-curve", action="store_true")
+    parser.add_argument("--coordination-frontier", action="store_true")
     parser.add_argument("--coordination-levels", default="0,0.0025,0.005,0.01,0.02,0.05")
     parser.add_argument("--base-coordination-hours", type=float, default=0.01)
     parser.add_argument("--stress-coordination-hours", type=float, default=0.05)
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
-    if args.coordination_curve:
+    if args.coordination_frontier:
+        levels = tuple(float(x.strip()) for x in args.coordination_levels.split(","))
+        result = coordination_frontier(
+            args.monte_carlo or 20, args.shock, args.periods, args.hops, levels)
+    elif args.coordination_curve:
         levels = tuple(float(x) for x in args.coordination_levels.split(","))
         result = coordination_curve(
             args.monte_carlo or 20, args.shock, args.periods, args.hops, levels)
