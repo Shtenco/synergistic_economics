@@ -180,7 +180,38 @@ def apply_capital_cohorts(
         raise CapitalBridgeError("model must expose the SCCE cells mapping")
     snapshots = aggregate_capital_services(
         tuple(model.cells), cohorts, baseline_services)
-    # All validation is complete before the first write.
+
+    # Preflight every target before mutating the first one. In particular, a
+    # malformed later cell must not leave earlier cells with new multipliers.
+    targets = []
     for snapshot in snapshots:
-        model.cells[snapshot.cell_id].capital = snapshot.capital_multiplier
+        cell = model.cells[snapshot.cell_id]
+        try:
+            old_value = cell.capital
+        except Exception as exc:
+            raise CapitalBridgeError(
+                f"{snapshot.cell_id} does not expose a readable capital field") from exc
+        old_number = _finite_nonnegative(old_value, f"{snapshot.cell_id} existing capital")
+        if not hasattr(cell, "__dict__") or "capital" not in vars(cell):
+            raise CapitalBridgeError(
+                f"{snapshot.cell_id} capital must be a writable instance field")
+        targets.append((cell, old_number, snapshot.capital_multiplier, snapshot.cell_id))
+
+    attempted = []
+    try:
+        for cell, old_value, new_value, cell_id in targets:
+            attempted.append((cell, old_value, cell_id))
+            cell.capital = new_value
+    except Exception as exc:
+        rollback_errors = []
+        for cell, old_value, cell_id in reversed(attempted):
+            try:
+                cell.capital = old_value
+            except Exception as rollback_exc:
+                rollback_errors.append((cell_id, str(rollback_exc)))
+        if rollback_errors:
+            raise CapitalBridgeError(
+                f"capital mapping failed and rollback was incomplete: {rollback_errors}") from exc
+        raise CapitalBridgeError(
+            "capital mapping failed; all attempted cell values were rolled back") from exc
     return snapshots
