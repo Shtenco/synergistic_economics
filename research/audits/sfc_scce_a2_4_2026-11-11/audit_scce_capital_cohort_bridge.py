@@ -118,6 +118,12 @@ def check_cohort_lifecycle(seed_cohorts):
         pass
     else:
         raise AssertionError("same-period cohort ageing replay was accepted")
+    try:
+        advance_cohort_period(result.state, (), (), period=2023)
+    except CapitalBridgeError:
+        pass
+    else:
+        raise AssertionError("skipped cohort period was accepted")
 
     # An overdrawn event must fail rather than silently clamp or destroy stock.
     try:
@@ -127,7 +133,7 @@ def check_cohort_lifecycle(seed_cohorts):
                 "overdraw-1", opening.cohort_id, "state_transition",
                 11, "operating", "repair"),),
             (),
-            period=1)
+            period=2021)
     except CapitalBridgeError:
         pass
     else:
