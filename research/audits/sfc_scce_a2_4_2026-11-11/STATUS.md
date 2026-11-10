@@ -785,3 +785,51 @@ sector balance sheets.
 latest exact-head CI has not produced runner steps or logs; no PASS is claimed.
 A2.4.4 remains OPEN, A2.4.7 remains OPEN and A2.4.8 remains BLOCKED. PR #4
 remains Draft/unmerged; `main` remains untouched.
+
+
+## 11 November continuation — event ordering and concurrent writer controls
+
+A deeper review of the new durable store found that the first integrity checker
+used SQLite `rowid` to reconstruct event order. Rowid is an implementation
+detail, not a durable business-order key; a rebuild or VACUUM must not silently
+change the canonical order of events inside a transaction group.
+
+The store schema is now version 2:
+- each event persists an explicit `event_index`;
+- a unique constraint/index prevents duplicate positions within one group;
+- integrity verification orders by `event_index` and requires contiguous
+  indexes from zero;
+- journal-line verification also checks contiguous `line_no` values;
+- a transactional v1-to-v2 migration assigns explicit indexes in the
+  pre-migration rowid order and restores the append-only update trigger.
+
+The financial event-store audit now additionally tests:
+- two concurrent connections delivering the same group: exactly one insert
+  and one idempotent replay;
+- two concurrent groups racing to claim the same event ID: exactly one
+  succeeds and the other is rejected;
+- migration from a synthetic version-1 database while preserving group event
+  order and verifying the migrated envelope.
+
+The contract also records the SQLite WAL-reset defect and its fixed releases:
+production multi-connection writers must use SQLite 3.51.3+ or a patched
+backport (3.50.7 / 3.44.6), and WAL must not be placed on a network filesystem.
+The runtime SQLite version must be recorded before enabling concurrent
+production writers.
+
+Commits:
+- `eb4db296df03cc5aee8dcaeb15910e966b745985` — concurrent replay and
+  cross-group event-ID race controls;
+- `13bd9db98ebb4885fcfd5cffbb79bd6ef53232e4` — explicit event order and
+  schema-v2 migration;
+- `285a118aa7f2f6923f7d53470318a2c15ef76b8d` — migration/order test fixture;
+- `17a66974dd27e452f11b17af54c58457632b2aa2` and
+  `bbf622988902b5b4beb7df34739e14683ed21a89` — integrity query corrections
+  to use stable event indexes while preserving legacy migration order;
+- `7cd1d156779685eba13b9e80084fe3bad3c8e007` and
+  `f8026a40eec3bdedd7020bdb507cfd12e702093b` — contract updates for
+  concurrency, SQLite WAL compatibility and schema migration.
+
+**Execution status:** these controls are committed but have not been observed
+running to completion. The latest GitHub jobs remain queued without runner
+steps or logs; no PASS is claimed.
