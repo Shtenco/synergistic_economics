@@ -10,6 +10,7 @@ from contextlib import closing
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
+import math
 import os
 import sqlite3
 from typing import Any, Mapping, Sequence
@@ -100,11 +101,13 @@ class FinancialEventStore:
     SCHEMA_VERSION = 1
 
     def __init__(self, database_path: str | os.PathLike, timeout: float = 10.0):
-        if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or timeout <= 0:
-            raise FinancialEventStoreError("timeout must be positive")
+        if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
+                or not math.isfinite(timeout) or timeout <= 0):
+            raise FinancialEventStoreError("timeout must be finite and positive")
         self.database_path = os.fspath(database_path)
-        if not self.database_path:
-            raise FinancialEventStoreError("database_path is required")
+        if not self.database_path or self.database_path == ":memory:":
+            raise FinancialEventStoreError(
+                "a persistent file-backed database_path is required")
         self.timeout = float(timeout)
         self._initialize()
 
@@ -120,8 +123,11 @@ class FinancialEventStore:
 
     def _initialize(self) -> None:
         with closing(self._connect()) as connection:
-            connection.execute("PRAGMA journal_mode = WAL")
-            connection.execute("PRAGMA synchronous = FULL")
+            journal_mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
+            synchronous = connection.execute("PRAGMA synchronous = FULL").fetchone()[0]
+            if str(journal_mode).lower() != "wal" or synchronous != 2:
+                raise FinancialEventStoreError(
+                    "SQLite WAL mode and FULL synchronous durability are required")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
