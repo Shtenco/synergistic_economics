@@ -165,6 +165,21 @@ class StageBPhysicalEconomyTests(unittest.TestCase):
         summary = model.summary()
         self.assertGreater(summary["total_message_records"], summary["total_messages"])
 
+    def test_per_record_labour_cost_is_propagated_into_monte_carlo(self):
+        free_records = monte_carlo(
+            runs=2, shock="compound", periods=8, cellular_hops=2,
+            coordination_hours_per_message=0.01,
+            coordination_hours_per_additional_record=0.0,
+        )
+        costly_records = monte_carlo(
+            runs=2, shock="compound", periods=8, cellular_hops=2,
+            coordination_hours_per_message=0.01,
+            coordination_hours_per_additional_record=0.01,
+        )
+        free = free_records["summary"]["cellular"]["total_coordination_hours"]["mean"]
+        costly = costly_records["summary"]["cellular"]["total_coordination_hours"]["mean"]
+        self.assertGreater(costly, free)
+
     def test_paired_coordination_sensitivity_uses_same_seeds(self):
         result = coordination_sensitivity(
             runs=3, shock="compound", periods=8, cellular_hops=2,
