@@ -326,3 +326,35 @@ earlier ancestor.
   ledger. It is a real-engine physical inventory transition check only.
 - Neither component fixture establishes the A2.4.8 cross-register numerical
   closure or permits construction of the unified economic engine.
+
+
+## 11 November continuation — B8.1 cohort contract hardening
+
+The B8.1 adapter fixture now validates:
+- non-negative integer vintage and age (rejecting booleans as integer impostors);
+- finite non-negative quantity and service capacity;
+- explicit condition, operating, retirement-reason and data-quality domains;
+- finite availability, utilization and service-quality coefficients in [0,1];
+- immutable material passports with unique material IDs and mass units;
+- immutable, unique repair-event identifiers;
+- component identity, vintage, age, quantity and material vector;
+- finite opening states and finite non-negative transition/addition/retirement/loss quantities.
+
+Adversarial controls reject duplicate material IDs, an unknown condition state,
+NaN availability, incomplete component identity and NaN opening stock. This
+hardens the specification adapter; it still does not consume a live B8.1
+runtime object or prove cohort continuity across the repository's economic
+prototype.
+
+Committed at `e71829683744cb52ecee560e2df090988cea8532`. Exact-head audit
+workflow run `42905853603` was queued at the last poll. No execution PASS is
+claimed.
+
+### Current exact-head state
+
+- Audit branch HEAD: `e71829683744cb52ecee560e2df090988cea8532`.
+- Draft PR #4: 85 commits ahead of `main`, 0 behind; 25 changed files.
+- Exact-head A2.4 audit workflow run `42905853603`: queued.
+- Prototype and Stage-C2 runs visible at the previous head
+  `42faf56e895fd5a6c8f74cfaa747f0a2dd0c94ea`: queued.
+- No completed exact-head CI logs are available. Do not mark Gate 0 as passed.
