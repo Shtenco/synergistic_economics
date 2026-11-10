@@ -81,7 +81,7 @@ def run_capital_bridge(cohorts, additions, p0, p1, availability, utilization):
     net_close = (
         net_open + gross_acquisitions - cfc - net_disposals + net_revaluation
     )
-    direct_gross = gross_survivors + additions_units * p1
+    direct_gross = gross_survivors + gross_acquisitions
     direct_net = net_survivors + addition_net_value
     service_close = service_survivors + addition_service
 
