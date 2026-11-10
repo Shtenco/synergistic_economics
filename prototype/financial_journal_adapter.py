@@ -104,6 +104,9 @@ def append_validated_group(journal, store: FinancialEventStore, group_id: str,
     except Exception:
         # EntityJournal.post() mutates its in-memory event dict only after all
         # checks pass. Undo only entries newly inserted by this adapter call.
-        for event_id in set(journal_events) - initial_ids:
-            journal_events.pop(event_id, None)
+        for event in events:
+            event_id = getattr(event, "event_id", None)
+            if (isinstance(event_id, str) and event_id not in initial_ids
+                    and journal_events.get(event_id) == event):
+                journal_events.pop(event_id, None)
         raise
