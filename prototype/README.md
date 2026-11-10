@@ -63,6 +63,7 @@ Run from the repository root:
 ```bash
 python prototype/cellular_coordination.py --seed 1 --shock none --hops 1
 python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 2
+python prototype/cellular_coordination.py --monte-carlo 100 --shock compound --hops 2 --summary-only
 python -m unittest discover -s prototype -p 'test_*.py' -v
 ```
 
