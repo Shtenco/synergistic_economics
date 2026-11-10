@@ -833,3 +833,12 @@ Commits:
 **Execution status:** these controls are committed but have not been observed
 running to completion. The latest GitHub jobs remain queued without runner
 steps or logs; no PASS is claimed.
+
+
+A final schema-initialization edge case was added to the same control: if an
+older initializer created the version-1 `events` table but crashed before
+writing `PRAGMA user_version=1`, the new initializer now inspects the actual
+table columns and routes that database through the v1-to-v2 migration. The
+audit fixture exercises both explicitly stamped v1 and unstamped v1-layout
+databases. This prevents a partial old initialization from being mislabeled
+as a fresh v2 database.
