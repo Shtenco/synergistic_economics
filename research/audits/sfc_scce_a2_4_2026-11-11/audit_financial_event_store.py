@@ -1,5 +1,7 @@
 """Adversarial controls for the durable A2.4.4 financial event store."""
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
+import json
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -160,6 +162,83 @@ def main():
         }
         assert rollback_store.integrity_check()
 
+        # Upgrade the previous schema without relying on rowid after
+        # migration: event_index must preserve the original group order.
+        legacy_db = Path(directory) / "legacy-v1.sqlite3"
+        legacy_events = (loan, transfer)
+        legacy_group = {
+            "group_id": "legacy-group",
+            "causation_id": "legacy-cause",
+            "events": list(legacy_events),
+        }
+        legacy_group_json = json.dumps(
+            legacy_group, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
+        with closing(sqlite3.connect(legacy_db)) as connection:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.execute("PRAGMA synchronous = FULL")
+            connection.executescript("""
+                CREATE TABLE event_groups (
+                    group_id TEXT PRIMARY KEY, causation_id TEXT,
+                    payload_sha256 TEXT NOT NULL, payload_json TEXT NOT NULL
+                );
+                CREATE TABLE events (
+                    event_id TEXT PRIMARY KEY,
+                    group_id TEXT NOT NULL REFERENCES event_groups(group_id),
+                    event_type TEXT NOT NULL,
+                    effective_period INTEGER NOT NULL CHECK (effective_period >= 0),
+                    payload_sha256 TEXT NOT NULL, payload_json TEXT NOT NULL
+                );
+                CREATE TABLE journal_lines (
+                    event_id TEXT NOT NULL REFERENCES events(event_id),
+                    line_no INTEGER NOT NULL CHECK (line_no >= 0),
+                    posting_json TEXT NOT NULL,
+                    PRIMARY KEY (event_id, line_no)
+                );
+                CREATE INDEX events_by_group ON events(group_id, event_id);
+                CREATE TRIGGER events_no_update BEFORE UPDATE ON events
+                BEGIN SELECT RAISE(ABORT, 'events are append-only'); END;
+            """)
+            connection.execute(
+                "INSERT INTO event_groups VALUES (?, ?, ?, ?)",
+                ("legacy-group", "legacy-cause",
+                 hashlib.sha256(legacy_group_json.encode("utf-8")).hexdigest(),
+                 legacy_group_json),
+            )
+            for event in legacy_events:
+                event_json = json.dumps(
+                    event, sort_keys=True, separators=(",", ":"),
+                    ensure_ascii=False, allow_nan=False,
+                )
+                connection.execute(
+                    "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?)",
+                    (event["event_id"], "legacy-group", event["event_type"],
+                     event["effective_period"],
+                     hashlib.sha256(event_json.encode("utf-8")).hexdigest(),
+                     event_json),
+                )
+                for line_no, posting in enumerate(event["postings"]):
+                    posting_json = json.dumps(
+                        posting, sort_keys=True, separators=(",", ":"),
+                        ensure_ascii=False, allow_nan=False,
+                    )
+                    connection.execute(
+                        "INSERT INTO journal_lines VALUES (?, ?, ?)",
+                        (event["event_id"], line_no, posting_json),
+                    )
+            connection.execute("PRAGMA user_version = 1")
+        migrated = FinancialEventStore(legacy_db)
+        assert migrated.integrity_check()
+        assert migrated.get_group("legacy-group") == legacy_group
+        with closing(sqlite3.connect(legacy_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+            assert connection.execute(
+                "SELECT event_id, event_index FROM events "
+                "WHERE group_id = ? ORDER BY event_index",
+                ("legacy-group",),
+            ).fetchall() == [("loan-1", 0), ("transfer-1", 1)]
+
         # Concurrent duplicate delivery of one group must serialize to
         # one insert and one idempotent replay, never duplicate postings.
         race_db = Path(directory) / "same-group-race.sqlite3"
@@ -222,6 +301,7 @@ def main():
     print("injected mid-write failure rolls back group, events and postings together")
     print("concurrent identical group delivery serializes to one durable insert")
     print("concurrent cross-group event-ID collision admits exactly one winner")
+    print("schema-v1 migration preserves explicit transaction event order")
 
 
 if __name__ == "__main__":
