@@ -223,6 +223,61 @@ def main():
     else:
         raise AssertionError("same amount in wrong currency accepted as mirror")
 
+    # A different instrument ID must not be silently netted into the same
+    # holder/issuer mirror, even when class, issuer, currency and amounts match.
+    wrong_id_liability = list(issuer_liabilities)
+    wrong_id_liability[0] = liability(
+        "deposit", "CB", 100, 15, 115, instrument_id="deposit:series-B")
+    validate_issuer_stock_flow(wrong_id_liability)
+    try:
+        validate_mirrors(positions, wrong_id_liability)
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("different instrument ID accepted as mirror")
+
+    # Duplicate issuer records are invalid, not an additive second liability.
+    try:
+        validate_mirrors(
+            positions, issuer_liabilities + [issuer_liabilities[0]])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("duplicate issuer liability record accepted")
+
+    # Distinct same-class instruments remain distinct even with identical
+    # nominal amounts and otherwise identical identity dimensions.
+    series_positions = [
+        position("government_bond", "H", "GOV", 0, 5, 5,
+                 instrument_id="bond-series-A"),
+        position("government_bond", "ROW", "GOV", 0, 5, 5,
+                 instrument_id="bond-series-B"),
+    ]
+    series_liabilities = [
+        liability("government_bond", "GOV", 0, 5, 5,
+                  instrument_id="bond-series-A"),
+        liability("government_bond", "GOV", 0, 5, 5,
+                  instrument_id="bond-series-B"),
+    ]
+    validate_mirrors(series_positions, series_liabilities)
+    try:
+        validate_mirrors(series_positions, series_liabilities[:1])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("missing distinct instrument series accepted")
+
+    # An explicitly blank instrument ID is not a valid identity.
+    incomplete = IssuerLiability(
+        "deposit", "CB", D("100"), D("15"), D("0"), D("0"), D("115"),
+        instrument_id="")
+    try:
+        validate_mirrors([], [incomplete])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("blank instrument ID accepted")
+
     # Valuation-only change alters stocks, not financial net lending.
     valuation_only = [
         position("fx_deposit", "H", "CB", 100, 0, 113,
@@ -257,6 +312,7 @@ def main():
     print("opening, T, V, O and closing mirror component-by-component")
     print("sector financial NL: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23; sum=0")
     print("identity key includes instrument ID, currency, maturity, denomination and valuation basis")
+    print("negative controls: wrong instrument ID, duplicate issuer record, blank ID and conflated series rejected")
     print("negative controls: broken roll-forward, missing issuer, T/V mismatch and wrong-currency mirror rejected")
     print("valuation-only V=10/O=3 yields zero financial NL; mixed T=7/V=10/O=3 yields +7/-7")
 
