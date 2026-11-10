@@ -88,6 +88,7 @@ def distribute_period_to_households(
     seed: int = 1,
     essential_products: Sequence[str] = ("food", "care"),
     priority_dispersion: float = 0.0,
+    essential_floor_fraction: float = 0.5,
 ) -> dict:
     """Disaggregate one Stage-B period's cell consumption among households.
 
@@ -122,7 +123,8 @@ def distribute_period_to_households(
     households = households_from_cell_demand(
         cell_demand, households_per_cell, seed, essential_products,
         priority_dispersion)
-    allocations = allocate_households(households, cell_supply, policy)
+    allocations = allocate_households(
+        households, cell_supply, policy, essential_floor_fraction)
     validate_household_allocation(households, cell_supply, allocations)
     metrics = evaluate_households(households, allocations)
     stage_b_demand = sum(
@@ -183,6 +185,7 @@ def distribute_period_to_households(
         "seed": seed,
         "households_per_cell": households_per_cell,
         "priority_dispersion": priority_dispersion,
+        "essential_floor_fraction": essential_floor_fraction,
         "households": households,
         "allocations": allocations,
         "metrics": metrics,
@@ -199,6 +202,7 @@ def summarize_periods_to_households(
     seed: int = 1,
     essential_products: Sequence[str] = ("food", "care"),
     priority_dispersion: float = 0.0,
+    essential_floor_fraction: float = 0.5,
 ) -> dict:
     """Aggregate stable synthetic households over a Stage-B simulation horizon.
 
@@ -219,7 +223,7 @@ def summarize_periods_to_households(
     for period in periods:
         result = distribute_period_to_households(
             period, households_per_cell, policy, seed, essential_products,
-            priority_dispersion)
+            priority_dispersion, essential_floor_fraction)
         period_metrics.append(result["metrics"])
 
         for household in result["households"]:
@@ -310,6 +314,7 @@ def summarize_periods_to_households(
         "policy": policy,
         "households_per_cell": households_per_cell,
         "priority_dispersion": priority_dispersion,
+        "essential_floor_fraction": essential_floor_fraction,
         "periods": len(periods),
         "mean_period_lower_decile_household_essential_fulfilment": (
             sum(m["lower_decile_household_essential_fulfilment"]
