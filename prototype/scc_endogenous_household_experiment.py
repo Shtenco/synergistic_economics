@@ -197,6 +197,7 @@ def run_backlog_sensitivity(
     backlog_retention: float = 0.5,
     max_backlog_periods: float = 1.0,
     economic_policies: Sequence[str] = POLICIES,
+    max_care_queue_age_periods: int = 3,
 ) -> dict:
     """Paired same-seed comparison of bounded essential backlog vs no carry-over."""
     common = {
@@ -209,7 +210,7 @@ def run_backlog_sensitivity(
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
         "backlog_service_order": "backlog_first",
-        "max_care_queue_age_periods": 3,
+        "max_care_queue_age_periods": max_care_queue_age_periods,
     }
     with_backlog = run_endogenous_household_experiment(
         **common,
@@ -283,6 +284,7 @@ def run_service_order_sensitivity(
     backlog_retention: float = 0.5,
     max_backlog_periods: float = 1.0,
     economic_policies: Sequence[str] = POLICIES,
+    max_care_queue_age_periods: int = 3,
 ) -> dict:
     """Paired same-seed comparison of current-first and backlog-first service."""
     common = {
@@ -296,7 +298,7 @@ def run_service_order_sensitivity(
         "max_backlog_periods": max_backlog_periods,
         "economic_policies": economic_policies,
         "household_policies": ("proportional",),
-        "max_care_queue_age_periods": 3,
+        "max_care_queue_age_periods": max_care_queue_age_periods,
     }
     current_first = run_endogenous_household_experiment(
         **common, backlog_service_order="current_first")
@@ -383,7 +385,7 @@ def main():
             args.runs, args.shock, args.periods, args.hops,
             args.households_per_cell, args.priority_dispersion,
             args.backlog_retention, args.max_backlog_periods,
-            economic_policies,
+            economic_policies, args.max_care_queue_age_periods,
         )
     elif args.backlog_sensitivity:
         result = run_backlog_sensitivity(
