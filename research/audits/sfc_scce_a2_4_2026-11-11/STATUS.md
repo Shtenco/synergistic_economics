@@ -132,3 +132,10 @@ All three files are committed component fixtures. Their execution in a recorded 
 - Recovered existing Stage-B Monte Carlo defaults (100 seeds, 24 periods, 2 hops) and Stage-C2-A2 CI configuration (20 seeds, 24 periods, compound shock, 2 hops, 10 households/cell, priority dispersion 0.4, floor 0.5, backlog retention 0.5, backlog capacity 1 period, queue age 3 periods, backlog-first; all default policy arms).
 - Identified 21 existing C2-A2 metrics and the current interval calculation (mean ± 1.96 × sample SD / sqrt(n)); no primary/secondary endpoint hierarchy, minimum practically important effect, explicit exclusions, confirmatory seed set or complete incremental-input accounting is frozen.
 - Decision: existing runs remain exploratory synthetic comparisons. No retrospective preregistration or empirical net-synergy claim. A2.4.6 remains open.
+
+
+## A2.4.5 consent/capability hardening
+
+- Updated `audit_labour_consent.py` (commit `0df3d2b488cf21523c38db85b846fa5ab5d39c65`) to reject unknown consent states, non-positive time-budget horizons, negative closing capability stock, and delivery without an active consent state, in addition to overlap, schedule, safety and wage-settlement checks.
+- An independent local execution of the fixture logic passed the 154/168-hour time example, 30-hour delivery, capability value 5.75, wage accrual 600, settlement 400 and closing payable 200; seven adversarial cases were rejected.
+- This is component-level verification only. The committed script remains pending execution in the branch CI workflow; person-level privacy, consent revocation chronology, jurisdiction-specific legal basis and SCCE runtime integration remain open.
