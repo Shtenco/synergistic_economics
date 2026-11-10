@@ -14,7 +14,7 @@ The next central research object of SYNERGY is the **cellular economic mechanism
 
 The present document turns the existing SCCE architecture into an operational research programme. It does not replace the seven-cell or input-output prototypes. It adds a separate coordination layer and a controlled comparison of institutional mechanisms.
 
-The first implemented component is deliberately narrow: a Stage-A matching kernel compares four allocation regimes on the same seven-cell synthetic world. It is a mechanism test, not yet a complete macroeconomic cellular automaton. In particular, it does not yet simulate production recipes, labour, wages, investment, credit creation, ownership changes, ecological stocks or multi-period capital accumulation. Those remain in the existing economic prototypes and subsequent integration stages.
+The implementation now has two layers. Stage A is a local matching kernel comparing four allocation regimes on the same seven-cell synthetic world. Stage B adds a multi-period physical production economy with inventories, intermediate-input procurement, local community consumption, ecological resource stocks and institution-specific production planning. Stage B is still a research prototype, not a calibrated macroeconomic model: money, credit, wages, ownership, capital investment, household income and empirically measured utility remain outside it.
 
 **No claim is made that SCCE currently outperforms markets, planning or cooperatives.** The purpose of the experiment is to make that claim testable and to make failure visible.
 
@@ -230,34 +230,41 @@ The first changes the economic state. The second changes the rules or parameters
 
 ## 11. What is implemented now
 
-The file prototype/cellular_coordination.py implements a narrow local matching experiment:
-- seven synthetic cells;
-- three product classes (food, materials and energy);
+**Stage A — local matching kernel:** `prototype/cellular_coordination.py` implements:
+- seven synthetic cells and three initial product classes;
 - heterogeneous supply, demand and need priorities;
-- a sparse inter-cell graph;
-- shortest-path distance and logistics cost;
-- four allocation regimes: market, central benchmark, cooperative pool and local cellular protocol;
-- a configurable local communication/delivery radius;
-- metrics for fulfilment, priority-weighted fulfilment, lower-cell fulfilment, inequality, logistics and coordination costs;
-- deterministic seeds and stress variants.
+- sparse inter-cell graph and shortest-path logistics costs;
+- market, central-priority, cooperative-pool and cellular local-request regimes;
+- configurable hop radius, deterministic seeds and stress variants;
+- fulfilment, weighted fulfilment, lower-cell fulfilment, inequality and coordination metrics.
 
-The cellular protocol uses repeated local request rounds. A buyer contacts its nearest eligible supplier within the allowed hop radius. A supplier allocates available supply among the requests it receives using priority-weighted max-min rationing. Unfilled buyers may approach another supplier in a later round. The protocol does not compute a global optimal allocation. The current implementation is a single-process simulation harness: it enforces a local information/reach rule, but it is not yet a distributed multi-agent deployment with independent cell processes, network messaging, consensus or fault-tolerant execution. A two-hop setting is a reach-radius experiment, not an implemented federation institution.
+Before inter-cell matching, each cell's own stock is netted against its own need. Own-use is not recorded as a fictitious trade. The cellular protocol then uses repeated local request rounds. A buyer contacts its nearest eligible supplier within the allowed radius; the supplier allocates scarce stock among received requests; unfilled demand can approach another supplier in a later round.
 
-## 12. What this kernel does not yet model
+**Stage B — dynamic physical economy:** `prototype/scc_dynamic_economy.py` adds:
+- seven heterogeneous production cells: food, materials, energy, machinery, logistics, software and care;
+- explicit production capacities, labour/productivity limits and input recipes;
+- local stocks of outputs, materials, energy and raw resources;
+- bounded local raw-resource regeneration and physical stock-flow accounting;
+- production planning, intermediate-input procurement, production and final-consumption phases;
+- local own-consumption before inter-cell matching;
+- event records, deterministic seed replay and resource-conservation checks;
+- four matched coordination regimes using the same initial world and shock.
 
-It is not yet a full dynamic economy or a distributed runtime. It currently omits:
+The production-planning rules now differ by institutional mechanism. Central planning uses current aggregate declared final demand; the cooperative pool uses aggregate needs with a larger shared buffer; the market rule reacts to previous-period market-wide unmet orders; the cellular rule reacts only to unmet orders signalled inside the configured local neighbourhood. Intermediate input plans account for the materials-energy loop, and cellular producers' input-demand signals are restricted to reachable neighbours. This is still a stylized treatment of institutions, not a full model of real markets or democratic cooperative governance.
+
+## 12. What these kernels do not yet model
+
+They are not a distributed runtime or a complete economy. They currently omit:
 - independent cell processes, real message transport, concurrency control across machines, node failures and adversarial network behavior;
-- a legally and institutionally specified federation layer (the hop-radius parameter is not federation governance);
-- endogenous production from labour, capital and intermediate inputs;
-- inventory carry-over and production planning across periods;
-- household agents and heterogeneous income;
-- cash budgets and actual payment settlement;
-- credit, interest, maturity and default;
-- ownership, profit, wages and distribution;
-- capital formation and depreciation;
-- environmental stocks and pollution;
-- learning from realized outcomes;
-- cell entry, exit, merger, split and federation governance.
+- legally and institutionally specified federation governance (a two-hop setting is a reach-radius experiment, not a federation institution);
+- household agents, heterogeneous income, wages, working-time choices and employment;
+- cash budgets, prices formed by supply/demand clearing, payment settlement and strategic bidding;
+- credit, interest, maturity, default, guarantees and balance-sheet integration;
+- ownership, profits, capital formation, depreciation and endogenous investment;
+- public goods, pollution, ecological externalities beyond the raw-resource stock;
+- policy learning, technology diffusion and cell entry, exit, merger or split.
+
+The current fixed-price output and consumption indices are diagnostic model metrics, not GDP, profit, income, utility or measured social welfare. The market baseline is a simplified price-ranked matching rule without buyer cash constraints or strategic bidding; the central baseline is an aggregate-demand priority allocator, not a mathematically solved social-planner optimum; and the cooperative baseline is weighted max-min rationing, not a fully modelled cooperative institution. None is yet strong enough to support an empirical ranking of economic systems.
 
 The current "service value" is a diagnostic allocation metric, not GDP, profit, income, utility or measured social welfare. It must not be reported as empirical prosperity.
 
@@ -412,12 +419,13 @@ A 2026 synthetic benchmark comparing centralized computational planning, agent-b
 - service and coordination metrics;
 - invariant tests.
 
-**Stage B — dynamic cellular state**
-- connect the local protocol to the existing seven-cell production model;
-- add per-cell opening/closing stocks and period-to-period inventory;
-- add local production planning and supplier substitution;
-- ensure physical balances after every transition;
-- add event logs and deterministic replay.
+**Stage B — dynamic cellular physical economy (implemented prototype)**
+- seven production cells, input recipes and local community demand;
+- period-to-period inventories and production planning;
+- local intermediate-input and final-goods matching;
+- bounded ecological resource regeneration and stock-flow checks;
+- four institutional coordination rules and paired stress runs.
+The current Stage-B prototype is `prototype/scc_dynamic_economy.py`; its unit tests are in `prototype/test_scc_dynamic_economy.py`. It remains uncalibrated and excludes monetary, ownership and household-income mechanisms.
 
 **Stage C — household and distribution layer**
 - heterogeneous household agents;
@@ -449,11 +457,11 @@ A 2026 synthetic benchmark comparing centralized computational planning, agent-b
 
 ## 22. Immediate next tasks
 
-1. Validate Stage-A algorithm and tests.
+1. Strengthen and validate the Stage-B production and input-allocation rules, especially the central and market baselines.
 2. Run paired Monte Carlo sweeps over seeds, shocks and local hop radii.
-3. Publish a transparent baseline comparison, including adverse results.
-4. Add a message-delay and network-density experiment.
-5. Only then connect the matching engine to the seven-cell production state transition.
+3. Add network-density, communication-delay and edge-capacity experiments.
+4. Integrate money, wages, credit, ownership and investment without allowing financial claims to substitute for physical output.
+5. Add household agents and distributional welfare metrics before making any claim about real prosperity.
 
 The governing rule is simple: **build the local economic mechanism first; integrate finance as one subsystem; test the entire institutional arrangement against serious alternatives.**
 
