@@ -250,11 +250,11 @@ def evaluate_households(
         if allocation.cell_id != h.cell_id:
             raise HouseholdDistributionError("cross-cell household allocation")
         for product, quantity in allocation.essential_served.items():
-            if (quantity < -EPS
+            if (not math.isfinite(float(quantity)) or quantity < -EPS
                     or quantity > float(h.essential_needs.get(product, 0.0)) + EPS):
                 raise HouseholdDistributionError("essential allocation exceeds need")
         for product, quantity in allocation.discretionary_served.items():
-            if (quantity < -EPS
+            if (not math.isfinite(float(quantity)) or quantity < -EPS
                     or quantity > float(h.discretionary_needs.get(product, 0.0)) + EPS):
                 raise HouseholdDistributionError("discretionary allocation exceeds need")
 
@@ -361,8 +361,9 @@ def validate_household_allocation(
     by_id = {a.household_id: a for a in allocations}
     if len(by_id) != len(allocations) or set(by_id) != {h.household_id for h in households}:
         raise HouseholdDistributionError("allocation set does not match households")
-    if any(float(q) < -EPS for stocks in cell_supply.values() for q in stocks.values()):
-        raise HouseholdDistributionError("negative cell supply")
+    if any(not math.isfinite(float(q)) or float(q) < -EPS
+           for stocks in cell_supply.values() for q in stocks.values()):
+        raise HouseholdDistributionError("cell supply must be finite and non-negative")
     used: Dict[tuple[str, str], float] = {}
     household_used: Dict[tuple[str, str, str], float] = {}
     needs = {h.household_id: h for h in households}
