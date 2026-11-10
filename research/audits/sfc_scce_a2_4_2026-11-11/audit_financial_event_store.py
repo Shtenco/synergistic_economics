@@ -150,6 +150,16 @@ def main():
         }
         assert rollback_store.integrity_check()
 
+        # An out-of-band extra posting is detectable even if SQLite itself
+        # remains structurally valid and foreign keys still hold.
+        with closing(sqlite3.connect(database)) as connection:
+            connection.execute(
+                "INSERT INTO journal_lines(event_id, line_no, posting_json) "
+                "VALUES (?, ?, ?)",
+                ("loan-1", 99, '{"account":"tampered","side":"D","amount":"1","entity_id":"x"}'),
+            )
+        assert not reopened.integrity_check()
+
     print("A2.4.4 durable financial event store: PASS")
     print("event and posting rows commit atomically as one transaction group")
     print("group/event uniqueness survives store reconstruction")
