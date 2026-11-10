@@ -443,9 +443,12 @@ def main():
                         default="none")
     parser.add_argument("--hops", type=int, default=1)
     parser.add_argument("--monte-carlo", type=int, default=0)
+    parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     if args.monte_carlo:
         result = monte_carlo(range(1, args.monte_carlo + 1), args.shock, args.hops)
+        if args.summary_only:
+            result.pop("rows", None)
     else:
         result = run_comparison(args.seed, args.shock, args.hops)
     print(json.dumps(result, indent=2, sort_keys=True))
