@@ -184,6 +184,19 @@ def evaluate_households(
     if len(by_id) != len(allocations) or set(by_id) != {h.household_id for h in households}:
         raise HouseholdDistributionError("allocation set does not match households")
 
+    for h in households:
+        allocation = by_id[h.household_id]
+        if allocation.cell_id != h.cell_id:
+            raise HouseholdDistributionError("cross-cell household allocation")
+        for product, quantity in allocation.essential_served.items():
+            if (quantity < -EPS
+                    or quantity > float(h.essential_needs.get(product, 0.0)) + EPS):
+                raise HouseholdDistributionError("essential allocation exceeds need")
+        for product, quantity in allocation.discretionary_served.items():
+            if (quantity < -EPS
+                    or quantity > float(h.discretionary_needs.get(product, 0.0)) + EPS):
+                raise HouseholdDistributionError("discretionary allocation exceeds need")
+
     essential_demand = essential_served = 0.0
     total_demand = total_served = 0.0
     per_household = {}
@@ -258,22 +271,33 @@ def validate_household_allocation(
 ) -> bool:
     """Check no creation, no cross-cell transfer and no over-fulfilment."""
     by_id = {a.household_id: a for a in allocations}
-    if set(by_id) != {h.household_id for h in households}:
+    if len(by_id) != len(allocations) or set(by_id) != {h.household_id for h in households}:
         raise HouseholdDistributionError("allocation set does not match households")
     used: Dict[tuple[str, str], float] = {}
+    household_used: Dict[tuple[str, str, str], float] = {}
     needs = {h.household_id: h for h in households}
     for a in allocations:
         h = needs[a.household_id]
         if a.cell_id != h.cell_id:
             raise HouseholdDistributionError("cross-cell household allocation")
         for p, q in a.essential_served.items():
-            if q < -EPS or q > float(h.essential_needs.get(p, 0.0)) + EPS:
-                raise HouseholdDistributionError("essential allocation exceeds need")
+            if q < -EPS:
+                raise HouseholdDistributionError("negative essential allocation")
+            household_used[(h.household_id, "essential", p)] = (
+                household_used.get((h.household_id, "essential", p), 0.0) + q)
             used[(a.cell_id, p)] = used.get((a.cell_id, p), 0.0) + q
         for p, q in a.discretionary_served.items():
-            if q < -EPS or q > float(h.discretionary_needs.get(p, 0.0)) + EPS:
-                raise HouseholdDistributionError("discretionary allocation exceeds need")
+            if q < -EPS:
+                raise HouseholdDistributionError("negative discretionary allocation")
+            household_used[(h.household_id, "discretionary", p)] = (
+                household_used.get((h.household_id, "discretionary", p), 0.0) + q)
             used[(a.cell_id, p)] = used.get((a.cell_id, p), 0.0) + q
+    for (household_id, need_type, product), quantity in household_used.items():
+        h = needs[household_id]
+        limit = (h.essential_needs if need_type == "essential"
+                 else h.discretionary_needs).get(product, 0.0)
+        if quantity > float(limit) + EPS:
+            raise HouseholdDistributionError("household receives more than declared need")
     for (cid, product), quantity in used.items():
         if quantity > float(cell_supply[cid].get(product, 0.0)) + EPS:
             raise HouseholdDistributionError("household allocation exceeds cell supply")
