@@ -98,7 +98,7 @@ class FinancialEventStore:
     distributed consensus or multi-region event store.
     """
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def __init__(self, database_path: str | os.PathLike, timeout: float = 10.0):
         if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
@@ -129,9 +129,47 @@ class FinancialEventStore:
                 raise FinancialEventStoreError(
                     "SQLite WAL mode and FULL synchronous durability are required")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, self.SCHEMA_VERSION):
+            if version not in (0, 1, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
                     f"unsupported event-store schema version: {version}")
+
+            # Version 2 makes event order explicit rather than relying on
+            # SQLite rowid, which is not a durable ordering contract.
+            if version == 1:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    connection.execute(
+                        "ALTER TABLE events ADD COLUMN event_index INTEGER "
+                        "NOT NULL DEFAULT 0 CHECK (event_index >= 0)")
+                    connection.execute("DROP TRIGGER IF EXISTS events_no_update")
+                    groups = connection.execute(
+                        "SELECT group_id FROM event_groups ORDER BY group_id"
+                    ).fetchall()
+                    for group in groups:
+                        rows = connection.execute(
+                            "SELECT event_id FROM events WHERE group_id = ? ORDER BY rowid",
+                            (group["group_id"],),
+                        ).fetchall()
+                        for event_index, row in enumerate(rows):
+                            connection.execute(
+                                "UPDATE events SET event_index = ? WHERE event_id = ?",
+                                (event_index, row["event_id"]),
+                            )
+                    connection.execute(
+                        "CREATE UNIQUE INDEX IF NOT EXISTS events_group_order "
+                        "ON events(group_id, event_index)")
+                    connection.execute("""
+                        CREATE TRIGGER IF NOT EXISTS events_no_update
+                        BEFORE UPDATE ON events
+                        BEGIN SELECT RAISE(ABORT, 'events are append-only'); END
+                    """)
+                    connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
+                    connection.execute("COMMIT")
+                except Exception:
+                    if connection.in_transaction:
+                        connection.execute("ROLLBACK")
+                    raise
+
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS event_groups (
                     group_id TEXT PRIMARY KEY,
@@ -144,6 +182,7 @@ class FinancialEventStore:
                     group_id TEXT NOT NULL REFERENCES event_groups(group_id),
                     event_type TEXT NOT NULL,
                     effective_period INTEGER NOT NULL CHECK (effective_period >= 0),
+                    event_index INTEGER NOT NULL CHECK (event_index >= 0),
                     payload_sha256 TEXT NOT NULL,
                     payload_json TEXT NOT NULL
                 );
@@ -155,6 +194,8 @@ class FinancialEventStore:
                 );
                 CREATE INDEX IF NOT EXISTS events_by_group
                     ON events(group_id, event_id);
+                CREATE UNIQUE INDEX IF NOT EXISTS events_group_order
+                    ON events(group_id, event_index);
                 CREATE TRIGGER IF NOT EXISTS event_groups_no_update
                     BEFORE UPDATE ON event_groups
                     BEGIN SELECT RAISE(ABORT, 'event groups are append-only'); END;
@@ -198,6 +239,7 @@ class FinancialEventStore:
             event_json = _canonical_json(event)
             event_rows.append((
                 event["event_id"], event["event_type"], event["effective_period"],
+                len(event_rows),
                 hashlib.sha256(event_json.encode("utf-8")).hexdigest(),
                 event_json, event["postings"],
             ))
@@ -230,11 +272,11 @@ class FinancialEventStore:
                     "VALUES (?, ?, ?, ?)",
                     (group_id, causation_id, payload_hash, payload_json),
                 )
-                for event_id, event_type, period, event_hash, event_json, postings in event_rows:
+                for event_id, event_type, period, event_index, event_hash, event_json, postings in event_rows:
                     connection.execute(
                         "INSERT INTO events(event_id, group_id, event_type, effective_period, "
-                        "payload_sha256, payload_json) VALUES (?, ?, ?, ?, ?, ?)",
-                        (event_id, group_id, event_type, period, event_hash, event_json),
+                        "event_index, payload_sha256, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (event_id, group_id, event_type, period, event_index, event_hash, event_json),
                     )
                     for line_no, posting in enumerate(postings):
                         connection.execute(
@@ -299,7 +341,9 @@ class FinancialEventStore:
                     ).fetchall()
                     if len(stored_events) != len(payload_events):
                         return False
-                    for payload_event, stored in zip(payload_events, stored_events):
+                    for event_index, (payload_event, stored) in enumerate(zip(payload_events, stored_events)):
+                        if stored["event_index"] != event_index:
+                            return False
                         event_json = _canonical_json(payload_event)
                         if (payload_event.get("event_id") != stored["event_id"]
                                 or payload_event.get("event_type") != stored["event_type"]
@@ -308,15 +352,16 @@ class FinancialEventStore:
                                 or event_json != stored["payload_json"]):
                             return False
                         stored_lines = connection.execute(
-                            "SELECT posting_json FROM journal_lines "
+                            "SELECT line_no, posting_json FROM journal_lines "
                             "WHERE event_id = ? ORDER BY line_no",
                             (stored["event_id"],),
                         ).fetchall()
                         payload_lines = payload_event.get("postings")
                         if not isinstance(payload_lines, list) or len(stored_lines) != len(payload_lines):
                             return False
-                        if [row["posting_json"] for row in stored_lines] != [
-                                _canonical_json(line) for line in payload_lines]:
+                        if ([row["line_no"] for row in stored_lines] != list(range(len(payload_lines)))
+                                or [row["posting_json"] for row in stored_lines] != [
+                                    _canonical_json(line) for line in payload_lines]):
                             return False
         except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError):
             return False
