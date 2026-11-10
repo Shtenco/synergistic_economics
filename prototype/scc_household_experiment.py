@@ -74,9 +74,11 @@ def run_household_distribution_experiment(
             period_values = {policy: {metric: [] for metric in METRICS}
                              for policy in HOUSEHOLD_POLICIES}
             for period_result in model.periods:
-                # The seed is shared by both rationing policies so their
-                # synthetic household needs and priorities are identical.
-                profile_seed = seed * 100_000 + period_result.period
+                # Keep a stable synthetic household panel across all periods.
+                # The same seed preserves identities, within-cell need shares
+                # and priorities; only the period's total demand scales needs.
+                # Both rationing policies therefore face identical households.
+                profile_seed = seed * 100_000
                 for household_policy in HOUSEHOLD_POLICIES:
                     distribution = distribute_period_to_households(
                         period_result,
