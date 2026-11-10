@@ -24,6 +24,8 @@ jobs:
         run: python --version
       - name: Compile audit controls
         run: python -m compileall -q research/audits/sfc_scce_a2_4_2026-11-11
+      - name: A2.4.1 real SCCE multi-period physical transition
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_scce_physical_transition.py
       - name: A2.4.1 six-sector SFC and physical arithmetic
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_six_sector.py
       - name: A2.4.2 capital stock and services bridge
