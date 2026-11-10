@@ -1,10 +1,9 @@
-"""A2.4.4 instrument-holder/issuer stock-flow reconciliation.
+"""A2.4.4 holder/issuer T/V/O stock-flow reconciliation.
 
-The fixture transcribes the opening/closing positions and sectoral financial
-net lending from FULL_SIX_SECTOR_SFC_NUMERICAL_CLOSURE.md. It remains a
-synthetic example, not a general production ledger. Financial net lending is
-computed from transaction flows only; revaluation and other-volume changes
-belong exclusively to the stock-flow bridge.
+The fixture transcribes the six-sector synthetic SFC example. It is a
+component control, not a production instrument ledger. Financial net lending
+uses transactions only; holder and issuer sides must mirror every T/V/O
+component, not merely the closing balance.
 """
 from dataclasses import dataclass
 from decimal import Decimal as D
@@ -26,11 +25,29 @@ class Position:
     closing: D
 
 
+@dataclass(frozen=True)
+class IssuerLiability:
+    instrument: str
+    issuer: str
+    opening: D
+    transactions: D
+    revaluation: D
+    other_volume: D
+    closing: D
+
+
 def position(instrument, holder, issuer, opening, transactions, closing,
              revaluation=0, other_volume=0):
     return Position(instrument, holder, issuer, D(str(opening)),
                     D(str(transactions)), D(str(revaluation)),
                     D(str(other_volume)), D(str(closing)))
+
+
+def liability(instrument, issuer, opening, transactions, closing,
+              revaluation=0, other_volume=0):
+    return IssuerLiability(instrument, issuer, D(str(opening)),
+                           D(str(transactions)), D(str(revaluation)),
+                           D(str(other_volume)), D(str(closing)))
 
 
 def validate_stock_flow(positions):
@@ -41,45 +58,68 @@ def validate_stock_flow(positions):
                     + p.other_volume)
         if expected != p.closing:
             raise ReconciliationError(
-                f"stock-flow mismatch {p.instrument}/{p.holder}/{p.issuer}: "
+                f"holder stock-flow mismatch {p.instrument}/{p.holder}/{p.issuer}: "
                 f"{expected} != {p.closing}")
     return True
 
 
+def validate_issuer_stock_flow(liabilities):
+    for p in liabilities:
+        if min(p.opening, p.closing) < 0:
+            raise ReconciliationError("negative gross issuer liability")
+        expected = (p.opening + p.transactions + p.revaluation
+                    + p.other_volume)
+        if expected != p.closing:
+            raise ReconciliationError(
+                f"issuer stock-flow mismatch {p.instrument}/{p.issuer}: "
+                f"{expected} != {p.closing}")
+    return True
+
+
+def _components(p):
+    return (p.opening, p.transactions, p.revaluation,
+            p.other_volume, p.closing)
+
+
 def validate_mirrors(positions, issuer_liabilities):
+    """Aggregate holder records and compare every component to issuer records."""
     held = {}
     for p in positions:
         key = (p.instrument, p.issuer)
-        held[key] = held.get(key, D("0")) + p.closing
-    if held != issuer_liabilities:
-        keys = set(held) | set(issuer_liabilities)
-        diffs = {key: (held.get(key, D("0")),
-                       issuer_liabilities.get(key, D("0")))
-                 for key in keys
-                 if held.get(key, D("0")) != issuer_liabilities.get(key, D("0"))}
-        raise ReconciliationError(f"holder/issuer mirror mismatch: {diffs}")
+        prior = held.get(key, (D("0"),) * 5)
+        held[key] = tuple(a + b for a, b in zip(prior, _components(p)))
+
+    issued = {}
+    for p in issuer_liabilities:
+        key = (p.instrument, p.issuer)
+        if key in issued:
+            raise ReconciliationError(f"duplicate issuer liability record: {key}")
+        issued[key] = _components(p)
+
+    if held != issued:
+        keys = set(held) | set(issued)
+        diffs = {
+            key: {"holder_aggregate": held.get(key),
+                  "issuer_record": issued.get(key)}
+            for key in keys if held.get(key) != issued.get(key)
+        }
+        raise ReconciliationError(
+            f"holder/issuer T/V/O mirror mismatch: {diffs}")
     return True
 
 
 def sector_financial_net_lending(positions):
-    """Financial NL uses transactions, never total stock changes.
-
-    For a position held by H and issued by I, transaction T increases H's
-    financial assets and I's financial liabilities by T. V and O are excluded.
-    """
-    assets = {}
-    liabilities = {}
+    """Financial NL uses transactions, never total stock changes."""
+    assets, liabilities = {}, {}
     for p in positions:
-        delta = p.transactions
-        assets[p.holder] = assets.get(p.holder, D("0")) + delta
-        liabilities[p.issuer] = liabilities.get(p.issuer, D("0")) + delta
+        assets[p.holder] = assets.get(p.holder, D("0")) + p.transactions
+        liabilities[p.issuer] = liabilities.get(p.issuer, D("0")) + p.transactions
     sectors = set(assets) | set(liabilities)
     return {s: assets.get(s, D("0")) - liabilities.get(s, D("0"))
             for s in sectors}
 
 
 def main():
-    # Opening/closing positions from the repository's six-sector SFC example.
     positions = [
         position("deposit", "H", "CB", 100, 7, 107),
         position("deposit", "ROW", "CB", 0, 8, 8),
@@ -92,16 +132,18 @@ def main():
         position("government_bond", "ROW", "GOV", 0, 15, 15),
         position("external_reserve_asset", "CBank", "ROW", 10, 0, 10),
     ]
-    issuer_liabilities = {
-        ("deposit", "CB"): D("115"),
-        ("loan", "H"): D("30"),
-        ("loan", "NFC"): D("99"),
-        ("reserves", "CBank"): D("30"),
-        ("cash", "CBank"): D("20"),
-        ("government_bond", "GOV"): D("65"),
-        ("external_reserve_asset", "ROW"): D("10"),
-    }
+    issuer_liabilities = [
+        liability("deposit", "CB", 100, 15, 115),
+        liability("loan", "H", 30, 0, 30),
+        liability("loan", "NFC", 80, 19, 99),
+        liability("reserves", "CBank", 30, 0, 30),
+        liability("cash", "CBank", 20, 0, 20),
+        liability("government_bond", "GOV", 50, 15, 65),
+        liability("external_reserve_asset", "ROW", 10, 0, 10),
+    ]
+
     validate_stock_flow(positions)
+    validate_issuer_stock_flow(issuer_liabilities)
     validate_mirrors(positions, issuer_liabilities)
 
     nl = sector_financial_net_lending(positions)
@@ -112,54 +154,71 @@ def main():
     assert nl == expected_nl, (nl, expected_nl)
     assert sum(nl.values(), D("0")) == 0
 
-    # A failed instrument roll-forward must not be hidden by a sectoral plug.
-    broken = list(positions)
-    broken[0] = Position(
+    broken_holder = list(positions)
+    broken_holder[0] = Position(
         "deposit", "H", "CB", D("100"), D("7"), D("0"), D("0"), D("108"))
     try:
-        validate_stock_flow(broken)
+        validate_stock_flow(broken_holder)
     except ReconciliationError:
         pass
     else:
-        raise AssertionError("broken stock-flow position accepted")
+        raise AssertionError("broken holder roll-forward accepted")
 
-    # A missing issuer liability must be visible even if total assets are unchanged.
-    bad_liabilities = dict(issuer_liabilities)
-    bad_liabilities[("deposit", "CB")] = D("114")
+    # Same closing balance, wrong T/V classification on issuer side.
+    bad_classification = list(issuer_liabilities)
+    bad_classification[0] = liability(
+        "deposit", "CB", 100, 14, 115, revaluation=1)
+    validate_issuer_stock_flow(bad_classification)
     try:
-        validate_mirrors(positions, bad_liabilities)
+        validate_mirrors(positions, bad_classification)
     except ReconciliationError:
         pass
     else:
-        raise AssertionError("unmatched issuer liability accepted")
+        raise AssertionError("equal closing stock with mismatched T/V accepted")
 
-    # Negative control: a valuation-only movement changes the closing stock,
-    # but must not create sectoral financial net lending.
+    # A missing issuer record must be detected.
+    try:
+        validate_mirrors(positions, issuer_liabilities[:-1])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("missing issuer liability record accepted")
+
+    # Valuation-only change alters stocks, not financial net lending.
     valuation_only = [
         position("fx_deposit", "H", "CB", 100, 0, 113,
                  revaluation=10, other_volume=3)
     ]
+    valuation_liability = [
+        liability("fx_deposit", "CB", 100, 0, 113,
+                  revaluation=10, other_volume=3)
+    ]
     validate_stock_flow(valuation_only)
-    valuation_nl = sector_financial_net_lending(valuation_only)
-    assert valuation_nl == {"H": D("0"), "CB": D("0")}
+    validate_issuer_stock_flow(valuation_liability)
+    validate_mirrors(valuation_only, valuation_liability)
+    assert sector_financial_net_lending(valuation_only) == {
+        "H": D("0"), "CB": D("0")}
 
-    # Mixed transaction, revaluation and OVC: only T enters financial NL.
     mixed = [
         position("fx_deposit", "H", "CB", 100, 7, 120,
                  revaluation=10, other_volume=3)
     ]
+    mixed_liability = [
+        liability("fx_deposit", "CB", 100, 7, 120,
+                  revaluation=10, other_volume=3)
+    ]
     validate_stock_flow(mixed)
-    mixed_nl = sector_financial_net_lending(mixed)
-    assert mixed_nl == {"H": D("7"), "CB": D("-7")}
-    assert sum(mixed_nl.values(), D("0")) == 0
+    validate_issuer_stock_flow(mixed_liability)
+    validate_mirrors(mixed, mixed_liability)
+    assert sector_financial_net_lending(mixed) == {
+        "H": D("7"), "CB": D("-7")}
 
-    print("A2.4.4 instrument stock-flow reconciliation: PASS")
-    print("10 holder/issuer positions; all stock-flow identities and mirrors close")
-    print("sector financial net lending: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23")
-    print("sum of sector financial net lending=0")
-    print("valuation-only V=10/O=3 changes stocks but produces zero financial NL")
-    print("mixed T=7/V=10/O=3 produces financial NL H=+7, CB=-7")
-    print("broken roll-forward and unmatched issuer liability rejected")
+    print("A2.4.4 holder/issuer T/V/O stock-flow reconciliation: PASS")
+    print("10 holder positions and 7 independent issuer-liability records")
+    print("opening, T, V, O and closing mirror component-by-component")
+    print("sector financial NL: H=7 NFC=-19 CB=4 CBank=0 GOV=-15 ROW=23; sum=0")
+    print("negative controls: broken roll-forward, missing issuer record and equal-close T/V mismatch rejected")
+    print("valuation-only V=10/O=3 yields zero financial NL; mixed T=7/V=10/O=3 yields +7/-7")
 
 
 if __name__ == "__main__":
