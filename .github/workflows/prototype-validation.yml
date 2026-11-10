@@ -40,3 +40,9 @@ jobs:
         run: python prototype/cellular_coordination.py --monte-carlo 100 --shock supply_crisis --hops 2 --summary-only
       - name: Run paired SCCE demand-surge comparison (100 seeds)
         run: python prototype/cellular_coordination.py --monte-carlo 100 --shock demand_surge --hops 2 --summary-only
+      - name: Run Stage-B SCCE dynamic physical economy
+        run: python prototype/scc_dynamic_economy.py --compare --shock none --periods 24 --hops 2
+      - name: Run Stage-B SCCE compound crisis comparison
+        run: python prototype/scc_dynamic_economy.py --compare --shock compound --periods 24 --hops 2
+      - name: Run Stage-B paired dynamic Monte Carlo (20 seeds)
+        run: python prototype/scc_dynamic_economy.py --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
