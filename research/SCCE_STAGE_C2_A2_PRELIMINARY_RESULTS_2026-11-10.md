@@ -9,6 +9,8 @@
 
 ---
 
+> <badge label="Superseded experiment" color="warning" /> **Methodological correction:** this initial C2-A2 run carried both food and care shortfalls forward as if both were queueable claims. That is not a defensible model of recurring food needs. Its service-order sensitivity also showed that the current-need metric can move sharply without any change in physical allocation. Preserve this file as a record of the initial generic-backlog experiment, but do not use its current-essential fulfilment ranking as a welfare conclusion. The corrected model carries only delayed care-service claims and records unmet food as period-specific deprivation exposure; see the typed-backlog follow-up results once validated.
+
 ## 1. Research question
 
 Does feeding household-level unmet essential needs back into each household's own economic cell change production, consumption and distributional outcomes? Does that feedback help every coordination regime equally?
