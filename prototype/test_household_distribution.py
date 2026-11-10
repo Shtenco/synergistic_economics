@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 from household_distribution import (
     Household, HouseholdDistributionError, allocate_households,
-    allocate_period_households,
+    allocate_period_households, generate_synthetic_households,
+    compare_household_distribution_policies,
     evaluate_households, validate_household_allocation,
 )
 
@@ -130,6 +131,42 @@ class HouseholdDistributionTests(unittest.TestCase):
         over_need = type(wrong_cell)("h", "cell-a", {"food": 2.0}, {})
         with self.assertRaises(HouseholdDistributionError):
             evaluate_households((household,), (over_need,))
+
+    def test_synthetic_households_are_reproducible_and_reconcile_to_cell_demand(self):
+        demand = {
+            "cell-a": {"food": 12.0, "care": 3.0, "books": 6.0},
+            "cell-b": {"food": 8.0, "care": 2.0, "books": 4.0},
+        }
+        a = generate_synthetic_households(demand, households_per_cell=5, seed=71)
+        b = generate_synthetic_households(demand, households_per_cell=5, seed=71)
+        self.assertEqual(a, b)
+        for cid, products in demand.items():
+            members = [h for h in a if h.cell_id == cid]
+            for product, total in products.items():
+                if product in ("food", "care"):
+                    actual = sum(h.essential_needs.get(product, 0.0) for h in members)
+                else:
+                    actual = sum(h.discretionary_needs.get(product, 0.0) for h in members)
+                self.assertAlmostEqual(actual, total)
+
+    def test_distribution_policies_use_identical_stage_b_world_and_supplies(self):
+        period = SimpleNamespace(
+            final_demand_by_cell={
+                "cell-a": {"food": 10.0, "care": 2.0, "books": 4.0},
+                "cell-b": {"food": 8.0, "care": 2.0, "books": 3.0},
+            },
+            final_consumption_by_cell={
+                "cell-a": {"food": 5.0, "care": 1.0, "books": 2.0},
+                "cell-b": {"food": 4.0, "care": 1.0, "books": 1.0},
+            },
+        )
+        result = compare_household_distribution_policies(
+            period, households_per_cell=6, seed=19)
+        self.assertEqual(result["household_count"], 12)
+        self.assertEqual(set(result["policies"]), {"proportional", "priority_weighted"})
+        for metrics in result["policies"].values():
+            self.assertAlmostEqual(metrics["essential_served"], 11.0)
+            self.assertAlmostEqual(metrics["overall_served"], 14.0)
 
     def test_unknown_policy_rejected(self):
         with self.assertRaises(HouseholdDistributionError):
