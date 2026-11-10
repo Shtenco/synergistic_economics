@@ -593,6 +593,32 @@ def main():
     assert not any(line.account == "loan_liability" for line in writeoff.lines)
     assert any(line.account == "loan_liability" for line in forgiveness.lines)
 
+    # The write-off exception is narrow; it cannot be used to bypass
+    # entity-level claim mirrors for arbitrary extra postings.
+    malformed_writeoff = JournalEvent("BAD-WRITEOFF", "creditor_writeoff", p, (
+        make_line(registry, p, "loss_allowance", "D", 3, "bank-1"),
+        make_line(registry, p, "loan_asset", "C", 3, "bank-1",
+                  issuer="company-1", instrument_id="loan-defaulted",
+                  instrument_class="loan"),
+        make_line(registry, p, "impairment_expense", "D", 3, "bank-1"),
+        make_line(registry, p, "loan_liability", "C", 3, "company-1",
+                  counterparty="bank-1", issuer="company-1",
+                  instrument_id="loan-defaulted", instrument_class="loan"),
+    ))
+    try:
+        EntityJournal(registry).post(malformed_writeoff)
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("overbroad creditor write-off exception accepted")
+    try:
+        EntityJournal(registry).post(
+            JournalEvent("BAD-EVENT-TYPE", "magic_transfer", p, e1.lines))
+    except IdentityError:
+        pass
+    else:
+        raise AssertionError("unknown event type accepted")
+
     # Sector membership is effective-dated, not retroactively rewritten.
     assert registry.sector_of("migrating-entity", 4) == "H"
     assert registry.sector_of("migrating-entity", 5) == "NFC"
