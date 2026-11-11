@@ -133,15 +133,16 @@ def evaluate(corpus):
                          for row in postings]
         expected_rules = {
             "bank_loan_origination": {
-                "loan_asset": ("D", 1), "loan_liability": ("C", 1),
-                "deposit_asset": ("D", 1), "deposit_liability": ("C", 1),
+                "loan_asset": {"D": 1}, "loan_liability": {"C": 1},
+                "deposit_asset": {"D": 1}, "deposit_liability": {"C": 1},
             },
             "supplier_payment": {
-                "deposit_asset": ("D", 1), "deposit_liability": ("C", 1),
+                "deposit_asset": {"D": 1, "C": 1},
+                "deposit_liability": {"D": 1, "C": 1},
             },
             "principal_repayment": {
-                "loan_liability": ("D", 1), "loan_asset": ("C", 1),
-                "deposit_asset": ("C", 1), "deposit_liability": ("D", 1),
+                "loan_liability": {"D": 1}, "loan_asset": {"C": 1},
+                "deposit_asset": {"C": 1}, "deposit_liability": {"D": 1},
             },
         }
         if event_type not in expected_rules:
@@ -151,11 +152,14 @@ def evaluate(corpus):
             observed[account].append((side, amount))
         rule = expected_rules[event_type]
         if set(observed) != set(rule) or any(
-                len(observed[name]) != count or
-                any(side != required_side for side, _ in observed[name])
-                for name, (required_side, count) in rule.items()):
+                {side: sum(1 for observed_side, _ in observed[name]
+                          if observed_side == side)
+                 for side in ("D", "C")} !=
+                {side: rule[name].get(side, 0) for side in ("D", "C")}
+                for name in rule):
             raise OracleError(f"event account composition/sides invalid: {event_type}")
-        if event_type in {"bank_loan_origination", "principal_repayment"}:
+        if event_type in {"bank_loan_origination", "supplier_payment",
+                          "principal_repayment"}:
             amounts = {amount for _, _, amount in account_sides}
             if len(amounts) != 1:
                 raise OracleError(f"{event_type} legs must share one amount")
