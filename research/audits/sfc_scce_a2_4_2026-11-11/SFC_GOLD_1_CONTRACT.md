@@ -123,3 +123,12 @@ misclassifying its instrument class. Both mutations must be rejected.
 
 This is a source-level control contract, not a test result. Exact-head CI
 execution remains required.
+
+
+The v1 fixture is intentionally sector-specific: the bank role is CB, the
+household borrower/payer role is H, and the supplier recipient role is NFC.
+The oracle rejects a coordinated mutation that changes the bank's registry
+sector and all corresponding posting labels while preserving internal
+registry consistency. Loan and deposit instrument IDs must be distinct, as
+must payer and supplier deposit instrument IDs. This is a frozen control
+contract, not a general institutional-sector classification engine.
