@@ -1909,3 +1909,38 @@ P1 hardening follow-up:
 
 
 P1 empty-history gate was tightened after source review: activation now requires all three durable tables (`event_groups`, `events`, `journal_lines`) to be empty, plus SQLite `integrity_check='ok'` and a clean foreign-key check. This rejects orphan normalized rows even if the group table is empty. The P1 audit now injects an orphan event row with foreign-key enforcement disabled and requires activation to refuse it.
+
+
+## 12 November continuation — SFC-GOLD-2A and financial replay recovery package
+
+A new four-artifact synthetic evidence package has been added on the A2.4 audit branch. Its scope is deliberately limited to debt principal, accrued interest, interest settlement, impairment allowance, creditor write-off and legally effective forgiveness. GOLD-2B remains FX; GOLD-2C remains collateral and guarantees.
+
+### Four artifacts
+
+1. `SFC_GOLD_2A_CORPUS.json` — frozen v1.0.0 corpus with two entities/sectors, three full instrument identities, period-0 opening rows, four period opening/closing snapshots, seven immutable events and seven after-event checkpoints. It freezes contractual principal 75, recognized gross loan asset 60, enforceable written-off claim memo 15, impairment allowance 5, net carrying amount 55, accrued interest 6/6 and deposit 76/76.
+2. `audit_sfc_gold_2a_oracle.py` — independent standard-library Decimal oracle. It imports no production modules, journal, SQLite store, projection kernel or recovery code. It checks event posting composition, full identity consistency, debit/credit balance, T/V/O roll-forward, legal claim reconciliation, allowance bounds, interest/deposit mirrors, transaction-only sector financial net lending and eight negative controls.
+3. `SFC_GOLD_2A_CONTRACT.md` — accounting/legal contract. It distinguishes impairment (valuation allowance only), creditor write-off (accounting derecognition with surviving legal claim in memorandum register), and legal forgiveness (legally effective bilateral extinguishment).
+4. `audit_financial_replay_recovery.py` — read-only SQLite v4 event-group loader. It independently verifies the predecessor hash chain, commit sequence, canonical group envelopes, normalized event/posting mirrors, opening snapshot when persisted, reconstructs positions and compares event checkpoints with the independent oracle. `--self-test` creates a schema-compatible synthetic SQLite fixture and explicitly does not claim to test the production append path.
+
+### Accounting classifications frozen in GOLD-2A
+
+- Loan origination, principal repayment, accrued interest, interest payment and legal forgiveness: T.
+- Impairment allowance recognition: V.
+- Creditor write-off and allowance consumed by the write-off: O.
+- FX is excluded and must not be smuggled into the 2A case.
+- The frozen transaction-only sector financial NL values are P1 CB +10 / H -10; P2 0 / 0; P3 0 / 0; P4 CB -5 / H +5. Each period consolidates to zero. V and O do not enter transaction NL.
+
+### Integration and proof boundaries
+
+The oracle and recovery scripts are wired into both `prototype/test_a2_4_audit_controls.py` and the dedicated `a2-4-audit-controls.yml` workflow.
+
+**Important current architecture blocker:** P1 opening activation requires an empty store and then blocks legacy `append_group()`; P2 projection-aware atomic append has not yet been implemented. The current public path therefore cannot yet create a database containing both a sealed P1 opening registry and subsequent event groups. The recovery self-test seeds a schema-compatible database directly to test the independent read/replay verifier. It does not bypass this limitation in production, and it does not prove an integrated event+projection commit.
+
+The current store has no materialized position-snapshot table. The recovery audit reports `NO_PERSISTED_POSITION_SNAPSHOTS` and compares a full replay against the frozen checkpoints/oracle instead. Full replay is not described as snapshot-recovery implementation.
+
+### Execution status
+
+- Artifact files and CI wiring are committed on the audit branch.
+- At the time of this status update, exact-head CI has not yet been inspected to completion. No PASS is claimed for GOLD-2A until the exact-head Prototype and A2.4 workflow logs are available and the oracle/recovery cases are green.
+- No production financial runtime, live ledger, provider or user balance was changed.
+- Corpus data is synthetic and does not certify IFRS, GAAP, SNA or any jurisdiction's legal treatment.
