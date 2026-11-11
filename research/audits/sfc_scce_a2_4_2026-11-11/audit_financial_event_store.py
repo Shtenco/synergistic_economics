@@ -450,6 +450,7 @@ def main():
             with closing(sqlite3.connect(legacy_v3_unstamped_db)) as target_connection:
                 source_connection.backup(target_connection)
                 target_connection.execute("PRAGMA user_version = 0")
+                target_connection.commit()
         migrated_v3_unstamped = FinancialEventStore(legacy_v3_unstamped_db)
         assert migrated_v3_unstamped.iter_groups()[0]["commit_sequence"] == 1
         assert migrated_v3_unstamped.integrity_check()
