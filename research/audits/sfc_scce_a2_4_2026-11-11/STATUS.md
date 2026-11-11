@@ -1104,3 +1104,41 @@ Source commit: `507a9d318d9b4218201359324d5713a7b0ce90da`.
 
 This narrows the oracle to its declared fixture, rather than claiming a
 general-purpose bank/household ontology. No execution PASS is claimed.
+
+
+## 11 November continuation — repository checkpoint after role hardening
+
+The current source sequence is:
+- `0ff4f68bba2214818b2dab6d2e7ec5f1beeb74c4` — cross-leg economic role
+  invariants and borrower/class negative controls;
+- `507a9d318d9b4218201359324d5713a7b0ce90da` — frozen CB/H/NFC role
+  constraints, distinct instrument checks and coordinated bank-sector
+  mutation;
+- `d4a074b44f675e18389e3487e1b753e822a9c71a` — adversarial-control comment
+  numbering cleanup.
+
+The branch was observed at `d4a074b44f675e18389e3487e1b753e822a9c71a`;
+PR #4 metadata reports 214 commits, 38 changed files, Draft/Open/unmerged.
+Canonical `main` was not modified. The PR description still contains older
+embedded branch/commit counts; the live branch ref and PR head SHA are the
+authoritative values.
+
+The most recent complete three-workflow set observed was created on
+`b2316f612428425279bc04d0d06c60c13ac927b0`:
+- Prototype validation `42939243472`;
+- SCCE Stage-C2 validation `42939243466`;
+- A2.4 audit control fixtures `42939239075`.
+
+All three runs and jobs were `queued`, with null conclusion, no start or
+completion time, zero runner steps and no execution logs. A previous full
+three-workflow set on source commit
+`507a9d318d9b4218201359324d5713a7b0ce90da` is likewise queued:
+Prototype `42939215258`, Stage-C2 `42939215333`, A2.4
+`42939208541`. These runs do not validate the final branch HEAD. No PASS is
+claimed; the current exact-head run set must be polled independently.
+
+The queue pattern is now repeated across many successive commits and
+workflows. It is evidence of a runner/dispatch backlog before job execution,
+not evidence of test success or failure. The available job records do not
+expose a root cause. Do not weaken tests or alter workflow semantics to make
+the queue appear green.
