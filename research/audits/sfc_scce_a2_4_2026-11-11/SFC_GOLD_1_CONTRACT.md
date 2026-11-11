@@ -99,3 +99,27 @@ not be inferred from this initial PASS if and when CI succeeds.
 **Gate status:** this is Gate 1 groundwork only. It does not close A2.4.4,
 Gate 0, Gate 1, Gate 2 or A2.4.8, and it does not establish production
 readiness or empirical net synergy.
+
+
+## Cross-leg economic role invariants (v1 oracle hardening)
+
+The oracle also checks the *relationships between legs*, not only each
+instrument's local mirror. For the narrow no-FX v1 case it requires:
+
+- origination to link the bank loan asset, borrower loan liability, borrower
+  deposit asset and bank deposit liability to the same bank/borrower pair;
+- supplier payment to link payer and supplier deposit-holder changes to the
+  same issuing bank, with distinct holders and correct debit/credit direction;
+- principal repayment to link the borrower, lending bank, loan mirror and
+  deposit mirror consistently.
+
+Loan accounts must carry the `loan` instrument class; deposit accounts must
+carry `deposit`. Loan and deposit currencies must match for the v1 origination
+and repayment fixtures. FX conversion is explicitly outside this version.
+
+Adversarial controls additionally preserve local mirror equality while
+mutating cross-leg borrower identity, and preserve a loan mirror while
+misclassifying its instrument class. Both mutations must be rejected.
+
+This is a source-level control contract, not a test result. Exact-head CI
+execution remains required.
