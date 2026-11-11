@@ -41,6 +41,126 @@ def _identity(posting, holder, issuer, period):
     return (period, *values, holder, issuer)
 
 
+
+def _validate_event_roles(event_type, postings):
+    """Enforce cross-leg economic roles, not merely local balance/mirroring."""
+    by_key = defaultdict(list)
+    for row in postings:
+        by_key[(row["account"], row["side"])].append(row)
+
+    def one(account, side):
+        rows = by_key[(account, side)]
+        if len(rows) != 1:
+            raise OracleError(f"expected one {account}/{side} posting")
+        return rows[0]
+
+    def require(condition, message):
+        if not condition:
+            raise OracleError(f"{event_type} role invariant: {message}")
+
+    def class_is(row, expected):
+        require(row.get("instrument_class") == expected,
+                f"{row['account']} must use {expected} instrument class")
+
+    if event_type == "bank_loan_origination":
+        loan_asset = one("loan_asset", "D")
+        loan_liability = one("loan_liability", "C")
+        deposit_asset = one("deposit_asset", "D")
+        deposit_liability = one("deposit_liability", "C")
+
+        borrower = loan_asset["counterparty_entity_id"]
+        bank = loan_asset["entity_id"]
+        require(loan_liability["entity_id"] == borrower,
+                "loan liability holder must be the loan borrower")
+        require(loan_liability["counterparty_entity_id"] == bank,
+                "loan creditor must be the originating bank")
+        require(loan_liability["issuer_entity_id"] == borrower,
+                "borrower must issue its loan liability")
+        require(loan_asset["issuer_entity_id"] == borrower,
+                "loan asset must identify the borrower as issuer")
+        require(deposit_asset["entity_id"] == borrower,
+                "new deposit asset must belong to the borrower")
+        require(deposit_asset["issuer_entity_id"] == bank,
+                "new deposit must be issued by the originating bank")
+        require(deposit_liability["entity_id"] == bank,
+                "deposit liability must be booked by the originating bank")
+        require(deposit_liability["counterparty_entity_id"] == borrower,
+                "deposit liability holder must be the borrower")
+        require(deposit_liability["issuer_entity_id"] == bank,
+                "bank must issue its deposit liability")
+        require(deposit_asset["counterparty_entity_id"] == bank,
+                "deposit asset counterparty must be the originating bank")
+        class_is(loan_asset, "loan")
+        class_is(loan_liability, "loan")
+        class_is(deposit_asset, "deposit")
+        class_is(deposit_liability, "deposit")
+        require(loan_asset["currency"] == deposit_asset["currency"],
+                "loan and created deposit currencies must match in v1")
+
+    elif event_type == "supplier_payment":
+        deposit_asset_out = one("deposit_asset", "C")
+        deposit_asset_in = one("deposit_asset", "D")
+        deposit_liability_out = one("deposit_liability", "D")
+        deposit_liability_in = one("deposit_liability", "C")
+
+        bank = deposit_liability_out["entity_id"]
+        payer = deposit_asset_out["entity_id"]
+        supplier = deposit_asset_in["entity_id"]
+        require(deposit_liability_in["entity_id"] == bank,
+                "both deposit liabilities must be booked by the same bank")
+        require(deposit_asset_out["counterparty_entity_id"] == bank
+                and deposit_asset_in["counterparty_entity_id"] == bank,
+                "both deposit holders must face the same bank")
+        require(deposit_liability_out["counterparty_entity_id"] == payer,
+                "outgoing deposit liability must identify the payer")
+        require(deposit_liability_in["counterparty_entity_id"] == supplier,
+                "incoming deposit liability must identify the supplier")
+        require(deposit_asset_out["issuer_entity_id"] == bank
+                and deposit_asset_in["issuer_entity_id"] == bank
+                and deposit_liability_out["issuer_entity_id"] == bank
+                and deposit_liability_in["issuer_entity_id"] == bank,
+                "transferred deposits must share the issuing bank")
+        require(payer != supplier, "payer and supplier must be distinct holders")
+        for row in postings:
+            class_is(row, "deposit")
+        require(deposit_asset_out["currency"] == deposit_asset_in["currency"],
+                "both sides of a deposit transfer must share currency in v1")
+
+    elif event_type == "principal_repayment":
+        loan_liability = one("loan_liability", "D")
+        loan_asset = one("loan_asset", "C")
+        deposit_asset = one("deposit_asset", "C")
+        deposit_liability = one("deposit_liability", "D")
+
+        borrower = loan_liability["entity_id"]
+        bank = loan_asset["entity_id"]
+        require(loan_liability["counterparty_entity_id"] == bank,
+                "borrower loan liability must be owed to the lending bank")
+        require(loan_asset["counterparty_entity_id"] == borrower,
+                "bank loan asset must identify the repaying borrower")
+        require(loan_asset["issuer_entity_id"] == borrower
+                and loan_liability["issuer_entity_id"] == borrower,
+                "loan claim and liability must identify the borrower as issuer")
+        require(deposit_asset["entity_id"] == borrower,
+                "repayment deposit asset must belong to the borrower")
+        require(deposit_asset["counterparty_entity_id"] == bank,
+                "repayment deposit asset must face the lending bank")
+        require(deposit_asset["issuer_entity_id"] == bank,
+                "repayment deposit must be issued by the lending bank")
+        require(deposit_liability["entity_id"] == bank
+                and deposit_liability["counterparty_entity_id"] == borrower,
+                "deposit liability reduction must belong to the bank and borrower")
+        require(deposit_liability["issuer_entity_id"] == bank,
+                "bank must issue the repaid deposit liability")
+        class_is(loan_asset, "loan")
+        class_is(loan_liability, "loan")
+        class_is(deposit_asset, "deposit")
+        class_is(deposit_liability, "deposit")
+        require(loan_asset["currency"] == deposit_asset["currency"],
+                "loan and repayment deposit currencies must match in v1")
+    else:
+        raise OracleError(f"unsupported event type for role validation: {event_type}")
+
 def evaluate(corpus):
     events = corpus.get("events")
     if not isinstance(events, list) or not events:
@@ -129,6 +249,7 @@ def evaluate(corpus):
                 balances[balance_key] += natural_change
 
         event_type = event.get("event_type")
+        _validate_event_roles(event_type, postings)
         account_sides = [(row["account"], row["side"], _decimal(row["amount"]))
                          for row in postings]
         expected_rules = {
@@ -256,6 +377,22 @@ def main():
     relabelled["events"][1]["event_type"] = "bank_loan_origination"
     _must_reject(lambda: evaluate(relabelled), "event-type composition mismatch")
 
+    # Mutation 5: locally mirrored deposit legs must still belong to the
+    # borrower named by the loan legs. This mutation preserves both deposit
+    # holder/issuer mirrors and global debit/credit totals.
+    wrong_borrower_role = json.loads(json.dumps(corpus))
+    wrong_borrower_role["events"][0]["postings"][2]["entity_id"] = "supplier-1"
+    wrong_borrower_role["events"][0]["postings"][2]["institutional_sector"] = "NFC"
+    wrong_borrower_role["events"][0]["postings"][3]["counterparty_entity_id"] = "supplier-1"
+    wrong_borrower_role["events"][0]["postings"][3]["counterparty_sector"] = "NFC"
+    _must_reject(lambda: evaluate(wrong_borrower_role), "deposit issued to an entity other than the borrower")
+
+    # Mutation 6: an otherwise mirrored loan may not be relabelled as a deposit.
+    wrong_class = json.loads(json.dumps(corpus))
+    wrong_class["events"][0]["postings"][0]["instrument_class"] = "deposit"
+    wrong_class["events"][0]["postings"][1]["instrument_class"] = "deposit"
+    _must_reject(lambda: evaluate(wrong_class), "loan account with deposit instrument class")
+
     # Mutation 5: duplicate delivery cannot be silently treated as a new event.
     duplicate_event = json.loads(json.dumps(corpus))
     duplicate_event["events"].append(duplicate_event["events"][0])
@@ -267,7 +404,7 @@ def main():
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: wrong holder, wrong instrument, wrong sector, event-type mutation and duplicate event rejected")
+    print("negative controls: wrong holder, instrument, sector, event type, cross-leg borrower role, instrument class and duplicate event rejected")
 
 
 if __name__ == "__main__":
