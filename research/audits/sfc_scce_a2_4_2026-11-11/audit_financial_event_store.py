@@ -575,6 +575,36 @@ def main():
             "ordered replay returned a permuted event history",
         )
 
+        # The group hash chain seals the immutable envelope, but normalized
+        # event/posting tables are separate mirrors. Corrupting a mirror must
+        # block all reads and any later append rather than silently extending
+        # an inconsistent store.
+        mirror_db = Path(directory) / "event-posting-mirror-tamper.sqlite3"
+        mirror_store = FinancialEventStore(mirror_db)
+        mirror_store.append_group("mirror-group-1", (first_event,))
+        with closing(sqlite3.connect(mirror_db)) as connection:
+            connection.execute("DROP TRIGGER journal_lines_no_update")
+            connection.execute(
+                "UPDATE journal_lines SET posting_json = ? "
+                "WHERE event_id = ? AND line_no = 0",
+                ('{"account":"tampered","side":"D","amount":"999","entity_id":"x"}',
+                 first_event["event_id"]),
+            )
+            connection.commit()
+        assert not mirror_store.integrity_check()
+        _must_reject(
+            lambda: mirror_store.append_group("after-mirror-tamper", (second_event,)),
+            "append continued after normalized posting mirror corruption",
+        )
+        _must_reject(
+            lambda: mirror_store.iter_groups(),
+            "ordered replay returned a store with a corrupt posting mirror",
+        )
+        _must_reject(
+            lambda: mirror_store.get_group("mirror-group-1"),
+            "point read returned a store with a corrupt posting mirror",
+        )
+
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
         with closing(sqlite3.connect(database)) as connection:
