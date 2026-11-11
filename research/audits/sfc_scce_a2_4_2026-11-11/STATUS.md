@@ -877,3 +877,35 @@ The dedicated A2.4 branch-push workflow has also been extended to execute
 directly. Previously those two new A2.4.4 controls were included in the
 prototype PR wrapper but omitted from the dedicated branch-push audit job.
 This is workflow wiring only; no execution result is inferred from the edit.
+
+
+## 11 November continuation — remaining cross-register gap audit
+
+Added `A2_4_REMAINING_CROSS_REGISTER_GAPS.md` after a source-level review of
+the exact branch head `24a8d0b4e5c9f740857395b1c7b9f1044e05bf3f`.
+
+New finding: the entity/sector claim fixture is period-aware, but the separate
+instrument stock-flow `Position` / `IssuerLiability` records and mirror key
+still lack `effective_period`. The component control therefore does not yet
+prove period-scoped holder/issuer identity or closing-to-opening continuity
+across successive periods.
+
+The audit also records the remaining authority boundary between the durable
+SQLite event store, the supplied synthetic journal validator, and SFC position
+and sector-balance projections; the missing contract-level debt lifecycle;
+the B8.1 production lifecycle and valuation gap; the B2/B3 runtime binding;
+labour/consent rights controls; and the distinction between exploratory
+synthetic experiments and prospective confirmatory evidence.
+
+The new document specifies acceptance criteria for SFC-GOLD-1/2, an independent
+oracle, crash/replay recovery, full multi-register period closure and Gate 0–4.
+It does not claim that these controls are implemented or passed.
+
+Exact-head CI at the time of audit:
+- Prototype validation `42926000574` — QUEUED;
+- SCCE Stage-C2 `42926000400` — QUEUED;
+- A2.4 audit controls `42925993756` — QUEUED.
+
+No completion logs or PASS evidence were available. PR #4 remains Draft and
+unmerged; canonical `main` remains untouched. A2.4.4 and A2.4.7 remain OPEN;
+A2.4.8 remains BLOCKED.
