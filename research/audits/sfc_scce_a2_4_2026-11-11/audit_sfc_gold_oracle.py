@@ -70,6 +70,11 @@ def _validate_event_roles(event_type, postings):
 
         borrower = loan_asset["counterparty_entity_id"]
         bank = loan_asset["entity_id"]
+        require(loan_asset["institutional_sector"] == "CB"
+                and loan_liability["institutional_sector"] == "H",
+                "v1 loan roles require a CB lender and household borrower")
+        require(loan_asset["instrument_id"] != deposit_asset["instrument_id"],
+                "loan and deposit must be distinct instruments")
         require(loan_liability["entity_id"] == borrower,
                 "loan liability holder must be the loan borrower")
         require(loan_liability["counterparty_entity_id"] == bank,
@@ -106,6 +111,12 @@ def _validate_event_roles(event_type, postings):
         bank = deposit_liability_out["entity_id"]
         payer = deposit_asset_out["entity_id"]
         supplier = deposit_asset_in["entity_id"]
+        require(deposit_liability_out["institutional_sector"] == "CB"
+                and deposit_asset_out["institutional_sector"] == "H"
+                and deposit_asset_in["institutional_sector"] == "NFC",
+                "v1 payment roles require CB bank, household payer and NFC supplier")
+        require(deposit_asset_out["instrument_id"] != deposit_asset_in["instrument_id"],
+                "payer and supplier deposits must be distinct instruments")
         require(deposit_liability_in["entity_id"] == bank,
                 "both deposit liabilities must be booked by the same bank")
         require(deposit_asset_out["counterparty_entity_id"] == bank
@@ -134,6 +145,11 @@ def _validate_event_roles(event_type, postings):
 
         borrower = loan_liability["entity_id"]
         bank = loan_asset["entity_id"]
+        require(loan_asset["institutional_sector"] == "CB"
+                and loan_liability["institutional_sector"] == "H",
+                "v1 repayment roles require a CB lender and household borrower")
+        require(loan_asset["instrument_id"] != deposit_asset["instrument_id"],
+                "loan and repayment deposit must be distinct instruments")
         require(loan_liability["counterparty_entity_id"] == bank,
                 "borrower loan liability must be owed to the lending bank")
         require(loan_asset["counterparty_entity_id"] == borrower,
@@ -377,6 +393,21 @@ def main():
     relabelled["events"][1]["event_type"] = "bank_loan_origination"
     _must_reject(lambda: evaluate(relabelled), "event-type composition mismatch")
 
+    # Mutation 5: changing the frozen bank sector and every matching
+    # posting label preserves registry consistency and accounting arithmetic,
+    # but a non-CB entity cannot play the bank role in this v1 corpus.
+    wrong_bank_sector = json.loads(json.dumps(corpus))
+    wrong_bank_sector["entities"][0]["sector"] = "NFC"
+    for event in wrong_bank_sector["events"]:
+        for posting in event["postings"]:
+            if posting["entity_id"] == "bank-1":
+                posting["institutional_sector"] = "NFC"
+            if posting.get("counterparty_entity_id") == "bank-1":
+                posting["counterparty_sector"] = "NFC"
+            if posting.get("issuer_entity_id") == "bank-1":
+                posting["issuer_sector"] = "NFC"
+    _must_reject(lambda: evaluate(wrong_bank_sector), "bank role assigned to non-CB sector")
+
     # Mutation 5: locally mirrored deposit legs must still belong to the
     # borrower named by the loan legs. This mutation preserves both deposit
     # holder/issuer mirrors and global debit/credit totals.
@@ -404,7 +435,7 @@ def main():
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: wrong holder, instrument, sector, event type, cross-leg borrower role, instrument class and duplicate event rejected")
+    print("negative controls: wrong holder, instrument, entity sector, bank role, event type, cross-leg borrower role, instrument class and duplicate event rejected")
 
 
 if __name__ == "__main__":
