@@ -274,3 +274,25 @@ A coordinated bank-sector mutation that keeps all entity/sector labels
 internally consistent is included as a negative control. These are fixture
 scope constraints, not a general-purpose institutional-sector ontology.
 Execution remains pending.
+
+
+## 14. SFC-GOLD-1 sequential stock and event replay boundary
+
+The independent oracle now validates the declared single period, requires
+registered counterparties/issuers, enforces immutable instrument identity
+across events, and checks running positions after each canonical event.
+The frozen event-array order is the v1 replay order. Because v1 has no opening
+stock or overdraft facility, negative intermediate positions are rejected.
+
+New negative controls cover an over-sized balanced repayment, repayment before
+origination, a changed maturity under a reused instrument ID, and an
+undeclared period. These controls are source implemented, not yet execution
+proven. The v1 no-negative-position assumption must not be generalized to
+systems with overdrafts or opening balances.
+
+The next genuine integration boundary remains durable event-store replay:
+same ordered source events must rebuild instrument positions and sector
+accounts after process restart, with crash injection and idempotent duplicate
+delivery. A multi-period SFC-GOLD-2 corpus must separately model opening
+snapshots and explicit overdraft/credit policy rather than inherit v1
+assumptions.
