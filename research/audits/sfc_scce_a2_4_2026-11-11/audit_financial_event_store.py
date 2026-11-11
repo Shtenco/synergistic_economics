@@ -592,6 +592,8 @@ def main():
     print("ambiguous populated v2 and unstamped-v2 migrations fail closed without fabricating chronology")
     print("single-group populated v2 migration safely assigns sequence 1")
     print("tampered global commit sequence and order permutation are detected by integrity_check")
+    print("schema-v4 hash chain seals group order; corrupted append and ordered replay are refused")
+    print("v3-to-v4 migration rejects corrupt legacy sequence and rolls back atomically")
 
 
 if __name__ == "__main__":
