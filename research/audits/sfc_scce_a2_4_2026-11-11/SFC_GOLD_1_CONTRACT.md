@@ -185,3 +185,25 @@ corpus-authored intermediate checkpoint while leaving the event stream
 unchanged. The independent expected-output comparison must reject this
 tampering. This is distinct from the twelve event-input mutations: it tests
 that the reference expectations themselves are actually enforced.
+
+
+## Corpus v1.2.0 — frozen holder/issuer identity and expectation integrity
+
+Version 1.2.0 adds explicit `holder_entity_id` and
+`issuer_entity_id` to every frozen final-position and per-event checkpoint
+row. The oracle now compares those fields with the independently accumulated
+instrument identity catalog. A liability-side row cannot silently change its
+beneficial holder while preserving the same entity/account/instrument/balance
+tuple.
+
+The expected-position parser also rejects duplicate position keys rather than
+silently collapsing them during dictionary construction, and requires
+positive finite decimal-string balances. The v1.2.0 negative controls include:
+- a corrupted intermediate checkpoint balance;
+- a tampered expected deposit holder;
+- a duplicate frozen final-position key;
+- a duplicate frozen checkpoint-position key.
+
+These are four frozen-expectation integrity controls in addition to the
+twelve event-input mutations. This is still source-level control design;
+execution and exact-head CI evidence remain pending.
