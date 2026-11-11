@@ -1,4 +1,5 @@
 import unittest
+from threading import Thread
 from datetime import datetime, timezone, timedelta
 
 from synergy_kernel import EventStore
@@ -146,6 +147,98 @@ class AtomicCoordinatorTests(unittest.TestCase):
         self.assertEqual([e.event_ordinal for e in receipt.events], [0, 1])
         self.assertEqual([e.aggregate_version for e in receipt.events], [1, 1])
         self.assertEqual(len(self.store.replay()), 2)
+
+
+    def test_multi_event_failure_after_second_append_rolls_back_everything(self):
+        def multi(state):
+            candidate = dict(state)
+            candidate["reserved"] = 10
+            return candidate, "ok", [
+                domain_event("evt-a", "key-a", 1, "5"),
+                domain_event("evt-b", "key-b", 1, "5"),
+            ]
+        with self.assertRaises(RuntimeError):
+            self.execute(transition_fn=multi, fail_after_event_append=2)
+        self.assertEqual(self.coordinator.state, {"reserved": 0})
+        self.assertEqual(self.coordinator.aggregate_version("inventory_lot", "lot-1"), 0)
+        self.assertEqual(self.store.replay(), ())
+
+        # Failed attempts do not leave an idempotency receipt: the same command
+        # can be retried after the transient append failure has been removed.
+        receipt = self.execute(transition_fn=multi)
+        self.assertEqual(self.coordinator.state, {"reserved": 10})
+        self.assertEqual(len(receipt.events), 2)
+        self.assertEqual(len(self.store.replay()), 2)
+
+    def test_transition_exception_leaves_state_log_and_version_unchanged(self):
+        def broken(state):
+            state["reserved"] = 999
+            raise RuntimeError("transition failed")
+        with self.assertRaises(RuntimeError):
+            self.execute(transition_fn=broken)
+        self.assertEqual(self.coordinator.state, {"reserved": 0})
+        self.assertEqual(self.coordinator.aggregate_version("inventory_lot", "lot-1"), 0)
+        self.assertEqual(self.store.replay(), ())
+        self.assertEqual(self.execute().result, 5)
+
+    def test_expected_version_rejects_bool_negative_and_float(self):
+        for invalid in (True, False, -1, 0.0, 1.5):
+            with self.subTest(value=invalid):
+                with self.assertRaises(EventBridgeError):
+                    self.execute(expected_version=invalid)
+        self.assertEqual(self.store.replay(), ())
+        self.assertEqual(self.coordinator.state, {"reserved": 0})
+
+    def test_fault_injection_index_must_be_positive_integer(self):
+        for invalid in (True, False, 0, -1, 1.0):
+            with self.subTest(value=invalid):
+                with self.assertRaises(EventBridgeError):
+                    self.execute(fail_after_event_append=invalid)
+        self.assertEqual(self.store.replay(), ())
+
+    def test_concurrent_commands_at_same_version_allow_exactly_one_winner(self):
+        outcomes = []
+        def worker(command_id):
+            def concurrent_transition(state):
+                candidate = dict(state)
+                candidate["reserved"] = candidate.get("reserved", 0) + 5
+                event = domain_event(
+                    event_id="evt-" + command_id,
+                    key="event-" + command_id,
+                    version=1,
+                )
+                return candidate, command_id, [event]
+            try:
+                receipt = self.coordinator.execute(
+                    command_id=command_id,
+                    idempotency_key="request-" + command_id,
+                    request={"command": command_id},
+                    aggregate_type="inventory_lot",
+                    aggregate_id="lot-1",
+                    expected_version=0,
+                    actor_id="operator-1",
+                    authority_ref="mandate-1",
+                    correlation_id="corr-" + command_id,
+                    occurred_at=NOW,
+                    recorded_at=NOW,
+                    transition=concurrent_transition,
+                )
+                outcomes.append(("committed", receipt.command_id))
+            except EventBridgeConflict:
+                outcomes.append(("conflict", command_id))
+
+        threads = [Thread(target=worker, args=(f"cmd-{i}",)) for i in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=5)
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(sum(kind == "committed" for kind, _ in outcomes), 1)
+        self.assertEqual(sum(kind == "conflict" for kind, _ in outcomes), 1)
+        self.assertEqual(self.coordinator.state["reserved"], 5)
+        self.assertEqual(self.coordinator.aggregate_version("inventory_lot", "lot-1"), 1)
+        self.assertEqual(len(self.store.replay()), 1)
+
 
 
 if __name__ == "__main__":
