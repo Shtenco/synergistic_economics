@@ -6,6 +6,7 @@ on:
       - audit/sfc-scce-a2-4-continuation-20261111
     paths:
       - "research/audits/sfc_scce_a2_4_2026-11-11/**"
+      - "prototype/**"
       - ".github/workflows/a2-4-audit-controls.yml"
 
 permissions:
