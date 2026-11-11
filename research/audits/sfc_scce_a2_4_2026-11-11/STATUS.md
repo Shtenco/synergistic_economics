@@ -1187,3 +1187,22 @@ Implementation:
 exact-head CI PASS is claimed. The no-negative-stock assumption is limited to
 this synthetic v1 fixture and must not be generalized to overdraft-capable
 deposit systems or ledgers with signed opening positions.
+
+
+### Exact-head CI checkpoint after sequential replay hardening
+
+At branch HEAD `59fb367f08e243d060ed2f3b8d9534e649dfe708`, all three
+required workflows were present for the same exact SHA:
+- Prototype validation `42940078569`;
+- SCCE Stage-C2 validation `42940078414`;
+- A2.4 audit control fixtures `42940074232`.
+
+All three runs were `queued`; their jobs had no conclusion and zero executed
+steps. No logs or artifacts existed at the time of inspection. This is a
+complete exact-SHA *dispatch set*, not an execution result. No PASS is claimed.
+
+The source was reviewed from the GitHub branch after commit. The oracle
+contains twelve adversarial rejection calls, including sequential overpayment,
+out-of-order replay, changed instrument identity and undeclared-period
+mutations. The script has not been executed locally in this environment; CI
+must execute it before its printed PASS line can be treated as evidence.
