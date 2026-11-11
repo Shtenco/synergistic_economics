@@ -256,6 +256,7 @@ class FinancialEventStore:
             if version == 3:
                 connection.execute("BEGIN IMMEDIATE")
                 try:
+                    connection.execute("DROP TRIGGER IF EXISTS event_groups_no_update")
                     connection.execute(
                         "ALTER TABLE event_groups ADD COLUMN previous_group_hash TEXT")
                     connection.execute(
@@ -275,6 +276,11 @@ class FinancialEventStore:
                             (previous_hash, chain_hash, row["group_id"]),
                         )
                         previous_hash = chain_hash
+                    connection.execute("""
+                        CREATE TRIGGER IF NOT EXISTS event_groups_no_update
+                        BEFORE UPDATE ON event_groups
+                        BEGIN SELECT RAISE(ABORT, 'event groups are append-only'); END
+                    """)
                     connection.execute("PRAGMA user_version = 4")
                     connection.execute("COMMIT")
                     version = 4
