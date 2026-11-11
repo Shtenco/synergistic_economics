@@ -203,3 +203,9 @@ An invalid legacy history is rejected inside the migration transaction; the
 DDL, trigger changes and version marker roll back together. The migration
 does not bless a gap or a corrupted group envelope with a newly computed
 chain.
+
+
+The ordered replay API validates the chain and the canonical group envelope
+before returning any groups. It refuses to return a replay prefix from a
+sequence-corrupted or permuted history. The append path performs the same
+verification under its writer transaction before extending the history.
