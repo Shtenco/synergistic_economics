@@ -642,6 +642,56 @@ def main():
             "point read returned a store with a corrupt posting mirror",
         )
 
+        # Event rows are a second normalized mirror. Mutating their indexed
+        # metadata while leaving the immutable envelope and chain untouched
+        # must also fail closed.
+        event_mirror_db = Path(directory) / "event-row-mirror-tamper.sqlite3"
+        event_mirror_store = FinancialEventStore(event_mirror_db)
+        event_mirror_store.append_group("event-mirror-group", (first_event,))
+        with closing(sqlite3.connect(event_mirror_db)) as connection:
+            connection.execute("DROP TRIGGER events_no_update")
+            connection.execute(
+                "UPDATE events SET event_type = ? WHERE event_id = ?",
+                ("tampered-event-type", first_event["event_id"]),
+            )
+            connection.commit()
+        assert not event_mirror_store.integrity_check()
+        _must_reject(
+            lambda: event_mirror_store.append_group("after-event-mirror-tamper", (second_event,)),
+            "append continued after normalized event-row corruption",
+        )
+        _must_reject(
+            lambda: event_mirror_store.iter_groups(),
+            "ordered replay returned a store with a corrupt event-row mirror",
+        )
+        _must_reject(
+            lambda: event_mirror_store.get_group("event-mirror-group"),
+            "point read returned a store with a corrupt event-row mirror",
+        )
+
+        # Missing normalized event rows are also corruption, even if no
+        # dangling foreign key remains after deleting the event's postings.
+        missing_event_db = Path(directory) / "event-row-mirror-missing.sqlite3"
+        missing_event_store = FinancialEventStore(missing_event_db)
+        missing_event_store.append_group("missing-event-group", (first_event,))
+        with closing(sqlite3.connect(missing_event_db)) as connection:
+            connection.execute("DROP TRIGGER journal_lines_no_delete")
+            connection.execute("DROP TRIGGER events_no_delete")
+            connection.execute(
+                "DELETE FROM journal_lines WHERE event_id = ?",
+                (first_event["event_id"],),
+            )
+            connection.execute(
+                "DELETE FROM events WHERE event_id = ?",
+                (first_event["event_id"],),
+            )
+            connection.commit()
+        assert not missing_event_store.integrity_check()
+        _must_reject(
+            lambda: missing_event_store.iter_groups(),
+            "ordered replay returned a store with a missing normalized event",
+        )
+
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
         with closing(sqlite3.connect(database)) as connection:
