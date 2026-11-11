@@ -358,6 +358,82 @@ def main():
     assert sector_financial_net_lending(mixed) == {
         "H": D("7"), "CB": D("-7")}
 
+    # Period is part of the instrument mirror key, not merely journal metadata.
+    period2_holder = [
+        position("deposit", "H", "CB", 107, 3, 110,
+                 effective_period=2),
+        position("deposit", "ROW", "CB", 8, 0, 8,
+                 effective_period=2),
+    ]
+    period2_issuer = [
+        liability("deposit", "CB", 115, 3, 118,
+                  effective_period=2),
+    ]
+    validate_stock_flow(period2_holder)
+    validate_issuer_stock_flow(period2_issuer)
+    validate_mirrors(positions[:2] + period2_holder,
+                     [issuer_liabilities[0], *period2_issuer])
+    validate_period_continuity(positions[:2] + period2_holder)
+    validate_period_continuity([issuer_liabilities[0], *period2_issuer])
+
+    # A cross-period mirror substitution must fail even if every amount matches.
+    try:
+        validate_mirrors([positions[0]], [period2_issuer[0]])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("cross-period holder/issuer mirror accepted")
+
+    # Opening(t+1) must equal closing(t); gaps are not silently bridged.
+    broken_period2 = [
+        position("deposit", "H", "CB", 108, 3, 111,
+                 effective_period=2),
+        position("deposit", "ROW", "CB", 8, 0, 8,
+                 effective_period=2),
+    ]
+    try:
+        validate_period_continuity(positions[:2] + broken_period2)
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("cross-period opening/closing discontinuity accepted")
+    skipped_period = position(
+        "deposit", "H", "CB", 110, 1, 111, effective_period=3)
+    try:
+        validate_period_continuity(period2_holder + [skipped_period])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("missing effective period silently bridged")
+
+    # Financial NL is a transaction flow: selecting period 2 must not sum period 1.
+    try:
+        sector_financial_net_lending(positions + period2_holder)
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("multi-period financial NL aggregated without selector")
+    period2_nl = sector_financial_net_lending(
+        positions + period2_holder, period=2)
+    assert period2_nl == {
+        "H": D("3"), "ROW": D("0"), "CB": D("-3")}
+    assert sector_financial_net_lending(
+        (p for p in positions + period2_holder), period=2) == period2_nl
+
+    try:
+        position("deposit", "H", "CB", 1, 0, 1, effective_period=True)
+    except TypeError:
+        raise
+    invalid_period = Position(
+        "deposit", "H", "CB", D("1"), D("0"), D("0"), D("0"), D("1"),
+        "deposit", "LCU", "unspecified", "nominal", "nominal", 0)
+    try:
+        validate_stock_flow([invalid_period])
+    except ReconciliationError:
+        pass
+    else:
+        raise AssertionError("zero effective period accepted")
+
     print("A2.4.4 holder/issuer T/V/O stock-flow reconciliation: PASS")
     print("10 holder positions and 7 independent issuer-liability records")
     print("opening, T, V, O and closing mirror component-by-component")
@@ -365,6 +441,8 @@ def main():
     print("identity key includes instrument ID, currency, maturity, denomination and valuation basis")
     print("negative controls: wrong instrument ID, duplicate issuer record, blank ID and conflated series rejected")
     print("negative controls: broken roll-forward, missing issuer, T/V mismatch and wrong-currency mirror rejected")
+    print("period controls: cross-period mirror substitution, discontinuity, skipped period and implicit multi-period NL rejected")
+    print("period controls: closing(t)=opening(t+1), explicit period selection and one-pass NL aggregation verified")
     print("valuation-only V=10/O=3 yields zero financial NL; mixed T=7/V=10/O=3 yields +7/-7")
 
 
