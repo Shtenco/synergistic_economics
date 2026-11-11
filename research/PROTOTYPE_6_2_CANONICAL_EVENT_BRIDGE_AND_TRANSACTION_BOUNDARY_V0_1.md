@@ -192,3 +192,12 @@ P6.2 is complete only when:
 - limitations and maturity are explicit.
 
 **Decision:** P6.1 remains an isolated in-memory reference. P6.2 begins with the canonical event contract and transaction boundary; it must not connect the current mutating API to EventStore using a post-hoc append loop.
+
+
+## 12. P6.2c/e implementation status — integrity audit boundary
+
+The additive P6.2c/e prototype now audits canonical records in the existing in-memory EventStore. In addition to schema/identity/digest and aggregate-order checks, it rejects missing or blank actor, authority and correlation metadata; malformed/non-UTC timestamps; invalid aggregate versions and ordinals; duplicate or blank evidence references; duplicate canonical event IDs and idempotency keys; and reuse of a command ID with inconsistent aggregate/version or command metadata.
+
+This is deliberately **not** the P6.2e state-recovery reducer described in the original roadmap. It does not rebuild inventory, restore command receipts or aggregate-version caches after process restart, reconcile materialized projections, or prove a crash-safe commit. The roadmap's state-reconstruction/reconciliation milestone remains blocked until the project selects a durable transaction boundary and defines complete versioned reducers for every inventory lifecycle event. The in-memory coordinator cannot satisfy that requirement.
+
+The strict audit also treats the current command model as one aggregate/version per command. A future cross-aggregate command must use an explicitly versioned workflow/transaction envelope; it must not be silently accepted under this contract.
