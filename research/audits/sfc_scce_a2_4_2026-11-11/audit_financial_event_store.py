@@ -528,6 +528,10 @@ def main():
             lambda: tamper_store.append_group("after-tamper", (first_event,)),
             "append continued after event-history sequence corruption",
         )
+        _must_reject(
+            lambda: tamper_store.iter_groups(),
+            "ordered replay returned a sequence-corrupted history",
+        )
 
         # A permutation preserves the contiguous sequence set {1, 2}; the
         # hash chain must still detect that historical group order was changed.
@@ -557,6 +561,10 @@ def main():
         _must_reject(
             lambda: reorder_store.append_group("after-reorder", (first_event,)),
             "append continued after event-history order permutation",
+        )
+        _must_reject(
+            lambda: reorder_store.iter_groups(),
+            "ordered replay returned a permuted event history",
         )
 
         # An out-of-band extra posting is detectable even if SQLite itself
