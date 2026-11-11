@@ -231,11 +231,23 @@ are not a completed execution result until exact-head CI logs are inspected.
 
 ### Remaining open boundary
 
-Schema v3 provides a deterministic order of durable group commits on this
-single SQLite store. It does not yet provide atomic SFC position/sector
-projection updates, an applied-through cursor, multi-process projection
-recovery, or a distributed ordering protocol. Those remain separate open
-gates; no exactly-once projection effect or A2.4.4 closure is claimed.
+Schema v4 provides a deterministic order of durable group commits on
+this single SQLite store and seals that order with a local hash chain over
+commit sequence, group ID, immutable payload hash and the preceding group
+hash. Integrity checking now detects sequence permutations that preserve the
+contiguous set 1..N, not only gaps or out-of-range sequence values.
+
+The chain is local tamper evidence, not an external trust anchor. An actor able
+to rewrite the entire database and recompute every chain link can replace the
+history; periodic external anchoring or independently retained signed
+checkpoints would be required to detect full-database rewrite. Migration from
+v3 seals the order visible at migration time and cannot prove that the
+pre-migration history was never altered.
+
+Schema v4 still does not provide atomic SFC position/sector projection
+updates, an applied-through cursor, multi-process projection recovery, or a
+distributed ordering protocol. Those remain separate open gates; no
+exactly-once projection effect or A2.4.4 closure is claimed.
 
 
 ### Recovery hardening — unstamped schema-v2 initialization
