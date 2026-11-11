@@ -204,7 +204,7 @@ def main():
     print(f"events={result['event_count']}; periods={result['periods']}")
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
-    print("sector financial net lending: CB=0 H=0 NFC=0; aggregate=0")
+    print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
     print("negative controls: wrong holder, wrong instrument identity and duplicate event rejected")
 
 
