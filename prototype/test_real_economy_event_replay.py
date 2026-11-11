@@ -1,4 +1,6 @@
 import unittest
+import json
+from hashlib import sha256
 from datetime import datetime, timezone
 
 from synergy_kernel import EventStore
@@ -97,7 +99,10 @@ class CanonicalReplayAuditTests(unittest.TestCase):
         # Create a well-formed second envelope but with aggregate version 3.
         run_command(self.coordinator, "cmd-2", "request-2", 2,
                     [raw_event("evt-2", "event-key-2", 2)])
-        self.store.events[1].payload["aggregate_version"] = 3
+        event = self.store.events[1]
+        event.payload["aggregate_version"] = 3
+        raw = json.dumps(event.payload, sort_keys=True, separators=(",", ":"), default=str)
+        object.__setattr__(event, "digest", sha256((event.event_type + "|" + raw).encode()).hexdigest())
         with self.assertRaises(EventReplayError):
             audit_canonical_event_log(self.store)
 
