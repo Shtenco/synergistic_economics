@@ -1789,3 +1789,43 @@ snapshot. This validates SQLite snapshot semantics, not execution of the
 repository audit script. The complete audit script still cannot be run
 locally because no repository checkout is present and the local shell cannot
 resolve `github.com`. Exact-head CI remains required.
+
+
+### 11 November continuation — normalized event and posting mirror fail-closed controls
+
+A separate integrity boundary was closed after reviewing the relationship
+between the immutable group envelope and its normalized SQLite mirrors. The
+local hash chain authenticates the group envelope, but it does not by itself
+prove that the separately stored `events` and `journal_lines` rows still
+match that envelope after privileged out-of-band database edits.
+
+The event store now verifies the normalized mirrors against each canonical
+immutable envelope. The verification is applied before append, ordered replay
+and point reads, and the full integrity checker independently checks the same
+relationship. A corrupted mirror therefore cannot be silently extended or
+returned as trusted event data.
+
+Adversarial fixtures now cover:
+- posting-row mutation after disabling its update trigger;
+- event-row metadata mutation after disabling its update trigger;
+- deletion of a normalized event and its postings after disabling delete
+  triggers;
+- refusal of append, ordered replay and point reads after detected corruption
+  (where applicable to the fixture).
+
+Commits:
+- `eff0783093cff4bab1d2cb90f4cc994004125702` — verify normalized event and
+  posting mirrors before append, replay and point reads;
+- `695f259cb6e3d3b5a87273f29d43547a9a15ef1f` — posting-mirror corruption
+  negative controls;
+- `be1a400af58769978b9647b0cae27da5428e3caa` — event-row mutation and
+  missing-event negative controls.
+
+**Local evidence boundary:** an isolated local SQLite microtest of the
+mirror-verification algorithm passed four cases: valid mirror accepted,
+posting mutation rejected, event metadata mutation rejected, and missing
+normalized event rejected. This is a narrow independently reconstructed
+mechanism test, not execution of the repository source or its audit script.
+A full checkout could not be obtained in the local shell because DNS/network
+resolution for `github.com` failed. Exact-head CI remains the required
+execution evidence for the committed repository implementation.
