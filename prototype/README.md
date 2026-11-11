@@ -213,3 +213,10 @@ These tests exercise only the in-process coordinator under its own lock. They do
 - [P6.3a contract](../research/PROTOTYPE_6_3A_INVENTORY_LIFECYCLE_EVENT_AND_COMMAND_CONTRACT_V0_1.md) defines typed lot/reservation aggregate identities, complete expected-version vectors, command-scoped idempotency, globally contiguous command event ordinals, immutable receipts, and exact event groups for register/reserve/commit/expiry/release/consume/quarantine.
 - It explicitly documents why current P6.1 event descriptions are incomplete for replay: reserve/release/expiry/consume mutate multiple aggregates but omit one or more aggregate events; child-lot state is not fully encoded.
 - P6.3a is a schema and acceptance contract only. It does not retrofit historical events, implement reducers or durable storage, or change P6.1 runtime behavior. Legacy P6.1 records require explicit migration/checkpoint treatment.
+
+
+## Repository-wide system audit — 11 November 2026
+
+- [Branch and system audit](../research/REPOSITORY_WIDE_BRANCH_AND_SYSTEM_AUDIT_2026-11-11.md) maps all six visible branches, PR targets, major accounting/event authorities, the unified state vector, cross-register equations, and source-level integration risks.
+- It records two concrete source-level defects for remediation: the SFC opening verifier rejects negative positions despite the signed-opening contract/test, and the financial journal adapter accepts a duck-typed caller-supplied validator.
+- The audit is explicitly in progress: no local archive/LZMA pass or full repository test run is claimed; exact-head CI remains required.
