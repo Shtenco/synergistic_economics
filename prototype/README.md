@@ -177,3 +177,11 @@ P6.1 remains an isolated in-memory reference and is not synchronized with Stage-
 - [test_real_economy_event_bridge.py](test_real_economy_event_bridge.py) — contract tests for canonical payload digests, UTC/time validation, required authority, idempotency scope, stale aggregate versions, multi-event ordinals and rollback on injected append failure.
 
 The coordinator is intentionally **single-process, single-writer and non-durable**. All writers must go through that coordinator; direct concurrent writes to the EventStore are outside its safety guarantee. It does not make the current P6.1 mutating `LotInventory` safe to adapt post hoc. Production still requires one durable transaction or an event-sourced commit boundary.
+
+
+### P6.2c — Canonical event-log integrity audit
+
+- [real_economy_event_replay.py](real_economy_event_replay.py) — audits canonical envelopes already stored in the existing EventStore: schema, identity agreement, payload digest, EventStore envelope digest, aggregate-version progression and per-command event ordinals. Legacy events without a canonical schema marker are counted and left uninterpreted; unknown declared schemas fail closed.
+- [test_real_economy_event_replay.py](test_real_economy_event_replay.py) — covers legacy coexistence, valid single/multi-event commands, sequential aggregate versions, payload/envelope tampering, identity mismatch, version gaps, ordinal gaps and unknown schemas.
+
+P6.2c is an integrity/replay audit, **not a business-state reducer**. It cannot reconstruct inventory or legal ownership until every lifecycle event contains a complete, versioned state-transition contract and a reducer is specified. The existing EventStore digest is recomputed for tamper detection but is not a previous-hash chain, authenticated signature, durable audit proof or evidence that an off-chain event actually occurred.
