@@ -1944,3 +1944,13 @@ The current store has no materialized position-snapshot table. The recovery audi
 - At the time of this status update, exact-head CI has not yet been inspected to completion. No PASS is claimed for GOLD-2A until the exact-head Prototype and A2.4 workflow logs are available and the oracle/recovery cases are green.
 - No production financial runtime, live ledger, provider or user balance was changed.
 - Corpus data is synthetic and does not certify IFRS, GAAP, SNA or any jurisdiction's legal treatment.
+
+
+### P1 signed-opening verifier correction — 12 November
+
+A previously recorded source-level contradiction was corrected in the audit branch:
+- `verify_sfc_projection_openings()` had rejected every negative opening amount even though normalization, P1 activation contract and generic projection kernel permit signed positions and defer nonnegative restrictions to instrument policy.
+- The verifier now checks canonical finite decimal representation and frozen snapshot hash without imposing a generic nonnegative rule.
+- `audit_sfc_projection_registry.py` now explicitly reopens the negative-opening database and verifies its persisted snapshot after activation.
+
+This fixes the generic snapshot-integrity contradiction only. It does not mean every instrument may have a negative balance: instrument-specific nonnegative/short-position rules remain the projection contract's responsibility. Exact-head execution is pending; no PASS is claimed for this correction until CI logs complete.
