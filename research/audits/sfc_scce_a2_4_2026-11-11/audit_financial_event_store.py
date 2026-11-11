@@ -438,6 +438,23 @@ def main():
         with closing(sqlite3.connect(legacy_v2_single_db)) as connection:
             assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
 
+        # A v3 initializer may have committed commit_sequence but crashed
+        # before stamping user_version. It must be recognized as v3, not
+        # misclassified as v2 and migrated by adding the column a second time.
+        legacy_v3_unstamped_db = Path(directory) / "legacy-v3-unstamped.sqlite3"
+        with closing(sqlite3.connect(legacy_v2_single_db)) as source_connection:
+            with closing(sqlite3.connect(legacy_v3_unstamped_db)) as target_connection:
+                source_connection.backup(target_connection)
+                target_connection.execute("PRAGMA user_version = 0")
+        migrated_v3_unstamped = FinancialEventStore(legacy_v3_unstamped_db)
+        assert migrated_v3_unstamped.iter_groups()[0]["commit_sequence"] == 1
+        assert migrated_v3_unstamped.integrity_check()
+        with closing(sqlite3.connect(legacy_v3_unstamped_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+            columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(event_groups)").fetchall()}
+            assert "commit_sequence" in columns
+
         # Out-of-band sequence corruption is caught even if an operator
         # disables the immutability trigger.
         tamper_db = Path(directory) / "commit-sequence-tamper.sqlite3"

@@ -1492,3 +1492,16 @@ remain mandatory.
 code and projection audit fixtures are NOT yet committed. This is a design
 milestone, not implementation or execution PASS. A2.4.4 remains OPEN;
 A2.4.8 remains BLOCKED.
+
+
+### Additional schema-v3 interrupted-initialization control
+
+A final migration-path inspection found that the zero-user_version recovery
+branch distinguished v1 from later layouts by event_index but did not inspect
+whether event_groups already had commit_sequence. A v3 store interrupted
+before user_version stamping could therefore be misclassified as v2 and
+attempt to add an already-existing column. The initializer now distinguishes
+v2 and v3 by the event_groups column set. The audit fixture clones a migrated
+v3 store, clears user_version, reopens it, and verifies sequence preservation,
+integrity and schema version restoration. This is source-level implementation;
+exact-head CI execution remains pending.
