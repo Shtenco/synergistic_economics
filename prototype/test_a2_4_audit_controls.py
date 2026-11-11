@@ -71,6 +71,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_financial_events(self):
         self._run_script("audit_financial_events.py")
 
+    def test_audit_sfc_gold_oracle(self):
+        self._run_script("audit_sfc_gold_oracle.py")
+
     def test_audit_financial_journal(self):
         self._run_script("audit_financial_journal.py")
 
