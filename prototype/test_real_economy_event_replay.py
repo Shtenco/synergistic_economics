@@ -22,6 +22,14 @@ def raw_event(event_id, key, version, ordinal_payload="5"):
     }
 
 
+def rewrite_envelope(event, **changes):
+    event.payload.update(changes)
+    raw = json.dumps(event.payload, sort_keys=True, separators=(",", ":"), default=str)
+    object.__setattr__(event, "digest", sha256((event.event_type + "|" + raw).encode()).hexdigest())
+    if "idempotency_key" in changes:
+        object.__setattr__(event, "idempotency_key", changes["idempotency_key"])
+
+
 def run_command(coordinator, command_id, key, version, events):
     return coordinator.execute(
         command_id=command_id, idempotency_key=key,
@@ -112,6 +120,45 @@ class CanonicalReplayAuditTests(unittest.TestCase):
             raw_event("evt-2", "event-key-2", 1),
         ])
         self.store.events[1].payload["event_ordinal"] = 2
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
+    def test_missing_actor_metadata_is_rejected_even_with_recomputed_store_digest(self):
+        run_command(self.coordinator, "cmd-1", "request-1", 1,
+                    [raw_event("evt-1", "event-key-1", 1)])
+        rewrite_envelope(self.store.events[0], actor_id=" ")
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
+    def test_non_utc_timestamp_is_rejected(self):
+        run_command(self.coordinator, "cmd-1", "request-1", 1,
+                    [raw_event("evt-1", "event-key-1", 1)])
+        rewrite_envelope(self.store.events[0], occurred_at="2026-11-11T17:00:00+03:00")
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
+    def test_duplicate_idempotency_key_across_events_is_rejected(self):
+        run_command(self.coordinator, "cmd-1", "request-1", 1, [
+            raw_event("evt-1", "event-key-1", 1),
+            raw_event("evt-2", "event-key-2", 1, "6"),
+        ])
+        rewrite_envelope(self.store.events[1], idempotency_key="event-key-1")
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
+    def test_command_id_cannot_be_reused_for_another_aggregate_version(self):
+        run_command(self.coordinator, "cmd-1", "request-1", 1,
+                    [raw_event("evt-1", "event-key-1", 1)])
+        run_command(self.coordinator, "cmd-2", "request-2", 2,
+                    [raw_event("evt-2", "event-key-2", 2)])
+        rewrite_envelope(self.store.events[1], command_id="cmd-1")
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
+    def test_duplicate_evidence_refs_are_rejected(self):
+        run_command(self.coordinator, "cmd-1", "request-1", 1,
+                    [raw_event("evt-1", "event-key-1", 1)])
+        rewrite_envelope(self.store.events[0], evidence_refs=["evidence-1", "evidence-1"])
         with self.assertRaises(EventReplayError):
             audit_canonical_event_log(self.store)
 
