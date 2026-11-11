@@ -36,6 +36,22 @@ def _nonempty_string(value: Any, field: str) -> str:
     return value
 
 
+_CHAIN_GENESIS = hashlib.sha256(
+    b"SYNERGY_FINANCIAL_EVENT_STORE_CHAIN_GENESIS_V1"
+).hexdigest()
+
+
+def _group_chain_hash(commit_sequence: int, group_id: str,
+                      payload_sha256: str, previous_group_hash: str) -> str:
+    material = _canonical_json({
+        "commit_sequence": commit_sequence,
+        "group_id": group_id,
+        "payload_sha256": payload_sha256,
+        "previous_group_hash": previous_group_hash,
+    })
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()
+
+
 def _validate_group(group_id: Any, causation_id: Any,
                     events: Sequence[Mapping[str, Any]]) -> tuple[str, str | None, list[dict]]:
     group_id = _nonempty_string(group_id, "group_id")
@@ -98,7 +114,7 @@ class FinancialEventStore:
     distributed consensus or multi-region event store.
     """
 
-    SCHEMA_VERSION = 3
+    SCHEMA_VERSION = 4
 
     def __init__(self, database_path: str | os.PathLike, timeout: float = 10.0):
         if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
@@ -147,7 +163,11 @@ class FinancialEventStore:
                             row["name"] for row in connection.execute(
                                 "PRAGMA table_info(event_groups)").fetchall()
                         }
-                        if "commit_sequence" in group_columns:
+                        if "group_chain_hash" in group_columns:
+                            # A v4 initializer may have committed its schema
+                            # but crashed before stamping user_version.
+                            version = 4
+                        elif "commit_sequence" in group_columns:
                             # A v3 initializer may have committed its schema
                             # but crashed before stamping user_version.
                             version = 3
@@ -155,7 +175,7 @@ class FinancialEventStore:
                             # A v2 initializer may have committed its schema
                             # but crashed before stamping user_version.
                             version = 2
-            if version not in (0, 1, 2, self.SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
                     f"unsupported event-store schema version: {version}")
 
@@ -230,11 +250,46 @@ class FinancialEventStore:
                         connection.execute("ROLLBACK")
                     raise
 
+            # Schema v4 seals the ordered group history with a local hash
+            # chain. Migration seals the extant v3 order; it cannot prove that
+            # the legacy order was never altered before this migration.
+            if version == 3:
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    connection.execute(
+                        "ALTER TABLE event_groups ADD COLUMN previous_group_hash TEXT")
+                    connection.execute(
+                        "ALTER TABLE event_groups ADD COLUMN group_chain_hash TEXT")
+                    previous_hash = _CHAIN_GENESIS
+                    rows = connection.execute(
+                        "SELECT group_id, commit_sequence, payload_sha256 "
+                        "FROM event_groups ORDER BY commit_sequence"
+                    ).fetchall()
+                    for row in rows:
+                        chain_hash = _group_chain_hash(
+                            row["commit_sequence"], row["group_id"],
+                            row["payload_sha256"], previous_hash)
+                        connection.execute(
+                            "UPDATE event_groups SET previous_group_hash = ?, "
+                            "group_chain_hash = ? WHERE group_id = ?",
+                            (previous_hash, chain_hash, row["group_id"]),
+                        )
+                        previous_hash = chain_hash
+                    connection.execute("PRAGMA user_version = 4")
+                    connection.execute("COMMIT")
+                    version = 4
+                except Exception:
+                    if connection.in_transaction:
+                        connection.execute("ROLLBACK")
+                    raise
+
             connection.executescript("""
                 CREATE TABLE IF NOT EXISTS event_groups (
                     group_id TEXT PRIMARY KEY,
                     causation_id TEXT,
                     commit_sequence INTEGER NOT NULL CHECK (commit_sequence > 0),
+                    previous_group_hash TEXT NOT NULL,
+                    group_chain_hash TEXT NOT NULL,
                     payload_sha256 TEXT NOT NULL,
                     payload_json TEXT NOT NULL
                 );
@@ -259,6 +314,10 @@ class FinancialEventStore:
                     ON events(group_id, event_id);
                 CREATE UNIQUE INDEX IF NOT EXISTS events_group_order
                     ON events(group_id, event_index);
+                CREATE TRIGGER IF NOT EXISTS event_groups_chain_insert_guard
+                    BEFORE INSERT ON event_groups
+                    WHEN NEW.previous_group_hash IS NULL OR NEW.group_chain_hash IS NULL
+                    BEGIN SELECT RAISE(ABORT, 'event group chain metadata is required'); END;
                 CREATE TRIGGER IF NOT EXISTS event_groups_no_update
                     BEFORE UPDATE ON event_groups
                     BEGIN SELECT RAISE(ABORT, 'event groups are append-only'); END;
@@ -334,10 +393,19 @@ class FinancialEventStore:
                     "SELECT COALESCE(MAX(commit_sequence), 0) + 1 "
                     "FROM event_groups"
                 ).fetchone()[0]
+                tail = connection.execute(
+                    "SELECT group_chain_hash FROM event_groups "
+                    "ORDER BY commit_sequence DESC LIMIT 1"
+                ).fetchone()
+                previous_hash = tail["group_chain_hash"] if tail else _CHAIN_GENESIS
+                chain_hash = _group_chain_hash(
+                    next_sequence, group_id, payload_hash, previous_hash)
                 connection.execute(
                     "INSERT INTO event_groups(group_id, causation_id, commit_sequence, "
-                    "payload_sha256, payload_json) VALUES (?, ?, ?, ?, ?)",
-                    (group_id, causation_id, next_sequence, payload_hash, payload_json),
+                    "previous_group_hash, group_chain_hash, payload_sha256, payload_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (group_id, causation_id, next_sequence, previous_hash,
+                     chain_hash, payload_hash, payload_json),
                 )
                 for event_id, event_type, period, event_index, event_hash, event_json, postings in event_rows:
                     connection.execute(
@@ -404,18 +472,24 @@ class FinancialEventStore:
                 if result != "ok" or foreign_keys:
                     return False
 
-                sequence_rows = connection.execute(
-                    "SELECT commit_sequence FROM event_groups ORDER BY commit_sequence"
-                ).fetchall()
-                if [row["commit_sequence"] for row in sequence_rows] != list(
-                        range(1, len(sequence_rows) + 1)):
-                    return False
-
                 groups = connection.execute(
-                    "SELECT group_id, causation_id, commit_sequence, payload_sha256, payload_json "
+                    "SELECT group_id, causation_id, commit_sequence, previous_group_hash, "
+                    "group_chain_hash, payload_sha256, payload_json "
                     "FROM event_groups ORDER BY commit_sequence"
                 ).fetchall()
+                if [group["commit_sequence"] for group in groups] != list(
+                        range(1, len(groups) + 1)):
+                    return False
+                previous_hash = _CHAIN_GENESIS
                 for group in groups:
+                    if group["previous_group_hash"] != previous_hash:
+                        return False
+                    expected_chain_hash = _group_chain_hash(
+                        group["commit_sequence"], group["group_id"],
+                        group["payload_sha256"], previous_hash)
+                    if group["group_chain_hash"] != expected_chain_hash:
+                        return False
+                    previous_hash = expected_chain_hash
                     if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
                         return False
                     envelope = json.loads(group["payload_json"])
