@@ -195,3 +195,11 @@ The append path also verifies the existing group chain while holding
 or chain hashes are inconsistent, it refuses to append rather than extending
 a corrupted history. Audit controls exercise both a sequence gap and a
 sequence permutation, then verify that further appends are rejected.
+
+
+Before v3-to-v4 chain sealing, migration verifies contiguous sequence
+`1..N`, payload-hash agreement, canonical JSON and group/causation identity.
+An invalid legacy history is rejected inside the migration transaction; the
+DDL, trigger changes and version marker roll back together. The migration
+does not bless a gap or a corrupted group envelope with a newly computed
+chain.
