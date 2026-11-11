@@ -962,3 +962,11 @@ Those runs predate the three implementation commits above and cannot validate
 the new code. A fresh exact-HEAD run set is required. PR #4 remains Draft and
 unmerged; canonical `main` remains untouched. A2.4.4 and A2.4.7 remain OPEN;
 A2.4.8 remains BLOCKED.
+
+
+A final fail-closed refinement in commit
+`9e2edbe5f60a3b89e1dbfd4def2315c190378f86` makes the continuity validator
+reuse the canonical full-instrument identity validation and validates every
+period before financial-NL selection. This prevents malformed/blank identity
+dimensions or invalid periods from bypassing the new checks. This is source
+hardening only; execution remains pending.
