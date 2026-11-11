@@ -970,3 +970,60 @@ reuse the canonical full-instrument identity validation and validates every
 period before financial-NL selection. This prevents malformed/blank identity
 dimensions or invalid periods from bypassing the new checks. This is source
 hardening only; execution remains pending.
+
+
+## 11 November continuation — SFC-GOLD-1 frozen corpus and independent oracle
+
+A first narrow SFC-GOLD-1 corpus is now committed as a data-only JSON fixture,
+with a separate arithmetic oracle. The frozen case covers:
+- bank loan origination creating matching loan and deposit positions;
+- supplier payment transferring an existing deposit without increasing
+  system-wide deposits;
+- principal repayment reducing matching borrower/bank loan and deposit
+  positions.
+
+The expected final values are frozen in the corpus: bank loan asset 14,
+household loan liability 14, household and supplier deposit assets 7 each,
+matching bank deposit liabilities 7 each, system deposits 14 on both sides,
+and sector financial net lending CB=0, H=-7, NFC=+7 (aggregate zero).
+
+The independent oracle does not import EntityJournal, the SQLite event store,
+the journal adapter, SFC runtime projections or other audit fixtures. It
+independently checks decimal-string amounts, frozen entity/sector membership,
+event-type account composition, double-entry equality, event-level
+holder/issuer mirrors, closing instrument balances and sector financial net
+lending. Negative controls mutate holder identity, instrument identity,
+sector assignment and event type, and attempt duplicate event delivery.
+
+Files:
+- `SFC_GOLD_1_CORPUS.json` — frozen input and canonical expected output;
+- `SFC_GOLD_1_CONTRACT.md` — scope, independence boundary, exclusions and
+  acceptance criteria;
+- `audit_sfc_gold_oracle.py` — standalone independent arithmetic oracle.
+
+CI wiring:
+- `prototype/test_a2_4_audit_controls.py` invokes the oracle as a subprocess;
+- `.github/workflows/a2-4-audit-controls.yml` executes the oracle directly.
+
+Implementation commits:
+- `03127b356c287ed4130bc4bfeb9edee5440ae14b` — initial frozen corpus;
+- `a648cb08dec7b583e960e75bc71d621a1f6db103` — corrected frozen sector
+  net-lending vector;
+- `4fd35589326357db969a2ee7b58a8ecc5ba037c5` — independent oracle;
+- `c0fb004f9d5325c13ff69b1d7d6af4527f71272f` — oracle output correction;
+- `70690751e2b1a19e88337831ac5712239b4148d1` — Prototype wrapper wiring;
+- `01ac4a0f3fcfed8e6f82104d96badd8a57450ee3` — dedicated A2.4 workflow
+  wiring;
+- `560527cdc17cd13babf2ddbd66d02f00cae51eb7`,
+  `30038ddf4f0002fd9de622bb74d0f0a7db4b6f11` and
+  `64e43efe9b73ed5e2ab8c810fc66946188f262f1` — oracle hardening and
+  negative-control corrections;
+- `45861ff0d39cced16a2314fcdc40ad01d77a8a08` — SFC-GOLD-1 contract.
+
+**Evidence boundary:** source and CI wiring are committed, but no execution
+PASS is claimed until the exact-head workflows complete and their steps/logs
+are reviewed. SFC-GOLD-1 v1 is intentionally single-period and excludes
+interest, valuation, impairment, write-off, legal forgiveness, collateral,
+guarantees and multi-period event-store projection. It is Gate 1 groundwork,
+not closure of Gate 0/1/2, A2.4.4 or A2.4.8. PR #4 remains Draft/unmerged;
+canonical `main` remains untouched.
