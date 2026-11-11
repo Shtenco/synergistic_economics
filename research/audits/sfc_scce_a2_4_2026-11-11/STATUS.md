@@ -1599,3 +1599,23 @@ Implementation/test commits:
 No local execution is claimed. Exact-head CI on the final commit is required.
 SFC projection, coverage and applied-through cursor remain unimplemented;
 A2.4.4 remains OPEN and A2.4.8 remains BLOCKED.
+
+
+### Additional fail-closed append control
+
+The append path now verifies the existing group chain under the same
+`BEGIN IMMEDIATE` lock before accepting a new group. A detected sequence gap,
+permutation, broken predecessor link, stored-payload hash mismatch or
+chain-hash mismatch blocks further writes. This prevents a new valid-looking
+group from extending an already corrupted history. Audit controls assert
+append refusal after both sequence-gap tampering and a permutation that
+preserves the contiguous sequence set.
+
+Implementation/test commits:
+- `c3cf47c284e5b85efb1beec3b94244d99b2c2748` — verify existing chain
+  under the writer transaction before append;
+- `0f451cd612b357f871cd4f5649f7023b6929f2a5` — negative controls for
+  fail-closed append after chain corruption;
+- `2fe1c4a97fdc81ab2791fd97f5c0091632271f3a` — contract update.
+
+These controls remain source-level until CI executes on the final exact HEAD.
