@@ -178,6 +178,7 @@ class InMemoryAtomicCoordinator:
                 transition: Callable, evidence_refs=(), causation_id=None,
                 fail_after_event_append=None):
         command_id = _required_text(command_id, "command_id")
+        evidence_refs = tuple(evidence_refs)
         idempotency_key = _required_text(idempotency_key, "idempotency_key")
         aggregate_type = _required_text(aggregate_type, "aggregate_type")
         aggregate_id = _required_text(aggregate_id, "aggregate_id")
