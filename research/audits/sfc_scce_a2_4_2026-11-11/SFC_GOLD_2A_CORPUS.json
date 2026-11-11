@@ -144,6 +144,10 @@
         "interest_payable": "6",
         "deposit_asset": "96",
         "deposit_liability": "96"
+      },
+      "sector_financial_net_lending": {
+        "CB": "10",
+        "H": "-10"
       }
     },
     {
@@ -169,6 +173,10 @@
         "interest_payable": "6",
         "deposit_asset": "96",
         "deposit_liability": "96"
+      },
+      "sector_financial_net_lending": {
+        "CB": "0",
+        "H": "0"
       }
     },
     {
@@ -194,6 +202,10 @@
         "interest_payable": "6",
         "deposit_asset": "76",
         "deposit_liability": "76"
+      },
+      "sector_financial_net_lending": {
+        "CB": "0",
+        "H": "0"
       }
     },
     {
@@ -219,6 +231,10 @@
         "interest_payable": "6",
         "deposit_asset": "76",
         "deposit_liability": "76"
+      },
+      "sector_financial_net_lending": {
+        "CB": "-5",
+        "H": "5"
       }
     }
   ],
@@ -746,7 +762,8 @@
     "At every checkpoint: contractual principal = recognized gross loan asset + enforceable written-off memorandum claim.",
     "At every checkpoint: net loan carrying = recognized gross loan asset - impairment allowance.",
     "Interest receivable equals interest payable; deposit asset equals deposit liability.",
-    "For each account and period, opening + T + V + O = closing; impairment recognition is V, write-off is O, principal repayment/interest accrual/payment/forgiveness are T."
+    "For each account and period, opening + T + V + O = closing; impairment recognition is V, write-off is O, principal repayment/interest accrual/payment/forgiveness are T.",
+    "Transaction-only sector financial net lending is computed from financial-asset transactions minus financial-liability transactions; V and O are excluded; sector totals sum to zero in each period."
   ],
   "explicit_nonclaims": [
     "This corpus is synthetic, not empirical.",
