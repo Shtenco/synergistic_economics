@@ -1754,3 +1754,38 @@ outside the available PR-only run listing. A2.4.4 remains OPEN; SFC projection,
 coverage and applied-through cursor remain unimplemented; A2.4.8 remains
 BLOCKED. PR #4 remains Draft/Open/unmerged; canonical `main` remains
 untouched.
+
+
+### 11 November continuation — consistent read snapshots under concurrent WAL writers
+
+A further concurrency review found a time-of-check/time-of-use window in
+verified reads. The connection uses SQLite autocommit mode; without an
+explicit read transaction, chain verification, mirror verification and the
+final SELECT could observe different WAL snapshots if another writer commits
+between those operations. A reader could therefore return rows that were not
+part of the snapshot whose chain it had just verified. The same read-skew
+risk applied to the multi-query `integrity_check()`.
+
+The store now opens an explicit read transaction before:
+- `iter_groups()` chain/mirror verification and final ordered SELECT;
+- `get_group()` chain/mirror verification and point SELECT;
+- the full `integrity_check()` sequence (SQLite structure, foreign keys,
+  chain and normalized mirrors).
+
+An adversarial concurrency fixture pauses the reader immediately after its
+chain verification, commits a second group through a concurrent WAL writer,
+then resumes the reader. The verified read must return only the original
+snapshot; a subsequent read must see both groups.
+
+Commits:
+- `020bed51da3ad2a18c6bead864825dbf77fe9469` — explicit consistent read
+  transactions for ordered replay, point reads and integrity checks;
+- `8683156149f0123f80644d6e5a6da91ae120f2cb` — concurrent WAL
+  read-snapshot regression control.
+
+**Execution boundary:** a local SQLite WAL concurrency microtest passed:
+a concurrent writer committed while a reader remained pinned to its original
+snapshot. This validates SQLite snapshot semantics, not execution of the
+repository audit script. The complete audit script still cannot be run
+locally because no repository checkout is present and the local shell cannot
+resolve `github.com`. Exact-head CI remains required.
