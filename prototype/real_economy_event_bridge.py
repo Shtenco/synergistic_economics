@@ -181,13 +181,23 @@ class InMemoryAtomicCoordinator:
         idempotency_key = _required_text(idempotency_key, "idempotency_key")
         aggregate_type = _required_text(aggregate_type, "aggregate_type")
         aggregate_id = _required_text(aggregate_id, "aggregate_id")
-        request_fingerprint = sha256(canonical_json(request).encode("utf-8")).hexdigest()
-        receipt_key = (command_id, idempotency_key)
+        fingerprint_input = {
+            "command_id": command_id, "request": request,
+            "aggregate_type": aggregate_type, "aggregate_id": aggregate_id,
+            "expected_version": expected_version, "actor_id": actor_id,
+            "authority_ref": authority_ref, "correlation_id": correlation_id,
+            "occurred_at": _utc(occurred_at, "occurred_at"),
+            "recorded_at": _utc(recorded_at, "recorded_at"),
+            "evidence_refs": list(evidence_refs),
+            "causation_id": causation_id,
+        }
+        request_fingerprint = sha256(canonical_json(fingerprint_input).encode("utf-8")).hexdigest()
+        receipt_key = idempotency_key
         with self._lock:
             prior = self._receipts.get(receipt_key)
             if prior is not None:
                 if prior.request_fingerprint != request_fingerprint:
-                    raise EventBridgeConflict("idempotency key reused with a different request")
+                    raise EventBridgeConflict("idempotency key reused with a different command or request")
                 return prior
             current_version = self._aggregate_versions.get((aggregate_type, aggregate_id), 0)
             if expected_version != current_version:
