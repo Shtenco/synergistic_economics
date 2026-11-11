@@ -442,13 +442,25 @@ def main():
         with closing(sqlite3.connect(legacy_v2_single_db)) as connection:
             assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
 
-        # A v4 initializer may have committed its chain columns but crashed
-        # before stamping user_version. It must be recognized as v4, not
-        # misclassified as v2/v3 and migrated by adding columns a second time.
+        # A v3 initializer may have committed commit_sequence but crashed
+        # before stamping user_version. Reconstruct a populated single-group
+        # v3 store, clear the version marker, and require v3 -> v4 recovery.
         legacy_v3_unstamped_db = Path(directory) / "legacy-v3-unstamped.sqlite3"
-        with closing(sqlite3.connect(legacy_v2_single_db)) as source_connection:
+        with closing(sqlite3.connect(legacy_v2_db)) as source_connection:
             with closing(sqlite3.connect(legacy_v3_unstamped_db)) as target_connection:
                 source_connection.backup(target_connection)
+                target_connection.execute(
+                    "DELETE FROM journal_lines WHERE event_id = ?", ("v2-event-1",))
+                target_connection.execute(
+                    "DELETE FROM events WHERE event_id = ?", ("v2-event-1",))
+                target_connection.execute(
+                    "DELETE FROM event_groups WHERE group_id = ?", ("v2-group-1",))
+                target_connection.execute(
+                    "ALTER TABLE event_groups ADD COLUMN commit_sequence "
+                    "INTEGER NOT NULL DEFAULT 1 CHECK (commit_sequence > 0)")
+                target_connection.execute(
+                    "CREATE UNIQUE INDEX event_groups_commit_sequence "
+                    "ON event_groups(commit_sequence)")
                 target_connection.execute("PRAGMA user_version = 0")
                 target_connection.commit()
         migrated_v3_unstamped = FinancialEventStore(legacy_v3_unstamped_db)
@@ -459,6 +471,21 @@ def main():
             columns = {row[1] for row in connection.execute(
                 "PRAGMA table_info(event_groups)").fetchall()}
             assert {"commit_sequence", "previous_group_hash", "group_chain_hash"} <= columns
+
+        # A v4 initializer may have committed its chain columns but crashed
+        # before stamping user_version. It must be recognized as v4 without
+        # trying to add its columns a second time.
+        legacy_v4_unstamped_db = Path(directory) / "legacy-v4-unstamped.sqlite3"
+        with closing(sqlite3.connect(legacy_v2_single_db)) as source_connection:
+            with closing(sqlite3.connect(legacy_v4_unstamped_db)) as target_connection:
+                source_connection.backup(target_connection)
+                target_connection.execute("PRAGMA user_version = 0")
+                target_connection.commit()
+        migrated_v4_unstamped = FinancialEventStore(legacy_v4_unstamped_db)
+        assert migrated_v4_unstamped.iter_groups()[0]["commit_sequence"] == 1
+        assert migrated_v4_unstamped.integrity_check()
+        with closing(sqlite3.connect(legacy_v4_unstamped_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
 
         # Out-of-band sequence corruption is caught even if an operator
         # disables the immutability trigger.
