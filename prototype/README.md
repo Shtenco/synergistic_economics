@@ -193,3 +193,10 @@ P6.2c is an integrity/replay audit, **not a business-state reducer**. It cannot 
 - `test_real_economy_event_bridge.py` adds multi-event rollback after the second append, retry after a failed attempt, transition-exception isolation, strict version/fault-index validation and a two-thread same-version race. The race contract is exactly one commit and one stale-version conflict.
 
 These tests exercise only the in-process coordinator under its own lock. They do not establish cross-process safety, crash durability, or atomicity with an external database; direct EventStore writers remain outside the coordinator's lock and invalidate its single-writer assumption.
+
+
+### P6.2e — Strict canonical replay-audit validation
+
+- `real_economy_event_replay.py` now validates required actor/authority/correlation metadata, UTC timestamp syntax, positive aggregate versions, non-negative event ordinals, non-empty unique evidence references, globally unique canonical event IDs and idempotency keys, and command-ID consistency across aggregate/version metadata.
+- `test_real_economy_event_replay.py` adds adversarial cases for blank actor metadata, non-UTC timestamps, duplicate idempotency keys, command-ID reuse and duplicate evidence references.
+- This remains an integrity audit only. It does not reconstruct lot state, restore in-memory receipts, or provide crash recovery; those require a durable persistence boundary and fully specified lifecycle reducers.
