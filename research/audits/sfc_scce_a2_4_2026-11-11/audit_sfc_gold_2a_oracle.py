@@ -65,7 +65,7 @@ def identity_key(p, account):
     entity = p.get("entity_id")
     cp = p.get("counterparty_entity_id")
     issuer = p.get("issuer_entity_id")
-    if account.endswith("_asset"):
+    if account in ("loan_asset", "deposit_asset", "interest_receivable"):
         holder = entity
     else:
         holder = cp
@@ -128,6 +128,7 @@ def evaluate(corpus):
     b = {k: dec(opening["balances"][k], "opening."+k) for k in ACCOUNT_KEYS}
     b["writeoff_memorandum"] = dec(opening["balances"]["writeoff_memorandum"], "opening.writeoff")
     event_ids = set()
+    instrument_keys = {}
     by_period = defaultdict(list)
     checkpoints = {r["after_event_id"]:r["balances"] for r in corpus.get("replay_checkpoints", [])}
     if len(checkpoints) != len(corpus.get("replay_checkpoints", [])):
@@ -176,6 +177,10 @@ def evaluate(corpus):
                 delta = amount if row["side"] == NORMAL[account] else -amount
                 b[account] += delta
                 period_flow[n][account][component] += delta
+                if account in ("loan_asset", "impairment_allowance"):
+                    period_flow[n]["net_loan_carrying"][component] += (
+                        delta if account == "loan_asset" else -delta
+                    )
             if et == "creditor_write_off":
                 if event.get("legal_effect") != "accounting_derecognition_no_legal_extinguishment":
                     raise OracleError("write-off must not be treated as legal forgiveness")
