@@ -1858,3 +1858,26 @@ This independently demonstrates why stock change must not be substituted for tra
 The complete repository audit script remains unexecuted locally because this shell has no checkout and cannot resolve `github.com`. Isolated calculations do not constitute full-source PASS. Exact-head CI remains pending and must be inspected after completion.
 
 **Gate status:** P0 domain kernel not implemented; P1–P5 not implemented. SFC projection and A2.4.4 remain OPEN; A2.4.8 remains BLOCKED. PR #4 remains Draft/Open/unmerged; canonical `main` remains untouched.
+
+
+## 11 November continuation — P0 pure SFC projection kernel
+
+Implemented the first executable stage of the projection plan:
+- `prototype/sfc_projection_kernel.py` defines a frozen full-identity value type, typed immutable T/V/O deltas, explicit per-event coverage validation and deterministic holder-position replay from explicit openings.
+- The kernel rejects missing/duplicate/unknown event dispositions, mapped events without deltas, no-stock-effect events with deltas, mismatched event periods, incomplete identities, noncanonical/non-finite/float amounts, missing or mismatched frozen openings, delta-index gaps, period gaps and contract-forbidden negative closings.
+- Decimal accumulation uses exact integer-scaled addition rather than the ambient Decimal context. This avoids silent rounding when the process changes `getcontext().prec`.
+- Financial net lending is calculated from transaction asset changes less transaction liability changes only; V and O remain in the stock-flow roll-forward, not NL.
+- The module is intentionally pure and has no SQLite writes, mapper inference, opening activation, coverage cursor or issuer register. It is P0 only; P1–P5 remain OPEN.
+
+Added `audit_sfc_projection_kernel.py` to the dedicated A2.4 workflow and the Prototype PR test wrapper. Local execution on Python 3.13.5:
+- `python -m py_compile /tmp/sfc_projection_kernel.py` — exit 0;
+- `PYTHONPATH=/tmp python /tmp/audit_sfc_projection_kernel.py` — exit 0;
+- positive checks: T/V/O roll-forward, three-period continuity, explicit no-stock-effect disposition, canonical decimal handling and transaction-only NL;
+- 10 negative controls rejected;
+- exact Decimal accumulation passed with ambient precision deliberately reduced to 8.
+
+SHA-256:
+- `sfc_projection_kernel.py`: `5731e9d9c085e09406fef30109f23f478d639ee02c90daa50c5ba9a7d8c43a5b`;
+- `audit_sfc_projection_kernel.py`: `92a9f20b4b492221db38eff2659cf8528d8a6d199896cd1d40c0f808fcdd01a4`.
+
+These are local tests of the exact P0 source/audit files staged for this commit, not a full repository run and not evidence of SQLite atomicity or end-to-end projection. The workflow must pass on the exact branch head before this component is marked CI-verified. A2.4.4 remains OPEN; A2.4.8 remains BLOCKED.

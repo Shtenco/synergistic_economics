@@ -89,6 +89,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_labour_consent(self):
         self._run_script("audit_labour_consent.py")
 
+    def test_audit_sfc_projection_kernel(self):
+        self._run_script("audit_sfc_projection_kernel.py")
+
 
 if __name__ == "__main__":
     unittest.main()

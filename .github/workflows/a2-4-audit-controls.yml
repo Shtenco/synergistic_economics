@@ -57,5 +57,7 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_event_store.py
       - name: A2.4.4 validated journal-to-store adapter
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal_adapter.py
+      - name: A2.4.4 pure SFC T/V/O projection kernel
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_kernel.py
       - name: A2.4.5 labour, time and consent fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
