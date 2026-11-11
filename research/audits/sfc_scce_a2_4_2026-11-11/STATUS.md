@@ -1703,3 +1703,54 @@ workflows have repeatedly remained queued without runner steps/logs.
 The dedicated push-triggered A2.4 workflow is not exposed by the available
 PR-only run-listing interface. A2.4.4 remains OPEN; SFC projection and cursor
 remain unimplemented; A2.4.8 remains BLOCKED.
+
+
+### 11 November continuation — normalized event/posting mirror fail-closed reads and writes
+
+A deeper consistency review found a gap in schema-v4 protection: the local
+hash chain authenticates the immutable group envelope, but the normalized
+`events` and `journal_lines` tables are separate stored mirrors. Before this
+change, `integrity_check()` detected a tampered mirror, but `append_group()`
+could still append to that database, and `get_group()` could return a point
+read without checking the chain or mirrors. `iter_groups()` checked the
+chain but not the normalized mirrors.
+
+The store now has a shared mirror verifier that checks foreign-key integrity,
+group-envelope identity/hash, canonical event payloads, event order, event
+hashes, and exact posting-line mirrors. It is invoked:
+- under the writer transaction before any append or idempotent replay;
+- before ordered group replay;
+- before point reads by group ID.
+
+A corrupted normalized mirror therefore blocks writes and all public group
+read paths rather than allowing an apparently healthy append-only log to
+continue over inconsistent projections of its own envelope.
+
+A negative fixture tampers with a posting row while leaving the group hash
+chain untouched. It requires `integrity_check()` to fail and append,
+`iter_groups()`, and `get_group()` all to reject the database.
+
+Commits:
+- `eff0783093cff4bab1d2cb90f4cc994004125702` — shared mirror verifier and
+  fail-closed append/replay/point-read paths;
+- `695f259cb6e3d3b5a87273f29d43547a9a15ef1f` — adversarial posting-mirror
+  corruption control.
+
+**Execution boundary:** the environment has no repository checkout and
+cannot resolve `github.com` from the local shell, so the complete repository
+audit script has not been run locally. Two isolated local Python/SQLite
+microtests were executed: (1) transactional DDL rollback and trigger
+reinstatement for the v3-to-v4 migration pattern; (2) the new mirror-verifier
+logic against a valid mirror and a tampered posting. Both microtests passed.
+They are narrow mechanism checks, not a run of
+`audit_financial_event_store.py`, not a full integration test, and not a
+substitute for exact-HEAD CI.
+
+Current source/test commits above are on the audit branch. Fresh PR-triggered
+Prototype and Stage-C2 runs are queued on commit
+`695f259cb6e3d3b5a87273f29d43547a9a15ef1f`; no runner steps or completed
+logs are yet available. The dedicated push-triggered A2.4 workflow remains
+outside the available PR-only run listing. A2.4.4 remains OPEN; SFC projection,
+coverage and applied-through cursor remain unimplemented; A2.4.8 remains
+BLOCKED. PR #4 remains Draft/Open/unmerged; canonical `main` remains
+untouched.
