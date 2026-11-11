@@ -1531,3 +1531,11 @@ production logic. It makes the existing migration and tamper assertions
 exercise durable database state. The audit fixture has not yet been executed
 on this revised HEAD; exact-head CI remains the required execution evidence.
 A2.4.4 remains OPEN and A2.4.8 remains BLOCKED.
+
+
+Correction commits:
+- `fee6898457142e583f98bd9b29a740320b2bcb30` — explicit commits for v1/v2
+  fixture setup, v2 pruning, tamper writes and injected posting corruption;
+- `8b963340f401aac17c00e9d471263e2c37d1a429` — explicit commit for copied
+  unstamped-v3 fixture metadata;
+- `6ab4154de80fda017b79ade0261d9e4d3a7d28a1` — initial status record.
