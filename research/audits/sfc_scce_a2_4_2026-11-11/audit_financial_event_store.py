@@ -104,6 +104,7 @@ def _create_legacy_v1_database(path, events, user_version):
                     (event["event_id"], line_no, posting_json),
                 )
         connection.execute(f"PRAGMA user_version = {int(user_version)}")
+        connection.commit()
     return group
 
 
@@ -398,6 +399,7 @@ def main():
                         "INSERT INTO journal_lines VALUES (?, ?, ?)",
                         (event["event_id"], line_no, posting_json),
                     )
+            connection.commit()
         _must_reject(
             lambda: FinancialEventStore(legacy_v2_db),
             "populated schema-v2 store with ambiguous group order was migrated",
@@ -413,6 +415,7 @@ def main():
             with closing(sqlite3.connect(legacy_v2_unstamped_db)) as target_connection:
                 source_connection.backup(target_connection)
                 target_connection.execute("PRAGMA user_version = 0")
+                target_connection.commit()
         _must_reject(
             lambda: FinancialEventStore(legacy_v2_unstamped_db),
             "unstamped populated schema-v2 store with ambiguous group order was migrated",
@@ -432,6 +435,7 @@ def main():
                     "DELETE FROM events WHERE event_id = ?", ("v2-event-1",))
                 target_connection.execute(
                     "DELETE FROM event_groups WHERE group_id = ?", ("v2-group-1",))
+                target_connection.commit()
         migrated_v2_single = FinancialEventStore(legacy_v2_single_db)
         assert migrated_v2_single.iter_groups()[0]["commit_sequence"] == 1
         assert migrated_v2_single.integrity_check()
@@ -467,6 +471,7 @@ def main():
                 "UPDATE event_groups SET commit_sequence = 9 WHERE group_id = ?",
                 ("tamper-group-2",),
             )
+            connection.commit()
         assert not tamper_store.integrity_check()
 
         # An out-of-band extra posting is detectable even if SQLite itself
@@ -477,6 +482,7 @@ def main():
                 "VALUES (?, ?, ?)",
                 ("loan-1", 99, '{"account":"tampered","side":"D","amount":"1","entity_id":"x"}'),
             )
+            connection.commit()
         assert not reopened.integrity_check()
 
     print("A2.4.4 durable financial event store: PASS")
