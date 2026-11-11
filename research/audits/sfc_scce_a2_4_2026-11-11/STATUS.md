@@ -1641,3 +1641,22 @@ Commits:
   corrupt v3 migration rollback.
 
 Execution remains pending on the final exact HEAD.
+
+
+### Replay and append fail-closed boundary
+
+The ordered `iter_groups()` API now validates the chain before returning any
+replay prefix. It rejects corrupted ordering rather than returning a
+deterministically sorted but untrusted history. The append path performs the
+same chain verification under `BEGIN IMMEDIATE` before extending the log.
+The verifier also checks canonical group JSON and that the payload's group
+and causation identifiers match the indexed columns.
+
+Additional controls require both append and ordered replay to reject a
+sequence gap and a sequence permutation preserving `{1,2}`.
+
+Commits:
+- `1db4d8064df3f23ab1ccacc264845c9387c83f4b` — validate chain and
+  envelope before ordered replay;
+- `8cd7e030a7a399f877e29ccb8610b0303e97965b` — assert replay rejection
+  after chain corruption.
