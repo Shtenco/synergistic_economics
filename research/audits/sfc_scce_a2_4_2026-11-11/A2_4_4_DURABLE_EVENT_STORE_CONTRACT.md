@@ -124,3 +124,31 @@ No exact-head CI result is claimed until GitHub Actions runs and logs complete.
 
 **Status:** component prototype added; exact-head execution pending; production
 integration and A2.4.4 closure remain OPEN. A2.4.8 remains BLOCKED.
+
+
+## Additional review — global replay order and projection recovery
+
+A separate source-level review now distinguishes local group atomicity from
+system-wide deterministic replay. Schema v2 stores `event_index` only within
+each transaction group. It has no durable cross-group `commit_sequence` and
+the public API has no ordered all-groups iterator. Consequently, a consumer
+cannot yet identify a canonical durable log prefix across groups. Group-ID
+sorting or implicit rowid order is not a defensible economic chronology.
+
+The adapter also persists the validated group after journal validation but
+does not atomically update SFC instrument positions, sector balance sheets,
+or a projection cursor. A crash between durable append and projection update
+therefore requires a replay protocol that is not implemented in the current
+component.
+
+The detailed design and acceptance contract is recorded in
+`A2_4_4_EVENT_REPLAY_AND_PROJECTION_RECOVERY_GAP.md`. The required next
+architecture separates effective accounting period from immutable commit
+sequence, preserves event_index inside groups, and atomically couples event
+append, projection deltas and the applied-through cursor in one database
+transaction (or uses a separately specified idempotent inbox protocol).
+
+**Gate status:** local append atomicity remains a prototype capability;
+cross-group canonical order, durable SFC projections and crash-safe
+projection cursor remain OPEN. No production replay or exactly-once effect
+claim is made.
