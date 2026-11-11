@@ -480,6 +480,21 @@ class FinancialEventStore:
                 if not _verify_event_posting_mirrors(connection):
                     raise FinancialEventStoreError(
                         "event/posting mirrors are corrupt; append is refused")
+                # Once an explicit SFC opening snapshot has been activated,
+                # the legacy append path must stop. Only the future
+                # projection-aware atomic append API may write new groups.
+                projection_meta_table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type = 'table' "
+                    "AND name = 'sfc_projection_meta'").fetchone()
+                if projection_meta_table is not None:
+                    projection_meta = connection.execute(
+                        "SELECT state FROM sfc_projection_meta WHERE singleton_id = 1"
+                    ).fetchone()
+                    if projection_meta is not None:
+                        raise FinancialEventStoreError(
+                            "SFC projection is prepared; legacy append is blocked "
+                            "until projection-aware atomic append is enabled")
+
                 existing = connection.execute(
                     "SELECT payload_sha256 FROM event_groups WHERE group_id = ?",
                     (group_id,),

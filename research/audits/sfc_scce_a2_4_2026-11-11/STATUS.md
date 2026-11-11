@@ -1881,3 +1881,21 @@ SHA-256:
 - `audit_sfc_projection_kernel.py`: `92a9f20b4b492221db38eff2659cf8528d8a6d199896cd1d40c0f808fcdd01a4`.
 
 These are local tests of the exact P0 source/audit files staged for this commit, not a full repository run and not evidence of SQLite atomicity or end-to-end projection. The workflow must pass on the exact branch head before this component is marked CI-verified. A2.4.4 remains OPEN; A2.4.8 remains BLOCKED.
+
+
+## 11 November continuation — P1 explicit SFC opening activation
+
+Added `prototype/sfc_projection_registry.py` and `audit_sfc_projection_registry.py`.
+
+P1 behavior:
+- Activation is allowed only while the event store contains zero committed groups. Populated v4 histories are rejected; no opening balance is inferred and no historical event is silently backfilled.
+- The opening snapshot must contain at least one explicit row. Each row has the complete ten-dimensional instrument/holder/issuer identity, period, canonical non-negative decimal-string amount (including explicit zero), and evidence reference.
+- Duplicate identity-period rows, floats, malformed identity, negative/non-finite amounts and missing evidence are rejected.
+- Rows are sorted canonically and sealed by a SHA-256 snapshot hash. The metadata records schema version, immutable mapper version, evidence reference and row count.
+- Identical activation retry is idempotent. A changed snapshot/version/evidence reference conflicts.
+- Opening and metadata tables are append-only/immutable and opening contents are verified against the frozen hash.
+- Critical fail-closed boundary: after activation, the legacy `append_group()` API is blocked. Until P2 exists, the store cannot accept new unprojected events. Existing unactivated stores continue to use the legacy append path unchanged.
+
+The P1 audit fixture is wired into both the dedicated A2.4 push workflow and Prototype PR wrapper. The fixture checks empty-store activation, explicit zero, idempotent retry, changed snapshot rejection, legacy-history rejection, opening tamper protection, snapshot verification and append blocking.
+
+This remains P1 only. It does not yet atomically append event + T/V/O deltas + materialized positions + coverage + cursor. P2/P3/P4/P5 remain OPEN. The full repository cannot be cloned in the local shell due DNS/network failure; exact-source local execution status must be reported separately from CI.
