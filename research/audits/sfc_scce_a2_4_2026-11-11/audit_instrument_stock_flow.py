@@ -28,6 +28,7 @@ class Position:
     maturity: str = "unspecified"
     denomination: str = "nominal"
     valuation_basis: str = "nominal"
+    effective_period: int = 1
 
 
 @dataclass(frozen=True)
@@ -44,32 +45,39 @@ class IssuerLiability:
     maturity: str = "unspecified"
     denomination: str = "nominal"
     valuation_basis: str = "nominal"
+    effective_period: int = 1
 
 
 def position(instrument, holder, issuer, opening, transactions, closing,
              revaluation=0, other_volume=0, *, instrument_id=None,
              currency="LCU", maturity="unspecified", denomination="nominal",
-             valuation_basis="nominal"):
+             valuation_basis="nominal", effective_period=1):
     return Position(instrument, holder, issuer, D(str(opening)),
                     D(str(transactions)), D(str(revaluation)),
                     D(str(other_volume)), D(str(closing)),
                     instrument_id or instrument, currency, maturity,
-                    denomination, valuation_basis)
+                    denomination, valuation_basis, effective_period)
 
 
 def liability(instrument, issuer, opening, transactions, closing,
               revaluation=0, other_volume=0, *, instrument_id=None,
               currency="LCU", maturity="unspecified", denomination="nominal",
-              valuation_basis="nominal"):
+              valuation_basis="nominal", effective_period=1):
     return IssuerLiability(instrument, issuer, D(str(opening)),
                            D(str(transactions)), D(str(revaluation)),
                            D(str(other_volume)), D(str(closing)),
                            instrument_id or instrument, currency, maturity,
-                           denomination, valuation_basis)
+                           denomination, valuation_basis, effective_period)
+
+
+def _validate_period(period):
+    if type(period) is not int or period < 1:
+        raise ReconciliationError("effective_period must be a positive integer")
 
 
 def validate_stock_flow(positions):
     for p in positions:
+        _validate_period(p.effective_period)
         if min(p.opening, p.closing) < 0:
             raise ReconciliationError("negative gross instrument position")
         expected = (p.opening + p.transactions + p.revaluation
@@ -83,6 +91,7 @@ def validate_stock_flow(positions):
 
 def validate_issuer_stock_flow(liabilities):
     for p in liabilities:
+        _validate_period(p.effective_period)
         if min(p.opening, p.closing) < 0:
             raise ReconciliationError("negative gross issuer liability")
         expected = (p.opening + p.transactions + p.revaluation
@@ -100,8 +109,9 @@ def _components(p):
 
 
 def _identity(p):
-    fields = (p.instrument_id, p.instrument, p.issuer, p.currency,
-              p.maturity, p.denomination, p.valuation_basis)
+    _validate_period(p.effective_period)
+    fields = (p.effective_period, p.instrument_id, p.instrument, p.issuer,
+              p.currency, p.maturity, p.denomination, p.valuation_basis)
     if not all(fields):
         raise ReconciliationError("incomplete financial instrument identity")
     return fields
@@ -134,8 +144,49 @@ def validate_mirrors(positions, issuer_liabilities):
     return True
 
 
-def sector_financial_net_lending(positions):
-    """Financial NL uses transactions, never total stock changes."""
+def validate_period_continuity(records):
+    """Require adjacent observed periods to roll closing stock into opening stock.
+
+    Records are aggregated by full instrument identity (excluding period),
+    so multiple holder positions reconcile to the issuer-level instrument.
+    A missing period is rejected rather than silently bridged.
+    """
+    by_instrument = {}
+    for p in records:
+        _validate_period(p.effective_period)
+        base = (p.instrument_id, p.instrument, p.issuer, p.currency,
+                p.maturity, p.denomination, p.valuation_basis)
+        row = by_instrument.setdefault(p.effective_period, {})
+        values = row.get(base, (D("0"), D("0")))
+        row[base] = (values[0] + p.opening, values[1] + p.closing)
+    instruments = set().union(*(set(rows) for rows in by_instrument.values())) if by_instrument else set()
+    for key in instruments:
+        periods = sorted(period for period, rows in by_instrument.items() if key in rows)
+        for prior, current in zip(periods, periods[1:]):
+            if current != prior + 1:
+                raise ReconciliationError(
+                    f"missing effective period for instrument {key}: {prior} -> {current}")
+            prior_closing = by_instrument[prior][key][1]
+            current_opening = by_instrument[current][key][0]
+            if prior_closing != current_opening:
+                raise ReconciliationError(
+                    f"closing/opening discontinuity for instrument {key} "
+                    f"between periods {prior} and {current}: "
+                    f"{prior_closing} != {current_opening}")
+    return True
+
+
+def sector_financial_net_lending(positions, period=None):
+    """Financial NL uses transactions, never stocks; multiple periods require selection."""
+    positions = list(positions)
+    periods = {p.effective_period for p in positions}
+    if period is None and len(periods) > 1:
+        raise ReconciliationError("multiple effective periods require an explicit period selector")
+    if period is not None:
+        _validate_period(period)
+        positions = [p for p in positions if p.effective_period == period]
+        if not positions:
+            raise ReconciliationError(f"no instrument positions for effective period {period}")
     assets, liabilities = {}, {}
     for p in positions:
         assets[p.holder] = assets.get(p.holder, D("0")) + p.transactions
