@@ -218,8 +218,6 @@ def replay_positions(
             raise SFCProjectionError("opening keys must be (SFCIdentity, period)")
         period = _period(key[1], "opening.period")
         parsed_openings[(key[0], period)] = _decimal(value, "opening.balance")
-        if parsed_openings[(key[0], period)] < 0:
-            raise SFCProjectionError("opening balance cannot be negative")
 
     terms: dict[tuple[SFCIdentity, int], dict[str, list[Decimal]]] = {}
     for delta in deltas:

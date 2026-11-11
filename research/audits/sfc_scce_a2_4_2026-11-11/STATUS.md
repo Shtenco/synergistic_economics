@@ -1889,7 +1889,7 @@ Added `prototype/sfc_projection_registry.py` and `audit_sfc_projection_registry.
 
 P1 behavior:
 - Activation is allowed only while the event store contains zero committed groups. Populated v4 histories are rejected; no opening balance is inferred and no historical event is silently backfilled.
-- The opening snapshot must contain at least one explicit row. Each row has the complete ten-dimensional instrument/holder/issuer identity, period, canonical non-negative decimal-string amount (including explicit zero), and evidence reference.
+- The opening snapshot must contain at least one explicit row. Each row has the complete ten-dimensional instrument/holder/issuer identity, period, canonical finite decimal-string amount (including explicit zero); signed openings are allowed at registry level and contract-specific negative-position rules belong to the projection kernel, and evidence reference.
 - Duplicate identity-period rows, floats, malformed identity, negative/non-finite amounts and missing evidence are rejected.
 - Rows are sorted canonically and sealed by a SHA-256 snapshot hash. The metadata records schema version, immutable mapper version, evidence reference and row count.
 - Identical activation retry is idempotent. A changed snapshot/version/evidence reference conflicts.

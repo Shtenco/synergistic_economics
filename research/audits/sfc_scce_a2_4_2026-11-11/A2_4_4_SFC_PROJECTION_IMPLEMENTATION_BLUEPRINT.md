@@ -115,7 +115,7 @@ The following is a logical schema contract, not a claim that these tables exist 
 `sfc_openings` — one explicit row per identity and period:
 - all identity dimensions;
 - period;
-- canonical non-negative opening amount;
+- canonical signed opening amount (negative balances are governed by instrument contract policy);
 - source/evidence reference;
 - unique full identity + period key.
 

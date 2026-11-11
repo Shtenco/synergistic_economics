@@ -67,6 +67,11 @@ def main():
         assert not activate_sfc_projection(
             empty, [_opening("0.00")], mapper_version="mapper@1",
             evidence_ref="snapshot:opening-0")
+        negative_path = str(Path(directory) / "negative.sqlite")
+        negative_store = FinancialEventStore(negative_path)
+        assert activate_sfc_projection(
+            negative_store, [_opening("-5")], mapper_version="mapper@1",
+            evidence_ref="snapshot:negative-position")
         _must_reject(lambda: activate_sfc_projection(
             empty, [_opening("1")], mapper_version="mapper@1",
             evidence_ref="snapshot:opening-0"),

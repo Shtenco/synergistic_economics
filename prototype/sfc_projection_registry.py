@@ -44,6 +44,10 @@ def _normalize_openings(openings: Sequence[Mapping[str, Any]]) -> list[dict[str,
         if not isinstance(raw_identity, Mapping):
             raise SFCProjectionRegistryError("opening.identity must be a mapping")
         try:
+            expected_fields = set(SFCIdentity.__dataclass_fields__)
+            if set(raw_identity) != expected_fields:
+                raise SFCProjectionRegistryError(
+                    "opening.identity must contain exactly the ten canonical identity fields")
             identity = SFCIdentity(**{
                 field: raw_identity.get(field)
                 for field in SFCIdentity.__dataclass_fields__
@@ -53,8 +57,6 @@ def _normalize_openings(openings: Sequence[Mapping[str, Any]]) -> list[dict[str,
                 raise SFCProjectionRegistryError("opening.period must be a non-negative integer")
             amount_text = canonical_decimal(row.get("amount"))
             amount = Decimal(amount_text)
-            if amount < 0:
-                raise SFCProjectionRegistryError("opening.amount cannot be negative")
         except (TypeError, SFCProjectionError) as exc:
             raise SFCProjectionRegistryError(f"invalid opening row {index}: {exc}") from exc
         evidence_ref = row.get("evidence_ref")

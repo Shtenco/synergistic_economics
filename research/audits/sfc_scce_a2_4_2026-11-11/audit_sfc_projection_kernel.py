@@ -123,6 +123,17 @@ def main():
         "event-period mismatch")
     _must_reject(lambda: replay_positions(events, projection, {}),
         "missing explicit opening")
+    negative_projection = {"mapping_version": "m@1", "events": [
+        {"event_id": "e1", "disposition": "mapped", "deltas": [
+            _delta(identity, "e1", 0, 1, "T", "1", "-5")]},
+        projection["events"][1]]}
+    negative_opening = replay_positions(
+        events, negative_projection, {(identity, 1): "-5"})
+    assert negative_opening[(identity, 1)].closing == Decimal("-4")
+    _must_reject(lambda: replay_positions(
+        events, negative_projection, {(identity, 1): "-5"},
+        nonnegative_identities={identity}),
+        "contract-forbidden negative opening/closing")
     _must_reject(lambda: replay_positions(
         events, {"mapping_version": "m@1", "events": [
             {"event_id": "e1", "disposition": "mapped", "deltas": [
@@ -155,7 +166,7 @@ def main():
     print("A2.4.4 pure SFC projection kernel: PASS")
     print("T/V/O roll-forward, three-period continuity and transaction-only NL: PASS")
     print("per-event coverage and explicit no-stock-effect disposition: PASS")
-    print("10 negative controls: PASS")
+    print("11 negative controls: PASS")
     print("exact Decimal accumulation under low ambient precision: PASS")
 
 
