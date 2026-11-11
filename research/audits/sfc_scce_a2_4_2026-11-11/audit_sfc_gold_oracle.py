@@ -178,7 +178,7 @@ def _validate_event_roles(event_type, postings):
         raise OracleError(f"unsupported event type for role validation: {event_type}")
 
 def evaluate(corpus):
-    if corpus.get("corpus_id") != "SFC-GOLD-1" or corpus.get("version") != "1.0.0":
+    if corpus.get("corpus_id") != "SFC-GOLD-1" or corpus.get("version") != "1.1.0":
         raise OracleError("unsupported SFC-GOLD-1 corpus identity/version")
     if corpus.get("status") != "FROZEN_SYNTHETIC_CONTROL_CORPUS":
         raise OracleError("corpus is not marked as the frozen synthetic control")
@@ -218,6 +218,7 @@ def evaluate(corpus):
     sector_assets = defaultdict(lambda: D("0"))
     sector_liabilities = defaultdict(lambda: D("0"))
     period_set = set()
+    replay_checkpoints = []
 
     for event in events:
         event_id = event.get("event_id")
@@ -379,6 +380,10 @@ def evaluate(corpus):
                     f"{balance_key} -> {next_balance}")
         for balance_key, delta in event_balance_deltas.items():
             balances[balance_key] += delta
+        replay_checkpoints.append({
+            "after_event_id": event_id,
+            "balances": dict(balances),
+        })
 
     if len(period_set) != 1 or period_set != {declared_period}:
         raise OracleError("events do not match the single declared SFC-GOLD-1 period")
@@ -393,6 +398,7 @@ def evaluate(corpus):
         "sector_financial_net_lending": sector_nl,
         "event_count": len(event_ids),
         "periods": tuple(sorted(period_set)),
+        "replay_checkpoints": replay_checkpoints,
     }
 
 
@@ -413,6 +419,22 @@ def _assert_expected(corpus, result):
         sector: D(value)
         for sector, value in expected["aggregate_sector_financial_net_lending"].items()
     }
+    expected_checkpoints = expected["replay_checkpoints"]
+    actual_checkpoints = result["replay_checkpoints"]
+    assert len(actual_checkpoints) == len(expected_checkpoints), (
+        "replay checkpoint count differs from frozen expectations")
+    for actual, frozen in zip(actual_checkpoints, expected_checkpoints):
+        assert actual["after_event_id"] == frozen["after_event_id"], (
+            "replay checkpoint event order differs")
+        frozen_positions = {
+            (row["entity_id"], row["account"], row["instrument_id"]): D(row["balance"])
+            for row in frozen["positions"]
+        }
+        actual_nonzero = {key: value for key, value in actual["balances"].items() if value}
+        assert actual_nonzero == frozen_positions, (
+            f"replay positions differ after {actual['after_event_id']}: "
+            f"{actual_nonzero} != {frozen_positions}")
+
     deposits_asset = sum(
         value for (entity, account, instrument), value in actual_positions.items()
         if account == "deposit_asset"
@@ -533,6 +555,7 @@ def main():
     print("SFC-GOLD-1 independent oracle: PASS")
     print("source: frozen JSON corpus; no production/audit imports")
     print(f"events={result['event_count']}; periods={result['periods']}")
+    print("replay checkpoints match after every canonical event")
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
     print("intermediate stocks: non-negative after every canonical event")
