@@ -544,6 +544,10 @@ class FinancialEventStore:
         from the original hashed economic envelope.
         """
         with closing(self._connect()) as connection:
+            # Pin one WAL snapshot across chain verification, mirror checks and
+            # result selection; otherwise a concurrent append can slip between
+            # these independent autocommit reads.
+            connection.execute("BEGIN")
             if not _verify_group_chain(connection):
                 raise FinancialEventStoreError(
                     "event-group history chain is corrupt; ordered replay is refused")
@@ -563,6 +567,8 @@ class FinancialEventStore:
     def get_group(self, group_id: str) -> dict | None:
         _nonempty_string(group_id, "group_id")
         with closing(self._connect()) as connection:
+            # Point reads must use the same snapshot for verification and data.
+            connection.execute("BEGIN")
             if not _verify_group_chain(connection):
                 raise FinancialEventStoreError(
                     "event-group history chain is corrupt; group read is refused")
@@ -590,6 +596,9 @@ class FinancialEventStore:
         """Check SQLite structure, foreign keys, payload hashes and line mirrors."""
         try:
             with closing(self._connect()) as connection:
+                # Keep SQLite structure, FK, chain and mirror checks on one
+                # consistent snapshot while WAL writers may continue appending.
+                connection.execute("BEGIN")
                 result = connection.execute("PRAGMA integrity_check").fetchone()[0]
                 foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
                 if result != "ok" or foreign_keys:
