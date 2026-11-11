@@ -266,3 +266,11 @@ without execution evidence; no PASS is claimed. Next extensions remain
 interest accrual/settlement, FX and other-volume changes, impairment versus
 write-off versus legal forgiveness, multi-period projections, and event-store
 replay/crash recovery.
+
+
+The SFC-GOLD-1 oracle now also binds the frozen v1 roles to CB/H/NFC sectors
+and requires distinct loan/deposit and payer/supplier deposit instruments.
+A coordinated bank-sector mutation that keeps all entity/sector labels
+internally consistent is included as a negative control. These are fixture
+scope constraints, not a general-purpose institutional-sector ontology.
+Execution remains pending.
