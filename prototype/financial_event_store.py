@@ -285,10 +285,24 @@ class FinancialEventStore:
                         "ALTER TABLE event_groups ADD COLUMN group_chain_hash TEXT")
                     previous_hash = _CHAIN_GENESIS
                     rows = connection.execute(
-                        "SELECT group_id, commit_sequence, payload_sha256 "
+                        "SELECT group_id, causation_id, commit_sequence, payload_sha256, payload_json "
                         "FROM event_groups ORDER BY commit_sequence"
                     ).fetchall()
+                    if [row["commit_sequence"] for row in rows] != list(
+                            range(1, len(rows) + 1)):
+                        raise FinancialEventStoreError(
+                            "schema v3 commit sequence is not contiguous; chain migration refused")
                     for row in rows:
+                        if hashlib.sha256(row["payload_json"].encode("utf-8")).hexdigest() != row["payload_sha256"]:
+                            raise FinancialEventStoreError(
+                                "schema v3 group payload hash mismatch; chain migration refused")
+                        envelope = json.loads(row["payload_json"])
+                        if (not isinstance(envelope, dict)
+                                or _canonical_json(envelope) != row["payload_json"]
+                                or envelope.get("group_id") != row["group_id"]
+                                or envelope.get("causation_id") != row["causation_id"]):
+                            raise FinancialEventStoreError(
+                                "schema v3 group envelope mismatch; chain migration refused")
                         chain_hash = _group_chain_hash(
                             row["commit_sequence"], row["group_id"],
                             row["payload_sha256"], previous_hash)
