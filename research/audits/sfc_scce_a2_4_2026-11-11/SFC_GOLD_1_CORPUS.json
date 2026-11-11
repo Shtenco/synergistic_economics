@@ -1,8 +1,8 @@
 {
   "corpus_id": "SFC-GOLD-1",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "status": "FROZEN_SYNTHETIC_CONTROL_CORPUS",
-  "scope": "Independent arithmetic oracle fixture for a minimal bank-created deposit lifecycle. Synthetic data; not empirical evidence or a production chart of accounts.",
+  "scope": "Independent arithmetic oracle fixture for a minimal bank-created deposit lifecycle. Synthetic data; not empirical evidence or a production chart of accounts. Version 1.1.0 additionally freezes canonical per-event replay checkpoints.",
   "amount_representation": "base-10 decimal strings; no binary floating point",
   "periods": [
     {
@@ -300,7 +300,125 @@
       "CB": "0",
       "H": "-7",
       "NFC": "7"
-    }
+    },
+    "replay_checkpoints": [
+      {
+        "after_event_id": "G1-E1",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "19"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "19"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "19"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "19"
+          }
+        ]
+      },
+      {
+        "after_event_id": "G1-E2",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "19"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "19"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "12"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "12"
+          },
+          {
+            "entity_id": "supplier-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-supplier-001",
+            "balance": "7"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-supplier-001",
+            "holder_entity_id": "supplier-1",
+            "balance": "7"
+          }
+        ]
+      },
+      {
+        "after_event_id": "G1-E3",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "14"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "14"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "7"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "7"
+          },
+          {
+            "entity_id": "supplier-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-supplier-001",
+            "balance": "7"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-supplier-001",
+            "holder_entity_id": "supplier-1",
+            "balance": "7"
+          }
+        ]
+      }
+    ]
   },
   "exclusions": [
     "interest accrual and settlement",
