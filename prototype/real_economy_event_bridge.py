@@ -182,6 +182,14 @@ class InMemoryAtomicCoordinator:
         idempotency_key = _required_text(idempotency_key, "idempotency_key")
         aggregate_type = _required_text(aggregate_type, "aggregate_type")
         aggregate_id = _required_text(aggregate_id, "aggregate_id")
+        if isinstance(expected_version, bool) or not isinstance(expected_version, int) or expected_version < 0:
+            raise EventBridgeError("expected_version must be a non-negative integer")
+        if fail_after_event_append is not None and (
+            isinstance(fail_after_event_append, bool)
+            or not isinstance(fail_after_event_append, int)
+            or fail_after_event_append < 1
+        ):
+            raise EventBridgeError("fail_after_event_append must be a positive integer or None")
         fingerprint_input = {
             "command_id": command_id, "request": request,
             "aggregate_type": aggregate_type, "aggregate_id": aggregate_id,
