@@ -298,8 +298,8 @@
     "household_loan_liability": "14",
     "aggregate_sector_financial_net_lending": {
       "CB": "0",
-      "H": "0",
-      "NFC": "0"
+      "H": "-7",
+      "NFC": "7"
     }
   },
   "exclusions": [
