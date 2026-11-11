@@ -170,3 +170,10 @@ Scenario outputs include a deterministic `event_log_digest` over the ordered eve
 - [P6.2 canonical event bridge and transaction boundary](../research/PROTOTYPE_6_2_CANONICAL_EVENT_BRIDGE_AND_TRANSACTION_BOUNDARY_V0_1.md) — event mapping, aggregate versioning, idempotency, replay, atomicity, outbox/inbox and acceptance tests.
 
 P6.1 remains an isolated in-memory reference and is not synchronized with Stage-B inventory. Do not append its returned events after mutating state as a production integration pattern: state and event persistence must share one transaction (or a deliberately selected event-sourced commit boundary). P6.2 is currently a design contract, not a durable implementation. No inventory-only event automatically posts to the financial ledger.
+
+### P6.2a–P6.2b — Canonical event mapping and in-memory transaction reference
+
+- [real_economy_event_bridge.py](real_economy_event_bridge.py) — validates and enriches P6.1 domain events into a versioned canonical envelope; preserves event/aggregate identity, aggregate version, actor, authority, command/correlation context, UTC timestamps and evidence references. Includes a test-only coordinator that stages candidate state, appends to the existing `synergy_kernel.EventStore`, and rolls back its in-memory event collections if append fails.
+- [test_real_economy_event_bridge.py](test_real_economy_event_bridge.py) — contract tests for canonical payload digests, UTC/time validation, required authority, idempotency scope, stale aggregate versions, multi-event ordinals and rollback on injected append failure.
+
+The coordinator is intentionally **single-process, single-writer and non-durable**. All writers must go through that coordinator; direct concurrent writes to the EventStore are outside its safety guarantee. It does not make the current P6.1 mutating `LotInventory` safe to adapt post hoc. Production still requires one durable transaction or an event-sourced commit boundary.
