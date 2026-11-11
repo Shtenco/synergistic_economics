@@ -178,16 +178,43 @@ def _validate_event_roles(event_type, postings):
         raise OracleError(f"unsupported event type for role validation: {event_type}")
 
 def evaluate(corpus):
+    if corpus.get("corpus_id") != "SFC-GOLD-1" or corpus.get("version") != "1.0.0":
+        raise OracleError("unsupported SFC-GOLD-1 corpus identity/version")
+    if corpus.get("status") != "FROZEN_SYNTHETIC_CONTROL_CORPUS":
+        raise OracleError("corpus is not marked as the frozen synthetic control")
+
+    declared_periods = corpus.get("periods")
+    if not isinstance(declared_periods, list) or len(declared_periods) != 1:
+        raise OracleError("SFC-GOLD-1 v1 requires exactly one declared period")
+    period_row = declared_periods[0]
+    if not isinstance(period_row, dict) or type(period_row.get("effective_period")) is not int:
+        raise OracleError("invalid declared period record")
+    declared_period = period_row["effective_period"]
+    if declared_period <= 0:
+        raise OracleError("declared effective period must be positive")
+
     events = corpus.get("events")
     if not isinstance(events, list) or not events:
         raise OracleError("corpus must contain events")
 
-    entities = {row["entity_id"]: row["sector"] for row in corpus.get("entities", [])}
-    if not entities or len(entities) != len(corpus.get("entities", [])):
-        raise OracleError("entity registry is empty or contains duplicate IDs")
+    entity_rows = corpus.get("entities")
+    if not isinstance(entity_rows, list) or not entity_rows:
+        raise OracleError("entity registry must be a non-empty list")
+    entities = {}
+    for row in entity_rows:
+        if not isinstance(row, dict):
+            raise OracleError("entity registry rows must be objects")
+        entity_id, sector = row.get("entity_id"), row.get("sector")
+        if not isinstance(entity_id, str) or not entity_id.strip():
+            raise OracleError("entity registry contains blank entity ID")
+        if not isinstance(sector, str) or not sector.strip():
+            raise OracleError("entity registry contains blank sector")
+        if entity_id in entities:
+            raise OracleError("entity registry contains duplicate IDs")
+        entities[entity_id] = sector
     event_ids = set()
     balances = defaultdict(lambda: D("0"))
-    per_event_mirrors = {}
+    instrument_catalog = {}
     sector_assets = defaultdict(lambda: D("0"))
     sector_liabilities = defaultdict(lambda: D("0"))
     period_set = set()
@@ -197,8 +224,8 @@ def evaluate(corpus):
         period = event.get("effective_period")
         if not isinstance(event_id, str) or not event_id or event_id in event_ids:
             raise OracleError("missing or duplicate event ID")
-        if type(period) is not int or period < 0:
-            raise OracleError("invalid effective period")
+        if type(period) is not int or period != declared_period:
+            raise OracleError("event period does not match the frozen declared period")
         event_ids.add(event_id)
         period_set.add(period)
         postings = event.get("postings")
@@ -210,7 +237,10 @@ def evaluate(corpus):
         event_assets = defaultdict(lambda: D("0"))
         event_liabilities = defaultdict(lambda: D("0"))
 
+        event_balance_deltas = defaultdict(lambda: D("0"))
         for posting in postings:
+            if not isinstance(posting, dict):
+                raise OracleError("posting rows must be objects")
             account = posting.get("account")
             side = posting.get("side")
             entity = posting.get("entity_id")
@@ -231,6 +261,15 @@ def evaluate(corpus):
                         raise OracleError(f"{entity_field}/{sector_field} registry mismatch")
                 elif related_sector:
                     raise OracleError(f"{sector_field} exists without {entity_field}")
+
+            counterparty = posting.get("counterparty_entity_id")
+            issuer = posting.get("issuer_entity_id")
+            if not isinstance(counterparty, str) or not counterparty.strip():
+                raise OracleError("v1 postings require a counterparty entity")
+            if not isinstance(issuer, str) or not issuer.strip():
+                raise OracleError("v1 postings require an issuer entity")
+            if counterparty not in entities or issuer not in entities:
+                raise OracleError("posting counterparty and issuer must be registered")
             if side == "D":
                 debit += amount
             elif side == "C":
@@ -261,8 +300,26 @@ def evaluate(corpus):
                     or (account.endswith("_liability") and side == "C")
                     else -amount
                 )
-                balance_key = (entity, account, posting.get("instrument_id"))
-                balances[balance_key] += natural_change
+                instrument_id = posting.get("instrument_id")
+                if not isinstance(instrument_id, str) or not instrument_id.strip():
+                    raise OracleError("financial posting requires an instrument ID")
+                holder = entity if account.endswith("_asset") else counterparty
+                legal_issuer = issuer
+                instrument_identity = (
+                    *[posting.get(name) for name in REQUIRED_IDENTITY],
+                    holder, legal_issuer,
+                )
+                if any(not isinstance(value, str) or not value.strip()
+                       for value in instrument_identity):
+                    raise OracleError("instrument identity and holder/issuer must be complete")
+                prior_identity = instrument_catalog.get(instrument_id)
+                if prior_identity is not None and prior_identity != instrument_identity:
+                    raise OracleError(
+                        f"instrument identity changed across events: {instrument_id}")
+                instrument_catalog[instrument_id] = instrument_identity
+
+                balance_key = (entity, account, instrument_id)
+                event_balance_deltas[balance_key] += natural_change
 
         event_type = event.get("event_type")
         _validate_event_roles(event_type, postings)
@@ -311,10 +368,20 @@ def evaluate(corpus):
             raise OracleError(
                 f"event-level claim mirror mismatch {event_id}: "
                 f"assets={event_assets}, liabilities={event_liabilities}")
-        per_event_mirrors[event_id] = event_assets
+        # Apply this event only after its local accounting and mirror checks.
+        # The v1 corpus has no overdraft facility or opening stock, so every
+        # instrument position must remain non-negative after each event.
+        for balance_key, delta in event_balance_deltas.items():
+            next_balance = balances[balance_key] + delta
+            if next_balance < 0:
+                raise OracleError(
+                    f"negative intermediate position after {event_id}: "
+                    f"{balance_key} -> {next_balance}")
+        for balance_key, delta in event_balance_deltas.items():
+            balances[balance_key] += delta
 
-    if len(period_set) != 1:
-        raise OracleError("SFC-GOLD-1 v1 is single-period; multi-period input rejected")
+    if len(period_set) != 1 or period_set != {declared_period}:
+        raise OracleError("events do not match the single declared SFC-GOLD-1 period")
 
     balances = {k: v for k, v in balances.items() if v}
     sector_nl = {
@@ -424,6 +491,40 @@ def main():
     wrong_class["events"][0]["postings"][1]["instrument_class"] = "deposit"
     _must_reject(lambda: evaluate(wrong_class), "loan account with deposit instrument class")
 
+    # Mutation 8: a fully balanced but over-sized repayment must fail at
+    # the intermediate stock boundary, before negative loan/deposit balances
+    # can be hidden by later aggregate arithmetic.
+    excessive_repayment = json.loads(json.dumps(corpus))
+    for posting in excessive_repayment["events"][2]["postings"]:
+        posting["amount"] = "20"
+    _must_reject(lambda: evaluate(excessive_repayment), "repayment exceeds available positions")
+
+    # Mutation 9: event array order is the canonical within-period replay order.
+    # Replaying repayment before origination creates a negative liability.
+    out_of_order = json.loads(json.dumps(corpus))
+    out_of_order["events"] = [
+        out_of_order["events"][2],
+        out_of_order["events"][0],
+        out_of_order["events"][1],
+    ]
+    _must_reject(lambda: evaluate(out_of_order), "out-of-order event replay")
+
+    # Mutation 10: a reused instrument ID cannot silently change its identity
+    # dimensions between otherwise mirrored events.
+    changed_instrument_identity = json.loads(json.dumps(corpus))
+    for posting in changed_instrument_identity["events"][2]["postings"]:
+        if posting["instrument_id"] == "loan-hh-001":
+            posting["maturity"] = "2030-12-31"
+    _must_reject(lambda: evaluate(changed_instrument_identity),
+                 "instrument identity changed between events")
+
+    # Mutation 11: events cannot be moved to a period absent from the frozen
+    # corpus declaration.
+    undeclared_period = json.loads(json.dumps(corpus))
+    for event in undeclared_period["events"]:
+        event["effective_period"] = 2
+    _must_reject(lambda: evaluate(undeclared_period), "undeclared event period")
+
     # Mutation 8: duplicate delivery cannot be silently treated as a new event.
     duplicate_event = json.loads(json.dumps(corpus))
     duplicate_event["events"].append(duplicate_event["events"][0])
@@ -434,8 +535,10 @@ def main():
     print(f"events={result['event_count']}; periods={result['periods']}")
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
+    print("intermediate stocks: non-negative after every canonical event")
+    print("instrument identity: immutable across all postings and events")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: wrong holder, instrument, entity sector, bank role, event type, cross-leg borrower role, instrument class and duplicate event rejected")
+    print("negative controls: wrong holder, instrument identity, entity sector, bank role, event type, cross-leg borrower role, instrument class, excessive repayment, out-of-order replay, undeclared period and duplicate event rejected")
 
 
 if __name__ == "__main__":
