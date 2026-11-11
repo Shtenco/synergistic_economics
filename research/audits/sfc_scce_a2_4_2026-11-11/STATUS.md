@@ -1829,3 +1829,32 @@ mechanism test, not execution of the repository source or its audit script.
 A full checkout could not be obtained in the local shell because DNS/network
 resolution for `github.com` failed. Exact-head CI remains the required
 execution evidence for the committed repository implementation.
+
+
+## 11 November continuation — SFC projection source audit and implementation boundary
+
+At branch commit `c026363aac6eeec3cc1254f5ba3c37435dc18ac6`, the source was re-inspected across `prototype/financial_event_store.py`, `prototype/financial_journal_adapter.py`, the event-store adversarial fixture, and the existing SFC projection/recovery contracts.
+
+Confirmed source boundary:
+- Schema v4 currently hashes/chains the event-group envelope containing group ID, causation ID and ordered events.
+- Its atomic transaction currently persists group, event and journal-posting rows only.
+- The validated adapter has no typed SFC mapper result and does not append projection deltas.
+- No opening snapshot, materialized holder-position table, projection coverage table, applied-through cursor or independent issuer-side register exists.
+- `audit_instrument_stock_flow.py` remains a synthetic arithmetic fixture; it does not replay event IDs from the durable store.
+
+A new architecture artifact, `A2_4_4_SFC_PROJECTION_IMPLEMENTATION_BLUEPRINT.md`, was committed at `cb105bca27476f7cbea22a481eab2cae81b32513`. It converts the existing projection protocol into a staged implementation contract (P0–P5), specifies the logical schema and same-transaction write boundary, and extends the adversarial matrix from 18 to 38 controls.
+
+Important refinement: projection coverage is specified per event, not merely per group. Every event must have exactly one explicit disposition: `mapped` with one or more deltas, or `no_stock_effect` with an explicit empty delta list. This prevents a mixed group from silently omitting an unprocessed event. The complete projection result, including mapper version and delta order, must be included in the immutable group hash.
+
+Independent Decimal arithmetic was executed locally for a three-period example:
+- period 1: 100 + 10 T + 5 V − 2 O = 113;
+- period 2: 113 − 8 T − 3 V + 1 O = 103;
+- period 3: 103 + 0 T + 7 V + 0 O = 110;
+- cumulative transaction-only financial NL contribution = +2;
+- total stock change = +10;
+- matching holder/issuer transaction NL contributions sum to zero.
+This independently demonstrates why stock change must not be substituted for transaction-based financial NL. It is a local arithmetic microtest, not execution of a repository script or runtime integration.
+
+The complete repository audit script remains unexecuted locally because this shell has no checkout and cannot resolve `github.com`. Isolated calculations do not constitute full-source PASS. Exact-head CI remains pending and must be inspected after completion.
+
+**Gate status:** P0 domain kernel not implemented; P1–P5 not implemented. SFC projection and A2.4.4 remain OPEN; A2.4.8 remains BLOCKED. PR #4 remains Draft/Open/unmerged; canonical `main` remains untouched.
