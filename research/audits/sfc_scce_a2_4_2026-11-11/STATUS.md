@@ -1142,3 +1142,48 @@ workflows. It is evidence of a runner/dispatch backlog before job execution,
 not evidence of test success or failure. The available job records do not
 expose a root cause. Do not weaken tests or alter workflow semantics to make
 the queue appear green.
+
+
+## 11 November continuation — SFC-GOLD-1 sequential stock/replay hardening
+
+A second semantic review found that event-local balance and mirror equality
+could accept a set of individually valid events in an economically impossible
+order, or an over-sized repayment whose final aggregate might conceal a
+negative intermediate position. The independent oracle now adds a sequential
+stock boundary for the deliberately narrow v1 corpus.
+
+New source controls:
+- validates corpus identity/version/status and its single declared positive
+  effective period;
+- requires every event to use that declared period;
+- requires posting counterparties and issuers to be registered;
+- maintains an instrument identity catalog keyed by instrument ID and rejects
+  changes in class, currency, maturity, denomination, valuation basis,
+  holder or issuer across events;
+- applies each event's position deltas only after event balance and claim
+  mirror checks;
+- rejects any negative intermediate position after each event. This is an
+  explicit v1 fixture assumption: no opening stock and no overdraft facility;
+- treats the frozen event array order as the canonical replay order.
+
+Four additional adversarial controls reject:
+1. an over-sized but locally balanced principal repayment;
+2. repayment replayed before loan origination;
+3. reuse of an instrument ID with a changed maturity in later events;
+4. moving events to a period absent from the frozen corpus declaration.
+
+The existing event-level mirror, role, sector, class and duplicate-delivery
+controls remain in place. This brings the independent oracle to twelve
+adversarial mutation cases.
+
+Implementation:
+- `d39beab79ef988164ac544ea31964d5552c17d84` — sequential stock, declared
+  period, instrument catalog and replay-order controls;
+- `a458198e3d815764e916ea6ad659171671988b53` — final review of the new
+  source and mutation paths;
+- the following commit normalizes mutation numbering and output wording.
+
+**Evidence boundary:** source review only. No local execution or completed
+exact-head CI PASS is claimed. The no-negative-stock assumption is limited to
+this synthetic v1 fixture and must not be generalized to overdraft-capable
+deposit systems or ledgers with signed opening positions.
