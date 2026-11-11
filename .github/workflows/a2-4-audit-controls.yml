@@ -49,6 +49,10 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_events.py
       - name: A2.4.4 independent SFC-GOLD-1 arithmetic oracle
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_gold_oracle.py
+      - name: A2.4.4 independent SFC-GOLD-2A debt and impairment oracle
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_gold_2a_oracle.py
+      - name: A2.4.4 financial event replay and recovery audit
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_replay_recovery.py --self-test
       - name: A2.4.4 balanced double-entry journal fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal.py
       - name: A2.4.4 instrument stock-flow and holder/issuer mirrors
