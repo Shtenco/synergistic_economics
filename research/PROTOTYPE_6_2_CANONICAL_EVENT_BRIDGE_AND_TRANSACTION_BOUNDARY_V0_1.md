@@ -201,3 +201,8 @@ The additive P6.2c/e prototype now audits canonical records in the existing in-m
 This is deliberately **not** the P6.2e state-recovery reducer described in the original roadmap. It does not rebuild inventory, restore command receipts or aggregate-version caches after process restart, reconcile materialized projections, or prove a crash-safe commit. The roadmap's state-reconstruction/reconciliation milestone remains blocked until the project selects a durable transaction boundary and defines complete versioned reducers for every inventory lifecycle event. The in-memory coordinator cannot satisfy that requirement.
 
 The strict audit also treats the current command model as one aggregate/version per command. A future cross-aggregate command must use an explicitly versioned workflow/transaction envelope; it must not be silently accepted under this contract.
+
+
+## 13. P6.3 durable recovery contract
+
+The recovery, snapshot and reconciliation requirements are specified in [P6.3 Durable Recovery, Snapshot and Reconciliation Contract](PROTOTYPE_6_3_DURABLE_RECOVERY_SNAPSHOT_AND_RECONCILIATION_CONTRACT_V0_1.md). This is a design/acceptance gate only. It does not make the current in-memory EventStore or coordinator durable. In particular, a production reducer is blocked until P6 lifecycle event schemas fully encode reservation and lot transitions and the command boundary supports atomic multi-aggregate version vectors.
