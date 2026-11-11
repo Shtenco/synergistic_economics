@@ -242,9 +242,9 @@ class FinancialEventStore:
                     connection.execute(
                         "CREATE UNIQUE INDEX event_groups_commit_sequence "
                         "ON event_groups(commit_sequence)")
-                    connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
+                    connection.execute("PRAGMA user_version = 3")
                     connection.execute("COMMIT")
-                    version = self.SCHEMA_VERSION
+                    version = 3
                 except Exception:
                     if connection.in_transaction:
                         connection.execute("ROLLBACK")
