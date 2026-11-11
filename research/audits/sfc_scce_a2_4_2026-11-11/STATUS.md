@@ -909,3 +909,56 @@ Exact-head CI at the time of audit:
 No completion logs or PASS evidence were available. PR #4 remains Draft and
 unmerged; canonical `main` remains untouched. A2.4.4 and A2.4.7 remain OPEN;
 A2.4.8 remains BLOCKED.
+
+
+## 11 November continuation — period-scoped instrument stock-flow controls
+
+A second A2.4.4 review found that the standalone instrument stock-flow
+component still treated positions as timeless records, even after the
+entity-sector claim fixture had become period-aware. This gap is now addressed
+at the synthetic component-control level in
+`audit_instrument_stock_flow.py`:
+
+- `Position` and `IssuerLiability` carry a positive integer
+  `effective_period`;
+- the holder/issuer mirror key includes the effective period, preventing
+  cross-period substitution;
+- `validate_period_continuity` aggregates holder records by full instrument
+  identity and requires the closing stock of each observed period to equal
+  the opening stock of the immediately following period;
+- a missing intervening period and a closing/opening discontinuity are
+  rejected rather than silently bridged;
+- financial net lending rejects implicit aggregation across multiple periods
+  and requires an explicit period selector;
+- negative controls cover cross-period mirror mismatch, continuity failure,
+  skipped periods, zero/invalid period identity, multi-period aggregation and
+  one-pass iterable selection.
+
+Implementation commits:
+- `10700ef008d429f21b42abf3c5c81fe66f7d264e` — add effective-period fields,
+  period-scoped mirror identity, continuity validator and explicit NL period
+  selection;
+- `1e13fd0e935e9896aaabc64debd24f3453963cd9` — add multi-period continuity,
+  mirror and aggregation controls;
+- `67642fb6fa78c07f70d503e203e5caf41f92e855` — tighten the skipped-period
+  negative control.
+
+**Evidence boundary:** this closes the previously identified *source-level
+gap in the isolated instrument stock-flow fixture only*. The records are still
+synthetic inputs. The validator is not yet fed from the durable SQLite event
+store, does not define typed boundary/restatement events, and is not wired into
+the production SFC runtime or an atomic multi-register projection. The new
+negative controls have not yet been observed completing in GitHub Actions.
+No test PASS, A2.4.4 closure, Gate 0/1/2 closure, or production readiness is
+claimed.
+
+At the time of the latest poll, the three workflows on the previous exact
+HEAD `b6360df9db51ba0681cf180201ff4df3706637da` were still queued:
+- Prototype validation `42930563436`;
+- SCCE Stage-C2 validation `42930563291`;
+- A2.4 audit control fixtures `42930555633`.
+
+Those runs predate the three implementation commits above and cannot validate
+the new code. A fresh exact-HEAD run set is required. PR #4 remains Draft and
+unmerged; canonical `main` remains untouched. A2.4.4 and A2.4.7 remain OPEN;
+A2.4.8 remains BLOCKED.
