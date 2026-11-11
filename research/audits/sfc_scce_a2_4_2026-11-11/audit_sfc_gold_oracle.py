@@ -178,7 +178,7 @@ def _validate_event_roles(event_type, postings):
         raise OracleError(f"unsupported event type for role validation: {event_type}")
 
 def evaluate(corpus):
-    if corpus.get("corpus_id") != "SFC-GOLD-1" or corpus.get("version") != "1.1.0":
+    if corpus.get("corpus_id") != "SFC-GOLD-1" or corpus.get("version") != "1.2.0":
         raise OracleError("unsupported SFC-GOLD-1 corpus identity/version")
     if corpus.get("status") != "FROZEN_SYNTHETIC_CONTROL_CORPUS":
         raise OracleError("corpus is not marked as the frozen synthetic control")
@@ -399,7 +399,27 @@ def evaluate(corpus):
         "event_count": len(event_ids),
         "periods": tuple(sorted(period_set)),
         "replay_checkpoints": replay_checkpoints,
+        "instrument_catalog": instrument_catalog,
     }
+
+
+def _frozen_position_map(rows, instrument_catalog, label):
+    assert isinstance(rows, list) and rows, f"{label} must be a non-empty list"
+    positions = {}
+    for row in rows:
+        assert isinstance(row, dict), f"{label} rows must be objects"
+        key = (row.get("entity_id"), row.get("account"), row.get("instrument_id"))
+        assert all(isinstance(value, str) and value.strip() for value in key), (
+            f"{label} row has incomplete position identity")
+        assert key not in positions, f"{label} contains duplicate position key: {key}"
+        instrument = instrument_catalog.get(key[2])
+        assert instrument is not None, f"{label} references unknown instrument: {key[2]}"
+        assert row.get("holder_entity_id") == instrument[-2], (
+            f"{label} holder mismatch for {key[2]}")
+        assert row.get("issuer_entity_id") == instrument[-1], (
+            f"{label} issuer mismatch for {key[2]}")
+        positions[key] = D(row["balance"])
+    return positions
 
 
 def _assert_expected(corpus, result):
@@ -408,10 +428,11 @@ def _assert_expected(corpus, result):
         (entity, account, instrument): value
         for (entity, account, instrument), value in result["balances"].items()
     }
-    expected_positions = {
-        (row["entity_id"], row["account"], row["instrument_id"]): D(row["balance"])
-        for row in expected["final_positions"]
-    }
+    expected_positions = _frozen_position_map(
+        expected["final_positions"], result["instrument_catalog"], "final_positions")
+    assert set(result["instrument_catalog"]) == {
+        row["instrument_id"] for row in expected["final_positions"]
+    }, "instrument catalog differs from frozen closing instrument set"
     assert actual_positions == expected_positions, (
         f"final positions differ: {actual_positions} != {expected_positions}")
 
@@ -426,10 +447,9 @@ def _assert_expected(corpus, result):
     for actual, frozen in zip(actual_checkpoints, expected_checkpoints):
         assert actual["after_event_id"] == frozen["after_event_id"], (
             "replay checkpoint event order differs")
-        frozen_positions = {
-            (row["entity_id"], row["account"], row["instrument_id"]): D(row["balance"])
-            for row in frozen["positions"]
-        }
+        frozen_positions = _frozen_position_map(
+            frozen["positions"], result["instrument_catalog"],
+            f"checkpoint {actual['after_event_id']}")
         actual_nonzero = {key: value for key, value in actual["balances"].items() if value}
         assert actual_nonzero == frozen_positions, (
             f"replay positions differ after {actual['after_event_id']}: "
@@ -568,6 +588,37 @@ def main():
         lambda: _assert_expected(corrupted_checkpoint, evaluate(corrupted_checkpoint)),
         "tampered supplier-payment replay checkpoint")
 
+    # Mutation 14: expected liability-holder metadata is part of the frozen
+    # financial-instrument identity and cannot be silently rewritten.
+    wrong_expected_holder = json.loads(json.dumps(corpus))
+    liability_row = next(
+        row for row in wrong_expected_holder["expected"]["final_positions"]
+        if row["account"] == "deposit_liability"
+        and row["instrument_id"] == "deposit-hh-001")
+    liability_row["holder_entity_id"] = "supplier-1"
+    _must_reject_expected(
+        lambda: _assert_expected(wrong_expected_holder, evaluate(wrong_expected_holder)),
+        "tampered expected deposit holder")
+
+    # Mutation 15: dict construction must not silently collapse duplicate
+    # expected position keys in the frozen gold data.
+    duplicate_expected_position = json.loads(json.dumps(corpus))
+    duplicate_expected_position["expected"]["final_positions"].append(
+        dict(duplicate_expected_position["expected"]["final_positions"][0]))
+    _must_reject_expected(
+        lambda: _assert_expected(
+            duplicate_expected_position, evaluate(duplicate_expected_position)),
+        "duplicate frozen final-position key")
+
+    # Mutation 16: checkpoint position keys receive the same duplicate guard.
+    duplicate_checkpoint_position = json.loads(json.dumps(corpus))
+    duplicate_checkpoint_position["expected"]["replay_checkpoints"][1]["positions"].append(
+        dict(duplicate_checkpoint_position["expected"]["replay_checkpoints"][1]["positions"][0]))
+    _must_reject_expected(
+        lambda: _assert_expected(
+            duplicate_checkpoint_position, evaluate(duplicate_checkpoint_position)),
+        "duplicate frozen checkpoint-position key")
+
     print("SFC-GOLD-1 independent oracle: PASS")
     print("source: frozen JSON corpus; no production/audit imports")
     print(f"events={result['event_count']}; periods={result['periods']}")
@@ -577,7 +628,7 @@ def main():
     print("intermediate stocks: non-negative after every canonical event")
     print("instrument identity: immutable across all postings and events")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: 12 event mutations plus tampered frozen replay expectation rejected")
+    print("negative controls: 12 event mutations plus 4 frozen-expectation integrity controls rejected")
 
 
 if __name__ == "__main__":
