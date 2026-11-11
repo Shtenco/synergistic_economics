@@ -1619,3 +1619,25 @@ Implementation/test commits:
 - `2fe1c4a97fdc81ab2791fd97f5c0091632271f3a` — contract update.
 
 These controls remain source-level until CI executes on the final exact HEAD.
+
+
+### Legacy-chain migration preconditions
+
+The v3-to-v4 migration now refuses to seal a legacy history unless:
+- commit_sequence is exactly contiguous from 1 through N;
+- each stored payload_sha256 matches the stored payload JSON;
+- the payload JSON is canonical;
+- the frozen group_id and causation_id agree with the envelope.
+
+These checks run inside the migration transaction. An invalid v3 history
+rolls back the added chain columns and leaves the prior schema/version marker
+unchanged. A negative fixture creates a v3 sequence gap, requires migration
+rejection, and verifies that no chain columns or version stamp survive.
+
+Commits:
+- `90f8790bdc444863fa540ab0d6bb927a93d623e6` — validate sequence and
+  immutable group envelope before migration sealing;
+- `a5020ca832121ba96d1f4ba60d0ad209e86a7648` — negative control for
+  corrupt v3 migration rollback.
+
+Execution remains pending on the final exact HEAD.
