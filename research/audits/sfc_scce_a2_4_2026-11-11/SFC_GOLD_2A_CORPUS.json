@@ -65,7 +65,60 @@
       "deposit_liability": "0",
       "impairment_allowance": "0",
       "writeoff_memorandum": "0"
-    }
+    },
+    "rows": [
+      {
+        "identity": {
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "holder_entity_id": "bank-1",
+          "holder_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      },
+      {
+        "identity": {
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "holder_entity_id": "borrower-1",
+          "holder_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      },
+      {
+        "identity": {
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "holder_entity_id": "bank-1",
+          "holder_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      }
+    ]
   },
   "periods": [
     {
