@@ -16,14 +16,14 @@ AUDIT_DIR = ROOT / "research" / "audits" / "sfc_scce_a2_4_2026-11-11"
 
 
 class A24AuditControlScriptsTest(unittest.TestCase):
-    def _run_script(self, script_name):
+    def _run_script(self, script_name, *args):
         script = AUDIT_DIR / script_name
         self.assertTrue(script.is_file(), f"missing audit control script: {script}")
         env = os.environ.copy()
         env["PYTHONHASHSEED"] = "0"
         env["PYTHONIOENCODING"] = "utf-8"
         result = subprocess.run(
-            [sys.executable, str(script)],
+            [sys.executable, str(script), *args],
             cwd=ROOT,
             env=env,
             text=True,
@@ -73,6 +73,12 @@ class A24AuditControlScriptsTest(unittest.TestCase):
 
     def test_audit_sfc_gold_oracle(self):
         self._run_script("audit_sfc_gold_oracle.py")
+
+    def test_audit_sfc_gold_2a_oracle(self):
+        self._run_script("audit_sfc_gold_2a_oracle.py")
+
+    def test_audit_financial_replay_recovery(self):
+        self._run_script("audit_financial_replay_recovery.py", "--self-test")
 
     def test_audit_financial_journal(self):
         self._run_script("audit_financial_journal.py")
