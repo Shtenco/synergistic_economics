@@ -240,3 +240,34 @@ The repository contains substantial and useful independent research/prototype co
 The two confirmed source-level defects (negative-opening verification contradiction and forgeable journal-validator adapter) should be corrected before any financial projection integration is treated as trusted. UEB's independent ledger should remain isolated until its useful domain rules are reconciled with the canonical journal.
 
 **No full-repository LZMA archive, whole-code local test run, all-branch line-by-line review, CI pass, empirical validation or production-readiness claim is made in this report.**
+
+
+## 10. Additional source pass — physical IO transition safety
+
+### F-08 — Input-output period transition is not failure-atomic
+
+**Severity: Medium for the research simulator; High if reused as a command or accounting boundary.**
+
+Files:
+- `prototype/io_economy.py`, `InputOutputEconomy.step()` and `_clear_product()`;
+- `prototype/test_io_economy.py`.
+
+The period method mutates the live model as it proceeds: each product market immediately changes buyer cash, seller cash, inventory, household consumption, import cash and prices, and appends an event. Production then mutates input stocks, cash, output stocks and household income, and appends more events. Only after all of those mutations does the method check physical stock balances and total cash conservation.
+
+If a later product clearing, production event, or closing invariant raises, the earlier mutations and events remain. There is no period-level snapshot/rollback, staged next-state object, or committed-period cursor. A retry of the same period can therefore start from a partially advanced state and may collide with already appended event keys. The tests cover successful deterministic scenarios and conservation after successful steps, but do not inject a failure after the first market has mutated state and assert rollback/retry safety.
+
+This does not invalidate the simulator as a research model, but it means `step()` is not a safe atomic economic command and its event list is not a durable canonical event log.
+
+**Correction direction:** either (a) explicitly document the simulator as non-transactional and never use it as a canonical write boundary, or (b) stage all period mutations in a detached candidate state, validate every product/cash/physical invariant, then publish state + event batch + period cursor atomically. Add fault injection after the first market, after production, and immediately before period close; assert byte-for-byte state/event equality after failure and successful same-period retry.
+
+### Physical-model boundary clarification
+
+The inspected `scc_dynamic_economy.py`, `cellular_coordination.py` and `household_distribution.py` intentionally use floating-point quantities and synthetic agents for deterministic physical/allocation experiments. Their module contracts explicitly exclude some combination of money, title, credit, wages, ownership or utility measurement. Float use in these bounded research kernels is not by itself a financial-ledger defect. The critical requirement is that no downstream canonical monetary, rights or stock-flow register silently treats those synthetic outputs as authoritative without a typed unit/period/provenance adapter and reconciliation.
+
+## 11. Exact-head CI recheck
+
+At 2026-11-11 15:18 UTC, GitHub returned these runs for the inspected exact commits:
+- Audit branch `66939fbc0fa677eb631777f4b5ffa271a2bd1972`: Prototype validation run `42952568163` and SCCE Stage-C2 run `42952568228`, both still `queued`.
+- P6 branch `f5d3e33c54b434739acd6fa86137db1891c40b97`: Prototype validation run `43046088140`, still `queued`.
+
+No conclusion is available. Do not mark these gates passed until completed run/job results are inspected.
