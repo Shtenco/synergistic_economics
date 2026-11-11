@@ -1899,3 +1899,10 @@ P1 behavior:
 The P1 audit fixture is wired into both the dedicated A2.4 push workflow and Prototype PR wrapper. The fixture checks empty-store activation, explicit zero, idempotent retry, changed snapshot rejection, legacy-history rejection, opening tamper protection, snapshot verification and append blocking.
 
 This remains P1 only. It does not yet atomically append event + T/V/O deltas + materialized positions + coverage + cursor. P2/P3/P4/P5 remain OPEN. The full repository cannot be cloned in the local shell due DNS/network failure; exact-source local execution status must be reported separately from CI.
+
+
+P1 hardening follow-up:
+- Removed `executescript()` from the activation transaction. Python sqlite3 can implicitly commit before `executescript()`; all activation DDL now uses individual `execute()` calls so `BEGIN IMMEDIATE` remains held across schema creation, the empty-history check, opening insertion and metadata sealing.
+- Added a pre-seal-only opening INSERT trigger. Opening rows are inserted before the metadata seal; once metadata exists, no additional opening can be inserted. UPDATE/DELETE remain blocked.
+- The P0 replay kernel and P1 registry both allow signed opening positions at the generic layer. Contract-specific nonnegative constraints are applied only when the identity is explicitly marked as nonnegative.
+- Local isolated SQLite microtests passed: DDL preserves the active write transaction; partial activation rollback removes the newly created schema; opening INSERT/UPDATE/DELETE and metadata UPDATE are blocked after sealing. This is not a substitute for the exact committed Python audit script or CI.

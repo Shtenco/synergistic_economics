@@ -92,6 +92,10 @@ def main():
             _must_reject(lambda: connection.execute(
                 "INSERT INTO sfc_openings SELECT * FROM sfc_openings LIMIT 1"),
                 "opening row insert after activation", sqlite3.IntegrityError)
+        with sqlite3.connect(empty_path) as connection:
+            connection.execute("DROP TRIGGER sfc_openings_no_update")
+            connection.execute("UPDATE sfc_openings SET amount = '9'")
+            assert not verify_sfc_projection_openings(connection)
 
         legacy_path = str(Path(directory) / "legacy.sqlite")
         legacy = FinancialEventStore(legacy_path)
