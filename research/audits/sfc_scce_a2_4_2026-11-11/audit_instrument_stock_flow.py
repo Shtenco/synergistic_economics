@@ -154,8 +154,8 @@ def validate_period_continuity(records):
     by_instrument = {}
     for p in records:
         _validate_period(p.effective_period)
-        base = (p.instrument_id, p.instrument, p.issuer, p.currency,
-                p.maturity, p.denomination, p.valuation_basis)
+        # Reuse the canonical identity validator; omit only the period itself.
+        base = _identity(p)[1:]
         row = by_instrument.setdefault(p.effective_period, {})
         values = row.get(base, (D("0"), D("0")))
         row[base] = (values[0] + p.opening, values[1] + p.closing)
@@ -179,6 +179,8 @@ def validate_period_continuity(records):
 def sector_financial_net_lending(positions, period=None):
     """Financial NL uses transactions, never stocks; multiple periods require selection."""
     positions = list(positions)
+    for p in positions:
+        _validate_period(p.effective_period)
     periods = {p.effective_period for p in positions}
     if period is None and len(periods) > 1:
         raise ReconciliationError("multiple effective periods require an explicit period selector")
