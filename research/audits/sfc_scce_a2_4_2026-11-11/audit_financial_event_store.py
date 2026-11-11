@@ -146,6 +146,14 @@ def main():
         assert reopened.append_group(
             "credit-transaction-1", group,
             causation_id="credit-agreement-1") is False
+        assert reopened.iter_groups() == [{
+            "commit_sequence": 1,
+            "group": {
+                "group_id": "credit-transaction-1",
+                "causation_id": "credit-agreement-1",
+                "events": list(group),
+            },
+        }]
         recovered = reopened.get_group("credit-transaction-1")
         assert recovered["causation_id"] == "credit-agreement-1"
         assert [row["event_id"] for row in recovered["events"]] == [
