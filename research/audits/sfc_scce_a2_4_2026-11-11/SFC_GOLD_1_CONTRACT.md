@@ -132,3 +132,27 @@ sector and all corresponding posting labels while preserving internal
 registry consistency. Loan and deposit instrument IDs must be distinct, as
 must payer and supplier deposit instrument IDs. This is a frozen control
 contract, not a general institutional-sector classification engine.
+
+
+## Sequential stock and replay contract (v1)
+
+The corpus declares exactly one positive effective period. Every event must
+belong to that period. The JSON event array is the canonical replay order for
+this single-period fixture; reordering it is a semantic mutation, not a
+permitted alternative serialization.
+
+The oracle maintains running positions and checks them after every complete
+event. SFC-GOLD-1 v1 starts without opening positions and models no overdraft
+facility, so every intermediate instrument position must remain non-negative.
+This is a fixture-specific assumption, not a general rule for bank deposits,
+credit facilities or ledgers with opening balances.
+
+An instrument ID is immutable across the corpus: instrument class, currency,
+maturity, denomination, valuation basis, holder and issuer cannot silently
+change between events. A changed contract or holder requires a distinct
+instrument identity or an explicit future lifecycle event contract.
+
+Adversarial controls cover over-repayment despite balanced journal legs,
+out-of-order repayment, changed maturity under a reused instrument ID, and
+events assigned to an undeclared period. These controls are source implemented;
+their execution remains subject to exact-head CI.
