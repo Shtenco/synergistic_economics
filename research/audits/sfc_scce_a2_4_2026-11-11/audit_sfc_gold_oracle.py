@@ -238,6 +238,7 @@ def main():
     # but redirect the issuer's liability to a different holder.
     wrong_holder = json.loads(json.dumps(corpus))
     wrong_holder["events"][0]["postings"][3]["counterparty_entity_id"] = "supplier-1"
+    wrong_holder["events"][0]["postings"][3]["counterparty_sector"] = "NFC"
     _must_reject(lambda: evaluate(wrong_holder), "wrong holder on mirrored liability")
 
     # Mutation 2: preserve all amounts and balance but change one instrument ID.
@@ -266,7 +267,7 @@ def main():
     print("closing positions match six frozen holder/issuer instrument records")
     print("system deposits: assets=14; liabilities=14")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: wrong holder, wrong instrument identity and duplicate event rejected")
+    print("negative controls: wrong holder, wrong instrument, wrong sector, event-type mutation and duplicate event rejected")
 
 
 if __name__ == "__main__":
