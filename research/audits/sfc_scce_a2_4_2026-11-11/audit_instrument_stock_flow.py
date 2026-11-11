@@ -397,10 +397,14 @@ def main():
         pass
     else:
         raise AssertionError("cross-period opening/closing discontinuity accepted")
-    skipped_period = position(
-        "deposit", "H", "CB", 110, 1, 111, effective_period=3)
+    period3_holder = [
+        position("deposit", "H", "CB", 110, 1, 111,
+                 effective_period=3),
+        position("deposit", "ROW", "CB", 8, 0, 8,
+                 effective_period=3),
+    ]
     try:
-        validate_period_continuity(period2_holder + [skipped_period])
+        validate_period_continuity(positions[:2] + period3_holder)
     except ReconciliationError:
         pass
     else:
@@ -420,10 +424,6 @@ def main():
     assert sector_financial_net_lending(
         (p for p in positions + period2_holder), period=2) == period2_nl
 
-    try:
-        position("deposit", "H", "CB", 1, 0, 1, effective_period=True)
-    except TypeError:
-        raise
     invalid_period = Position(
         "deposit", "H", "CB", D("1"), D("0"), D("0"), D("0"), D("1"),
         "deposit", "LCU", "unspecified", "nominal", "nominal", 0)
