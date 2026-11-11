@@ -159,3 +159,14 @@ The seven-cell model has a single representative household cash pool, one shared
 Passing software tests validates only the tested invariants. It does not validate the SYNERGY economic thesis.
 
 Scenario outputs include a deterministic `event_log_digest` over the ordered event payload digests; it is an integrity checksum, not a cryptographic chain with previous-event linkage.
+
+
+## Prototype 6 — Real-Economy Integration Primitives (P6.0–P6.2)
+
+- [real_economy_protocol.py](real_economy_protocol.py) — isolated P6.0 read-only Claim projection and proposition-specific SPER evidence decision; P6.1 in-memory lot inventory, custody/ownership separation, versioned reservations, partial child-lot movement and idempotent commands.
+- [test_real_economy_protocol.py](test_real_economy_protocol.py) — focused P6.0–P6.1 invariant tests.
+- [SEC/SPER architecture audit](../research/SEC_SPER_INTEGRATION_AUDIT_AND_CONTRACT_V0_1.md) — entity boundaries, state dimensions, evidence semantics and integration constraints.
+- [P6.0–P6.1 implementation contract](../research/PROTOTYPE_6_REAL_ECONOMY_INTEGRATION_P6_0_P6_1_V0_1.md) — implementation scope and explicit non-production limitations.
+- [P6.2 canonical event bridge and transaction boundary](../research/PROTOTYPE_6_2_CANONICAL_EVENT_BRIDGE_AND_TRANSACTION_BOUNDARY_V0_1.md) — event mapping, aggregate versioning, idempotency, replay, atomicity, outbox/inbox and acceptance tests.
+
+P6.1 remains an isolated in-memory reference and is not synchronized with Stage-B inventory. Do not append its returned events after mutating state as a production integration pattern: state and event persistence must share one transaction (or a deliberately selected event-sourced commit boundary). P6.2 is currently a design contract, not a durable implementation. No inventory-only event automatically posts to the financial ledger.
