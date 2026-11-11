@@ -245,3 +245,24 @@ pending. Interest, FX revaluation, other-volume changes, impairment,
 write-off, legal forgiveness, collateral/guarantees, multiple periods and
 event-store projection are explicit future extensions. No Gate PASS or
 A2.4.4/A2.4.8 closure is implied.
+
+
+## 13. SFC-GOLD-1 semantic closure beyond local balance
+
+A source review identified that debit/credit balance, per-instrument
+holder/issuer mirroring and event account-side cardinality do not alone prove
+that all legs belong to one coherent economic event. The independent
+SFC-GOLD-1 oracle now checks cross-leg roles for bank loan origination,
+supplier payment and principal repayment. It also ties account families to
+instrument classes and enforces no-FX currency consistency in v1.
+
+Two adversarial cases preserve local balance/mirroring while violating
+cross-leg semantics: a new deposit is redirected to an entity other than the
+loan borrower, and both mirrored loan records are relabelled as deposit
+instruments. The oracle must reject both.
+
+This is source implementation only. The exact-head CI jobs remain queued
+without execution evidence; no PASS is claimed. Next extensions remain
+interest accrual/settlement, FX and other-volume changes, impairment versus
+write-off versus legal forgiveness, multi-period projections, and event-store
+replay/crash recovery.
