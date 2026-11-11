@@ -46,6 +46,9 @@ def evaluate(corpus):
     if not isinstance(events, list) or not events:
         raise OracleError("corpus must contain events")
 
+    entities = {row["entity_id"]: row["sector"] for row in corpus.get("entities", [])}
+    if not entities or len(entities) != len(corpus.get("entities", [])):
+        raise OracleError("entity registry is empty or contains duplicate IDs")
     event_ids = set()
     balances = defaultdict(lambda: D("0"))
     per_event_mirrors = {}
@@ -80,6 +83,18 @@ def evaluate(corpus):
             if not all(isinstance(x, str) and x.strip()
                        for x in (account, entity, sector)):
                 raise OracleError("posting account, entity and sector are required")
+            if entity not in entities or entities[entity] != sector:
+                raise OracleError("posting entity/sector does not match frozen registry")
+            for entity_field, sector_field in (
+                    ("counterparty_entity_id", "counterparty_sector"),
+                    ("issuer_entity_id", "issuer_sector")):
+                related = posting.get(entity_field, "")
+                related_sector = posting.get(sector_field, "")
+                if related:
+                    if related not in entities or entities[related] != related_sector:
+                        raise OracleError(f"{entity_field}/{sector_field} registry mismatch")
+                elif related_sector:
+                    raise OracleError(f"{sector_field} exists without {entity_field}")
             if side == "D":
                 debit += amount
             elif side == "C":
@@ -112,6 +127,38 @@ def evaluate(corpus):
                 )
                 balance_key = (entity, account, posting.get("instrument_id"))
                 balances[balance_key] += natural_change
+
+        event_type = event.get("event_type")
+        account_sides = [(row["account"], row["side"], _decimal(row["amount"]))
+                         for row in postings]
+        expected_rules = {
+            "bank_loan_origination": {
+                "loan_asset": ("D", 1), "loan_liability": ("C", 1),
+                "deposit_asset": ("D", 1), "deposit_liability": ("C", 1),
+            },
+            "supplier_payment": {
+                "deposit_asset": ("D", 1), "deposit_liability": ("C", 1),
+            },
+            "principal_repayment": {
+                "loan_liability": ("D", 1), "loan_asset": ("C", 1),
+                "deposit_asset": ("C", 1), "deposit_liability": ("D", 1),
+            },
+        }
+        if event_type not in expected_rules:
+            raise OracleError(f"unsupported SFC-GOLD-1 event type: {event_type}")
+        observed = defaultdict(list)
+        for account, side, amount in account_sides:
+            observed[account].append((side, amount))
+        rule = expected_rules[event_type]
+        if set(observed) != set(rule) or any(
+                len(observed[name]) != count or
+                any(side != required_side for side, _ in observed[name])
+                for name, (required_side, count) in rule.items()):
+            raise OracleError(f"event account composition/sides invalid: {event_type}")
+        if event_type in {"bank_loan_origination", "principal_repayment"}:
+            amounts = {amount for _, _, amount in account_sides}
+            if len(amounts) != 1:
+                raise OracleError(f"{event_type} legs must share one amount")
 
         if debit != credit:
             raise OracleError(
@@ -194,7 +241,17 @@ def main():
     wrong_instrument["events"][0]["postings"][1]["instrument_id"] = "loan-other"
     _must_reject(lambda: evaluate(wrong_instrument), "wrong loan instrument identity")
 
-    # Mutation 3: duplicate delivery cannot be silently treated as a new event.
+    # Mutation 3: sector labels cannot be detached from the frozen entity registry.
+    wrong_sector = json.loads(json.dumps(corpus))
+    wrong_sector["events"][0]["postings"][0]["institutional_sector"] = "H"
+    _must_reject(lambda: evaluate(wrong_sector), "entity/sector mismatch")
+
+    # Mutation 4: event labels have enforced posting composition, not free-form tags.
+    relabelled = json.loads(json.dumps(corpus))
+    relabelled["events"][1]["event_type"] = "bank_loan_origination"
+    _must_reject(lambda: evaluate(relabelled), "event-type composition mismatch")
+
+    # Mutation 5: duplicate delivery cannot be silently treated as a new event.
     duplicate_event = json.loads(json.dumps(corpus))
     duplicate_event["events"].append(duplicate_event["events"][0])
     _must_reject(lambda: evaluate(duplicate_event), "duplicate event ID")
