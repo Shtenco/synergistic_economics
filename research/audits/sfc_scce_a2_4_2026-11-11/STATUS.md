@@ -1409,3 +1409,17 @@ Relevant commits:
 **Evidence boundary:** source inspection only; no local oracle execution and
 no completed exact-head CI PASS are claimed. The gold corpus remains
 synthetic, one-period and narrow in instrument/event scope.
+
+
+### Exact-head CI checkpoint after v1.2.0 identity hardening
+
+At branch HEAD `f2c9411e6b57fa1a70d77c6576f86a1e6a52c46a`, all three
+required workflow runs and check-runs were confirmed on that exact SHA:
+- Prototype validation: `42941151969`;
+- SCCE Stage-C2 validation: `42941152141`;
+- A2.4 audit control fixtures: `42941144742`.
+
+Each workflow job was still `queued`, with null conclusion and zero executed
+steps. No execution logs or artifacts were available. This is an exact-SHA
+dispatch set only; no PASS is claimed. A subsequent status-only commit will
+change HEAD and therefore requires a new exact-head CI observation.
