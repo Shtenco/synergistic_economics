@@ -1084,3 +1084,23 @@ These runs cannot validate the new oracle hardening commit. Earlier queued
 runs on `55e523db2eb84297962272a7d35fddf2cc082309` are also stale. No PASS
 is claimed. A fresh exact-HEAD run set and completed logs are required.
 PR #4 remains Draft/unmerged; canonical `main` remains untouched.
+
+
+### Follow-up hardening — frozen v1 sector roles and instrument separation
+
+The role validator is tightened to the actual frozen SFC-GOLD-1 v1 scope:
+- the bank role must be sector CB;
+- the loan borrower and payment payer must be sector H;
+- the supplier recipient must be sector NFC;
+- loan and deposit instruments must be distinct;
+- payer and supplier deposit instruments must be distinct.
+
+A new adversarial mutation changes the bank entity's sector and every matching
+posting/related-sector label consistently. This preserves the entity registry
+mapping and balanced journal structure, but must fail because the v1 bank role
+is constitutionally represented by the CB sector in this frozen corpus.
+
+Source commit: `507a9d318d9b4218201359324d5713a7b0ce90da`.
+
+This narrows the oracle to its declared fixture, rather than claiming a
+general-purpose bank/household ontology. No execution PASS is claimed.
