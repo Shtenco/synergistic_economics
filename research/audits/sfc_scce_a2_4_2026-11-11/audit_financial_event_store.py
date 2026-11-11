@@ -246,7 +246,7 @@ def main():
                 "commit_sequence": 1, "group": legacy_group,
             }]
             with closing(sqlite3.connect(legacy_db)) as connection:
-                assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+                assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
                 assert connection.execute(
                     "SELECT event_id, event_index FROM events "
                     "WHERE group_id = ? ORDER BY event_index",
