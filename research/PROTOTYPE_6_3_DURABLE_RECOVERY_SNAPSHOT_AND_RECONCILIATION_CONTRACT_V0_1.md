@@ -220,3 +220,10 @@ No operator override may convert a failed integrity check into `HEALTHY` without
 - No claim of durability, crash recovery, tamper-proofing or production readiness until the required tests pass on the selected durable implementation.
 
 **Decision:** P6.2e remains a strict integrity audit. P6.3 defines the requirements for durable recovery; implementation is gated on schema completion and persistence selection.
+
+
+## 12. P6.3a schema completion
+
+The detailed lifecycle event and multi-aggregate command contract is specified in [P6.3a — Inventory Lifecycle Event and Multi-Aggregate Command Contract](PROTOTYPE_6_3A_INVENTORY_LIFECYCLE_EVENT_AND_COMMAND_CONTRACT_V0_1.md).
+
+P6.3a makes the aggregate/version and event-group rules normative before reducer implementation. In particular, it distinguishes reservation-only commit from expiry (which releases lot quantity), and specifies three-aggregate consume (source lot, reservation, new child lot). Historical P6.1 event descriptions remain legacy/incomplete and require explicit migration or a provenance-backed checkpoint; they are not silently promoted to v2.
