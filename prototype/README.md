@@ -185,3 +185,11 @@ The coordinator is intentionally **single-process, single-writer and non-durable
 - [test_real_economy_event_replay.py](test_real_economy_event_replay.py) — covers legacy coexistence, valid single/multi-event commands, sequential aggregate versions, payload/envelope tampering, identity mismatch, version gaps, ordinal gaps and unknown schemas.
 
 P6.2c is an integrity/replay audit, **not a business-state reducer**. It cannot reconstruct inventory or legal ownership until every lifecycle event contains a complete, versioned state-transition contract and a reducer is specified. The existing EventStore digest is recomputed for tamper detection but is not a previous-hash chain, authenticated signature, durable audit proof or evidence that an off-chain event actually occurred.
+
+
+### P6.2d — Atomicity, retry and concurrency fault tests
+
+- `real_economy_event_bridge.py` now rejects invalid aggregate `expected_version` values (including booleans, floats and negatives) and invalid fault-injection indices before executing the transition.
+- `test_real_economy_event_bridge.py` adds multi-event rollback after the second append, retry after a failed attempt, transition-exception isolation, strict version/fault-index validation and a two-thread same-version race. The race contract is exactly one commit and one stale-version conflict.
+
+These tests exercise only the in-process coordinator under its own lock. They do not establish cross-process safety, crash durability, or atomicity with an external database; direct EventStore writers remain outside the coordinator's lock and invalidate its single-writer assumption.
