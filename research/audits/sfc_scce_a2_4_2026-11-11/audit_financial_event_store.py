@@ -7,12 +7,13 @@ from pathlib import Path
 import sqlite3
 import sys
 import tempfile
-from threading import Barrier
+from threading import Barrier, Event
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
 
 from financial_event_store import FinancialEventStore, FinancialEventStoreError
+import financial_event_store as event_store_module
 
 
 def _posting(account, side, amount, entity_id):
@@ -349,6 +350,42 @@ def main():
         ]
         assert concurrent_sequences == [1, 2, 3, 4]
         assert concurrent_order_store.integrity_check()
+
+        # A read must pin one WAL snapshot across hash-chain verification,
+        # mirror verification and result selection. Pause immediately after
+        # the first chain check, commit a concurrent writer, then resume.
+        snapshot_db = Path(directory) / "verified-read-snapshot.sqlite3"
+        snapshot_store = FinancialEventStore(snapshot_db)
+        snapshot_store.append_group("snapshot-before", (first_event,))
+        chain_checked = Event()
+        resume_reader = Event()
+        original_verify_chain = event_store_module._verify_group_chain
+        paused = [False]
+
+        def pause_reader_after_chain(connection):
+            result = original_verify_chain(connection)
+            if not paused[0]:
+                paused[0] = True
+                chain_checked.set()
+                if not resume_reader.wait(10):
+                    raise AssertionError("timed out waiting to resume snapshot reader")
+            return result
+
+        event_store_module._verify_group_chain = pause_reader_after_chain
+        try:
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                read_future = pool.submit(snapshot_store.iter_groups)
+                assert chain_checked.wait(10), "reader did not reach chain verification"
+                assert snapshot_store.append_group("snapshot-after", (second_event,))
+                resume_reader.set()
+                snapshot_result = read_future.result(timeout=10)
+        finally:
+            resume_reader.set()
+            event_store_module._verify_group_chain = original_verify_chain
+        assert [row["group"]["group_id"] for row in snapshot_result] == [
+            "snapshot-before",
+        ]
+        assert len(snapshot_store.iter_groups()) == 2
 
         # A populated v2 database with multiple groups has no recoverable
         # cross-group chronology. Migration must fail closed and leave it v2.
