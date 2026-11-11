@@ -418,7 +418,7 @@ def _frozen_position_map(rows, instrument_catalog, label):
             f"{label} holder mismatch for {key[2]}")
         assert row.get("issuer_entity_id") == instrument[-1], (
             f"{label} issuer mismatch for {key[2]}")
-        positions[key] = D(row["balance"])
+        positions[key] = _decimal(row.get("balance"))
     return positions
 
 
