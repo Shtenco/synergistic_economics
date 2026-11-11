@@ -125,6 +125,27 @@ The Stage-C1 kernel remains separate from Stage B's production and matching deci
 
 C2-A1 is deliberately a controlled bridge: it makes household profiles the explicit source of cell demand but preserves aggregate demand and Stage-B physical outcomes exactly. C2-A2 adds an in-loop household delivery and bounded essential-backlog feedback into the next period's own-cell demand. This is still a synthetic physical model; household labour, income, ownership, money and credit remain unimplemented.
 
+## Prototype 6 — Real Economy Integration (P6.0–P6.1)
+
+- [real_economy_protocol.py](real_economy_protocol.py) — additive standard-library reference module: read-only SEC projection over canonical Claim, proposition-specific SPER evidence decisions, lot-level stock, owner/custodian separation, versioned reservations, expiry, partial movement into child lots, and idempotent command receipts. It does not create a second EventStore or financial ledger.
+- [test_real_economy_protocol.py](test_real_economy_protocol.py) — focused tests for stock/reservation invariants, stale versions, authorization, idempotency, lot splitting, claim projection and evidence verification.
+- [P6.0–P6.1 specification](../research/PROTOTYPE_6_REAL_ECONOMY_INTEGRATION_P6_0_P6_1_V0_1.md) — scope, canonical boundaries, lifecycle rules, known limitations and next implementation gates.
+- [SEC/SPER architecture audit](../research/SEC_SPER_INTEGRATION_AUDIT_AND_CONTRACT_V0_1.md) — integration contract and cross-volume audit.
+
+Run the focused tests from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_real_economy_protocol.py' -v
+```
+
+Run the full regression suite:
+
+```bash
+python -m unittest discover -s prototype -p 'test_*.py' -v
+```
+
+P6.0–P6.1 are in-memory research primitives. They are not synchronized with Stage-B inventory, do not persist to the canonical EventStore, do not post journal entries, and do not implement production identity, cryptographic credential verification, title transfer, payment or durable atomicity. Passing these tests validates only the stated invariants.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
