@@ -1463,3 +1463,32 @@ that layout as v2 and applies the same ambiguity guard. Audit source now covers
 stamped and unstamped multi-group v2 rejection and successful one-group v2
 migration to sequence 1. Source implementation is committed; exact-head CI
 execution is still pending.
+
+
+## 11 November continuation — SFC projection protocol design
+
+A dedicated specification was added:
+A2_4_4_SFC_PROJECTION_PROTOCOL_SPEC.md.
+
+The design prohibits inferring SFC stock changes from debit/credit signs
+alone. A projection delta must name its event, effective period, complete
+instrument identity, holder, issuer, sectors, currency, maturity,
+denomination, valuation basis, T/V/O component, signed decimal-string amount
+and frozen opening stock. Projection data must be bound into the immutable
+group payload so a retry with changed projection economics is a conflict.
+
+The target atomic unit is event group + journal postings + immutable
+projection deltas + materialized holder positions + coverage marker +
+applied-through cursor in one SQLite transaction. Projection activation
+requires an explicit opening snapshot before the first event group; existing
+histories cannot be silently backfilled. Empty delta lists explicitly cover
+groups with no SFC stock effect; missing projection data blocks the prefix.
+
+Issuer aggregates derived from holder positions are not an independent
+issuer-liability register. Separate issuer-side evidence and reconciliation
+remain mandatory.
+
+**Implementation status:** protocol design recorded; schema-v4 projection
+code and projection audit fixtures are NOT yet committed. This is a design
+milestone, not implementation or execution PASS. A2.4.4 remains OPEN;
+A2.4.8 remains BLOCKED.
