@@ -117,6 +117,11 @@ class AtomicCoordinatorTests(unittest.TestCase):
             self.execute(command_id="cmd-2", idempotency_key="key-2",
                          expected_version=0)
 
+    def test_idempotency_key_is_global_across_command_ids(self):
+        self.execute()
+        with self.assertRaises(EventBridgeConflict):
+            self.execute(command_id="cmd-2")
+
     def test_failure_after_event_append_rolls_back_store_and_state(self):
         with self.assertRaises(RuntimeError):
             self.execute(fail_after_event_append=1)
