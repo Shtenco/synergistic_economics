@@ -525,7 +525,7 @@ def main():
         event["effective_period"] = 2
     _must_reject(lambda: evaluate(undeclared_period), "undeclared event period")
 
-    # Mutation 8: duplicate delivery cannot be silently treated as a new event.
+    # Mutation 12: duplicate delivery cannot be silently treated as a new event.
     duplicate_event = json.loads(json.dumps(corpus))
     duplicate_event["events"].append(duplicate_event["events"][0])
     _must_reject(lambda: evaluate(duplicate_event), "duplicate event ID")
@@ -538,7 +538,7 @@ def main():
     print("intermediate stocks: non-negative after every canonical event")
     print("instrument identity: immutable across all postings and events")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: wrong holder, instrument identity, entity sector, bank role, event type, cross-leg borrower role, instrument class, excessive repayment, out-of-order replay, undeclared period and duplicate event rejected")
+    print("negative controls: holder, instrument, entity sector, bank role, event type, cross-leg role, instrument class, excessive repayment, replay order, period declaration and duplicate delivery rejected")
 
 
 if __name__ == "__main__":
