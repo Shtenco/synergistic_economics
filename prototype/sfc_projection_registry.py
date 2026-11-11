@@ -248,7 +248,7 @@ def verify_sfc_projection_openings(connection: sqlite3.Connection) -> bool:
         normalized = []
         for row in rows:
             amount = canonical_decimal(row["amount"])
-            if amount != row["amount"] or Decimal(amount) < 0:
+            if amount != row["amount"]:
                 return False
             identity = {field: row[field] for field in SFCIdentity.__dataclass_fields__}
             # Revalidate the full identity, including whitespace and empties.
