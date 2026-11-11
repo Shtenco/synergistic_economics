@@ -440,11 +440,11 @@ def main():
         assert migrated_v2_single.iter_groups()[0]["commit_sequence"] == 1
         assert migrated_v2_single.integrity_check()
         with closing(sqlite3.connect(legacy_v2_single_db)) as connection:
-            assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
 
-        # A v3 initializer may have committed commit_sequence but crashed
-        # before stamping user_version. It must be recognized as v3, not
-        # misclassified as v2 and migrated by adding the column a second time.
+        # A v4 initializer may have committed its chain columns but crashed
+        # before stamping user_version. It must be recognized as v4, not
+        # misclassified as v2/v3 and migrated by adding columns a second time.
         legacy_v3_unstamped_db = Path(directory) / "legacy-v3-unstamped.sqlite3"
         with closing(sqlite3.connect(legacy_v2_single_db)) as source_connection:
             with closing(sqlite3.connect(legacy_v3_unstamped_db)) as target_connection:
@@ -455,10 +455,10 @@ def main():
         assert migrated_v3_unstamped.iter_groups()[0]["commit_sequence"] == 1
         assert migrated_v3_unstamped.integrity_check()
         with closing(sqlite3.connect(legacy_v3_unstamped_db)) as connection:
-            assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 4
             columns = {row[1] for row in connection.execute(
                 "PRAGMA table_info(event_groups)").fetchall()}
-            assert "commit_sequence" in columns
+            assert {"commit_sequence", "previous_group_hash", "group_chain_hash"} <= columns
 
         # Out-of-band sequence corruption is caught even if an operator
         # disables the immutability trigger.
@@ -474,6 +474,32 @@ def main():
             )
             connection.commit()
         assert not tamper_store.integrity_check()
+
+        # A permutation preserves the contiguous sequence set {1, 2}; the
+        # hash chain must still detect that historical group order was changed.
+        reorder_db = Path(directory) / "commit-sequence-reorder.sqlite3"
+        reorder_store = FinancialEventStore(reorder_db)
+        reorder_store.append_group("order-group-1", (first_event,))
+        reorder_store.append_group("order-group-2", (second_event,))
+        with closing(sqlite3.connect(reorder_db)) as connection:
+            connection.execute("DROP TRIGGER event_groups_no_update")
+            connection.execute(
+                "UPDATE event_groups SET commit_sequence = 3 WHERE group_id = ?",
+                ("order-group-1",),
+            )
+            connection.execute(
+                "UPDATE event_groups SET commit_sequence = 1 WHERE group_id = ?",
+                ("order-group-2",),
+            )
+            connection.execute(
+                "UPDATE event_groups SET commit_sequence = 2 WHERE group_id = ?",
+                ("order-group-1",),
+            )
+            connection.commit()
+            assert [row[0] for row in connection.execute(
+                "SELECT commit_sequence FROM event_groups ORDER BY commit_sequence"
+            )] == [1, 2]
+        assert not reorder_store.integrity_check()
 
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
@@ -495,11 +521,11 @@ def main():
     print("concurrent identical group delivery serializes to one durable insert")
     print("concurrent cross-group event-ID collision admits exactly one winner")
     print("schema-v1 migration preserves the sole historical group and stamps commit sequence 1")
-    print("global commit_sequence is monotonic, gap-free, immutable and independent of effective_period")
+    print("global commit_sequence is gap-free and hash-chain sealed independently of effective_period")
     print("concurrent distinct groups receive a unique serialized commit order")
     print("ambiguous populated v2 and unstamped-v2 migrations fail closed without fabricating chronology")
     print("single-group populated v2 migration safely assigns sequence 1")
-    print("tampered global commit sequence is detected by integrity_check")
+    print("tampered global commit sequence and order permutation are detected by integrity_check")
 
 
 if __name__ == "__main__":
