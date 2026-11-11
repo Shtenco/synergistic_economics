@@ -1267,3 +1267,97 @@ checkpoint fixture that is present but accidentally not asserted.
 
 The oracle now reports twelve event mutations plus one frozen-expectation
 tamper control. Source review only; exact-head CI execution remains pending.
+
+
+## 11 November continuation — SFC-GOLD-1 v1.1 and event-store replay boundary
+
+### Frozen gold-corpus progress
+
+The SFC-GOLD-1 corpus is now version 1.1.0. It retains the three-event
+synthetic loan/payment/principal-repayment lifecycle and adds corpus-authored
+expected position snapshots after each event boundary:
+- G1-E1: four positions after loan origination;
+- G1-E2: six positions after supplier payment;
+- G1-E3: six closing positions after principal repayment.
+
+The independent Decimal oracle now captures the running positions and
+compares every checkpoint against those frozen expectations. It retains the
+twelve adversarial event mutations and adds a thirteenth negative control
+that corrupts a frozen intermediate expectation while leaving the event
+stream unchanged. The control must be rejected by the independent expected
+output comparison.
+
+Relevant source commits:
+- `efbf39726f8ad2b8a2677535318cf16191d1e239` — v1.1.0 corpus checkpoints;
+- `9c128837325e017fcf9fd90b92edc1f0e95d04ab` — oracle checkpoint capture
+  and comparison;
+- `df30d7799a7c03adc442a5676b5bc28061a3cf2a` — frozen-expectation tamper
+  negative control;
+- `e26485ad554a13d411cdeefe81c833b08012889a` — documentation of the
+  checkpoint/tamper control.
+
+### Durable event-store review — new blocking finding
+
+A source-level review of `prototype/financial_event_store.py`,
+`prototype/financial_journal_adapter.py` and their audit fixtures confirms
+that the prototype already implements valuable local controls:
+- SQLite WAL with FULL synchronous mode;
+- atomic append of one group, its events and postings;
+- group-payload hash and immutable replay conflict checks;
+- global event-ID uniqueness;
+- explicit event_index within a group;
+- append-only database triggers;
+- same-group idempotent replay;
+- rollback on injected mid-write failure;
+- restart/reconstruction, concurrency and schema-v1 migration fixtures;
+- typed journal adapter that validates before durable append and rolls back
+  adapter-owned in-memory journal mutations on failure.
+
+This is **not** yet deterministic system-wide replay. Schema v2 stores
+`event_index` only within a group; it has no immutable cross-group
+`commit_sequence`, and the public API has no ordered all-groups iterator.
+Sorting group IDs, timestamps or implicit SQLite rowid would not establish
+economic chronology. The current adapter also does not atomically update SFC
+instrument positions, sector balance sheets or a projection cursor.
+
+A new evidence-backed design/gap document was added:
+`A2_4_4_EVENT_REPLAY_AND_PROJECTION_RECOVERY_GAP.md`.
+
+It specifies:
+1. separation of effective accounting period from database-assigned immutable
+   commit_sequence;
+2. canonical order `(commit_sequence, event_index)`;
+3. explicit handling of populated v2 stores whose historical cross-group
+   chronology cannot be recovered from existing fields;
+4. a single-database transaction coupling event append, SFC projection deltas
+   and applied-through cursor, or a separately specified idempotent inbox;
+5. deterministic rebuild from explicit opening snapshots with per-event
+   checkpoints and independent reconciliation;
+6. twelve adversarial tests for ordering, concurrency, retry, crash boundaries,
+   sequence tampering, backdated periods and rebuild equivalence.
+
+The durable event-store contract was updated to link this finding.
+
+**Gate state:** local group append is source-implemented; cross-group canonical
+replay order is OPEN; durable SFC instrument/sector projections are OPEN;
+crash-safe projection cursor and exactly-once effect are OPEN. A2.4.4 remains
+OPEN and A2.4.8 remains BLOCKED.
+
+### Exact-head CI observation
+
+At prior HEAD `e26485ad554a13d411cdeefe81c833b08012889a`, the three required
+workflows were dispatched on the same SHA:
+- Prototype validation: `42940522884`;
+- SCCE Stage-C2 validation: `42940522921`;
+- A2.4 audit control fixtures: `42940516883`.
+
+All three were queued, each job had zero executed steps, and no completion
+logs or artifacts were available. These runs do not constitute PASS and do
+not validate subsequent documentation commits. A fresh exact-head set and
+completed job logs are required.
+
+**Evidence boundary:** source review and frozen synthetic expectations only.
+No local execution is claimed in this environment. No completed CI PASS,
+production event-store integration, crash recovery, exactly-once projection
+effect, empirical SFC evidence or production readiness is claimed. PR #4
+remains Draft/Open/unmerged; canonical `main` remains untouched.
