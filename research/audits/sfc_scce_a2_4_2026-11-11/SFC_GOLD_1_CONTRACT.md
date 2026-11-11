@@ -178,3 +178,10 @@ The extension does not add new economic event types, opening stocks,
 multi-period accounting, interest, FX, impairment, write-off or legal
 forgiveness. It remains a synthetic single-period reference case. Exact-head
 CI execution is still required; no PASS is claimed.
+
+
+The v1.1.0 oracle also contains a control that deliberately corrupts one
+corpus-authored intermediate checkpoint while leaving the event stream
+unchanged. The independent expected-output comparison must reject this
+tampering. This is distinct from the twelve event-input mutations: it tests
+that the reference expectations themselves are actually enforced.
