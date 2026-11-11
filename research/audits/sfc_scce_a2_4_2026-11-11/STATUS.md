@@ -1539,3 +1539,63 @@ Correction commits:
 - `8b963340f401aac17c00e9d471263e2c37d1a429` — explicit commit for copied
   unstamped-v3 fixture metadata;
 - `6ab4154de80fda017b79ade0261d9e4d3a7d28a1` — initial status record.
+
+
+## 11 November continuation — schema v4 event-order hash chain
+
+A further integrity review found that schema v3's gap-free sequence check
+could not detect a permutation of existing sequence numbers: changing
+`1,2` to `2,1` preserves the set `{1,2}`. The database triggers reject
+ordinary updates, but the existing integrity checker did not detect this
+out-of-band change if an operator disabled the trigger.
+
+The event store is now source-updated to schema v4:
+- Each group stores `previous_group_hash` and `group_chain_hash`.
+- The group-chain hash binds commit sequence, group ID, immutable group
+  payload hash and predecessor hash using canonical JSON and SHA-256.
+- Chain metadata is appended in the same `BEGIN IMMEDIATE` transaction as
+  the event group, events and journal postings.
+- `integrity_check()` validates the genesis link, every predecessor and every
+  recomputed chain hash, in addition to gap-free sequence and event/posting
+  mirrors.
+- The v2 migration now stamps schema v3 first, then applies the v3-to-v4
+  chain migration; it does not skip directly to v4 without chain columns.
+- The v3-to-v4 migration drops and reinstates the group update trigger inside
+  one transaction so existing append-only protection does not block backfill.
+- Recovery fixtures distinguish interrupted v3 migration from an unstamped
+  v4 layout.
+- A new adversarial fixture swaps two sequence numbers while preserving the
+  contiguous set `{1,2}`; integrity must reject the reordered chain.
+
+The dedicated A2.4 workflow now also triggers when any file under
+`prototype/**` changes, so edits to production code exercised by the audit
+scripts cannot silently bypass that workflow's path filter.
+
+**Trust boundary:** the chain is local tamper evidence, not an external
+cryptographic anchor. A privileged actor who rewrites the entire database and
+recomputes all links can replace the history. External signed checkpoints or
+independent anchoring are required to detect a full-database rewrite.
+Migration seals the v3 order visible at migration time and cannot prove that
+the legacy order was never changed before migration.
+
+Implementation/test commits:
+- `42f0df86ac570064074554107f6d94c65d07f62c` — initial schema-v4 chain
+  implementation;
+- `ea449e3ac514fcd9899c6861f9df939ac8fad3b1` — sequence-permutation
+  negative control and migration assertions;
+- `7a9457767d75b0f213c83cd298d0a9c0a1045839` — correct v2 migration
+  staging through schema v3 before v4;
+- `a6ae33cb017456d65685bf13c07cb39e74e38551` — preserve/reinstate
+  append-only group trigger during v3-to-v4 migration;
+- `b7e91dc3e530d9aa2a9d526ae4cebfc9bbd37ad2` — separate interrupted
+  v3-to-v4 and unstamped-v4 recovery fixtures;
+- `55242d9410eb0d0a13e58a22f5942c3885a242ae` — run A2.4 controls when
+  prototype source changes;
+- `fa65fbb3e6934359cf855ae4459bab59d275d272` and
+  `6d256b64406a52f455261d23f097aa70e8cdcace` — update replay-gap and
+  durable-store contracts.
+
+**Evidence boundary:** source-level implementation and fixture review only.
+No local execution is claimed. Exact-head CI on the final commit is required.
+SFC projection, coverage and applied-through cursor remain unimplemented;
+A2.4.4 remains OPEN and A2.4.8 remains BLOCKED.
