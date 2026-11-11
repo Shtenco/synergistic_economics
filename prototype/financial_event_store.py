@@ -54,14 +54,21 @@ def _group_chain_hash(commit_sequence: int, group_id: str,
 
 def _verify_group_chain(connection: sqlite3.Connection) -> bool:
     groups = connection.execute(
-        "SELECT group_id, commit_sequence, previous_group_hash, group_chain_hash, "
-        "payload_sha256, payload_json FROM event_groups ORDER BY commit_sequence"
+        "SELECT group_id, causation_id, commit_sequence, previous_group_hash, "
+        "group_chain_hash, payload_sha256, payload_json "
+        "FROM event_groups ORDER BY commit_sequence"
     ).fetchall()
     previous_hash = _CHAIN_GENESIS
     for expected_sequence, group in enumerate(groups, start=1):
         if group["commit_sequence"] != expected_sequence:
             return False
         if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
+            return False
+        envelope = json.loads(group["payload_json"])
+        if (not isinstance(envelope, dict)
+                or _canonical_json(envelope) != group["payload_json"]
+                or envelope.get("group_id") != group["group_id"]
+                or envelope.get("causation_id") != group["causation_id"]):
             return False
         if group["previous_group_hash"] != previous_hash:
             return False
@@ -478,6 +485,9 @@ class FinancialEventStore:
         from the original hashed economic envelope.
         """
         with closing(self._connect()) as connection:
+            if not _verify_group_chain(connection):
+                raise FinancialEventStoreError(
+                    "event-group history chain is corrupt; ordered replay is refused")
             rows = connection.execute(
                 "SELECT commit_sequence, payload_json FROM event_groups "
                 "ORDER BY commit_sequence"
