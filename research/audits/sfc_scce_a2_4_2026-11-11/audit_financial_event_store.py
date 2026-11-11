@@ -501,6 +501,10 @@ def main():
             )
             connection.commit()
         assert not tamper_store.integrity_check()
+        _must_reject(
+            lambda: tamper_store.append_group("after-tamper", (first_event,)),
+            "append continued after event-history sequence corruption",
+        )
 
         # A permutation preserves the contiguous sequence set {1, 2}; the
         # hash chain must still detect that historical group order was changed.
@@ -527,6 +531,10 @@ def main():
                 "SELECT commit_sequence FROM event_groups ORDER BY commit_sequence"
             )] == [1, 2]
         assert not reorder_store.integrity_check()
+        _must_reject(
+            lambda: reorder_store.append_group("after-reorder", (first_event,)),
+            "append continued after event-history order permutation",
+        )
 
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
