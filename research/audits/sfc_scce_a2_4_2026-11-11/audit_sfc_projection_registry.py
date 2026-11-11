@@ -84,6 +84,9 @@ def main():
             _must_reject(lambda: connection.execute(
                 "DELETE FROM sfc_openings"),
                 "opening row delete", sqlite3.IntegrityError)
+            _must_reject(lambda: connection.execute(
+                "INSERT INTO sfc_openings SELECT * FROM sfc_openings LIMIT 1"),
+                "opening row insert after activation", sqlite3.IntegrityError)
 
         legacy_path = str(Path(directory) / "legacy.sqlite")
         legacy = FinancialEventStore(legacy_path)

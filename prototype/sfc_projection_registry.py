@@ -83,8 +83,10 @@ def _snapshot_hash(openings: list[dict[str, Any]]) -> str:
 
 
 def _create_schema(connection: sqlite3.Connection) -> None:
-    connection.executescript("""
-        CREATE TABLE IF NOT EXISTS sfc_projection_meta (
+    # Do not use executescript() here: sqlite3 implicitly commits an open
+    # transaction before running it, which would break the activation lock.
+    statements = (
+        """CREATE TABLE IF NOT EXISTS sfc_projection_meta (
             singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
             projection_schema_version INTEGER NOT NULL CHECK (projection_schema_version = 1),
             state TEXT NOT NULL CHECK (state = 'prepared'),
@@ -92,8 +94,8 @@ def _create_schema(connection: sqlite3.Connection) -> None:
             mapper_version TEXT NOT NULL,
             evidence_ref TEXT NOT NULL,
             opening_count INTEGER NOT NULL CHECK (opening_count > 0)
-        );
-        CREATE TABLE IF NOT EXISTS sfc_openings (
+        )""",
+        """CREATE TABLE IF NOT EXISTS sfc_openings (
             instrument_id TEXT NOT NULL,
             instrument_class TEXT NOT NULL,
             holder_entity_id TEXT NOT NULL,
@@ -112,20 +114,26 @@ def _create_schema(connection: sqlite3.Connection) -> None:
                 issuer_entity_id, issuer_sector, currency, maturity,
                 denomination, valuation_basis, period
             )
-        );
-        CREATE TRIGGER IF NOT EXISTS sfc_openings_no_update
+        )""",
+        """CREATE TRIGGER IF NOT EXISTS sfc_openings_no_insert_after_activation
+            BEFORE INSERT ON sfc_openings
+            WHEN EXISTS (SELECT 1 FROM sfc_projection_meta WHERE singleton_id = 1)
+            BEGIN SELECT RAISE(ABORT, 'SFC opening snapshot is sealed'); END""",
+        """CREATE TRIGGER IF NOT EXISTS sfc_openings_no_update
             BEFORE UPDATE ON sfc_openings
-            BEGIN SELECT RAISE(ABORT, 'SFC openings are immutable'); END;
-        CREATE TRIGGER IF NOT EXISTS sfc_openings_no_delete
+            BEGIN SELECT RAISE(ABORT, 'SFC openings are immutable'); END""",
+        """CREATE TRIGGER IF NOT EXISTS sfc_openings_no_delete
             BEFORE DELETE ON sfc_openings
-            BEGIN SELECT RAISE(ABORT, 'SFC openings are immutable'); END;
-        CREATE TRIGGER IF NOT EXISTS sfc_projection_meta_no_update
+            BEGIN SELECT RAISE(ABORT, 'SFC openings are immutable'); END""",
+        """CREATE TRIGGER IF NOT EXISTS sfc_projection_meta_no_update
             BEFORE UPDATE ON sfc_projection_meta
-            BEGIN SELECT RAISE(ABORT, 'SFC projection metadata is immutable'); END;
-        CREATE TRIGGER IF NOT EXISTS sfc_projection_meta_no_delete
+            BEGIN SELECT RAISE(ABORT, 'SFC projection metadata is immutable'); END""",
+        """CREATE TRIGGER IF NOT EXISTS sfc_projection_meta_no_delete
             BEFORE DELETE ON sfc_projection_meta
-            BEGIN SELECT RAISE(ABORT, 'SFC projection metadata is immutable'); END;
-    """)
+            BEGIN SELECT RAISE(ABORT, 'SFC projection metadata is immutable'); END""",
+    )
+    for statement in statements:
+        connection.execute(statement)
 
 
 def activate_sfc_projection(
@@ -181,12 +189,8 @@ def activate_sfc_projection(
                 raise SFCProjectionRegistryError(
                     "opening activation requires an empty event store; "
                     "legacy history requires an attested rebuild procedure")
-            connection.execute(
-                "INSERT INTO sfc_projection_meta(singleton_id, projection_schema_version, "
-                "state, snapshot_sha256, mapper_version, evidence_ref, opening_count) "
-                "VALUES (1, 1, 'prepared', ?, ?, ?, ?)",
-                (snapshot_hash, mapper_version, evidence_ref, len(normalized)),
-            )
+            # Insert opening rows before the metadata seal. The insert trigger
+            # prevents any later extension of the frozen opening snapshot.
             for item in normalized:
                 identity = item["identity"]
                 connection.execute(
@@ -198,6 +202,12 @@ def activate_sfc_projection(
                     tuple(identity[field] for field in SFCIdentity.__dataclass_fields__)
                     + (item["period"], item["amount"], item["evidence_ref"]),
                 )
+            connection.execute(
+                "INSERT INTO sfc_projection_meta(singleton_id, projection_schema_version, "
+                "state, snapshot_sha256, mapper_version, evidence_ref, opening_count) "
+                "VALUES (1, 1, 'prepared', ?, ?, ?, ?)",
+                (snapshot_hash, mapper_version, evidence_ref, len(normalized)),
+            )
             if not verify_sfc_projection_openings(connection):
                 raise SFCProjectionRegistryError("opening snapshot failed post-write verification")
             connection.execute("COMMIT")
