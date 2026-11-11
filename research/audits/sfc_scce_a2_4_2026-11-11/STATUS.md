@@ -1906,3 +1906,6 @@ P1 hardening follow-up:
 - Added a pre-seal-only opening INSERT trigger. Opening rows are inserted before the metadata seal; once metadata exists, no additional opening can be inserted. UPDATE/DELETE remain blocked.
 - The P0 replay kernel and P1 registry both allow signed opening positions at the generic layer. Contract-specific nonnegative constraints are applied only when the identity is explicitly marked as nonnegative.
 - Local isolated SQLite microtests passed: DDL preserves the active write transaction; partial activation rollback removes the newly created schema; opening INSERT/UPDATE/DELETE and metadata UPDATE are blocked after sealing. This is not a substitute for the exact committed Python audit script or CI.
+
+
+P1 empty-history gate was tightened after source review: activation now requires all three durable tables (`event_groups`, `events`, `journal_lines`) to be empty, plus SQLite `integrity_check='ok'` and a clean foreign-key check. This rejects orphan normalized rows even if the group table is empty. The P1 audit now injects an orphan event row with foreign-key enforcement disabled and requires activation to refuse it.

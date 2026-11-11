@@ -97,6 +97,20 @@ def main():
             connection.execute("UPDATE sfc_openings SET amount = '9'")
             assert not verify_sfc_projection_openings(connection)
 
+        orphan_path = str(Path(directory) / "orphan.sqlite")
+        orphan_store = FinancialEventStore(orphan_path)
+        with sqlite3.connect(orphan_path) as connection:
+            connection.execute("PRAGMA foreign_keys = OFF")
+            connection.execute(
+                "INSERT INTO events(event_id, group_id, event_type, effective_period, "
+                "event_index, payload_sha256, payload_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("orphan-event", "missing-group", "control", 0, 0, "0" * 64, "{}"),
+            )
+        _must_reject(lambda: activate_sfc_projection(
+            orphan_store, [_opening()], mapper_version="mapper@1",
+            evidence_ref="snapshot:opening-0"),
+            "orphan normalized event row", SFCProjectionRegistryError)
+
         legacy_path = str(Path(directory) / "legacy.sqlite")
         legacy = FinancialEventStore(legacy_path)
         assert legacy.append_group("g-1", _event("legacy-event"))

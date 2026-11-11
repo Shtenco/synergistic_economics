@@ -185,12 +185,21 @@ def activate_sfc_projection(
                 connection.execute("COMMIT")
                 return False
 
-            group_count = connection.execute(
-                "SELECT COUNT(*) FROM event_groups").fetchone()[0]
-            if group_count != 0:
+            table_counts = {}
+            for table_name in ("event_groups", "events", "journal_lines"):
+                table_counts[table_name] = connection.execute(
+                    f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
+            if any(table_counts.values()):
                 raise SFCProjectionRegistryError(
-                    "opening activation requires an empty event store; "
-                    "legacy history requires an attested rebuild procedure")
+                    "opening activation requires an empty event store including "
+                    "all normalized event and posting tables; legacy history "
+                    "requires an attested rebuild procedure")
+            if connection.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise SFCProjectionRegistryError(
+                    "opening activation requires a structurally healthy empty store")
+            if connection.execute("PRAGMA foreign_key_check").fetchall():
+                raise SFCProjectionRegistryError(
+                    "opening activation refuses event-store foreign-key violations")
             # Insert opening rows before the metadata seal. The insert trigger
             # prevents any later extension of the frozen opening snapshot.
             for item in normalized:
