@@ -145,6 +145,8 @@ def evaluate(corpus):
                 raise OracleError(f"P{n} opening {key} does not equal prior close: {expected_open} != {actual_open}")
         period_open[n] = metrics(b)
         period_flow[n] = {k:{c:D(0) for c in "TVO"} for k in METRIC_KEYS}
+        sector_asset_flows = defaultdict(lambda: D(0))
+        sector_liability_flows = defaultdict(lambda: D(0))
         events = [e for e in corpus["events"] if e["effective_period"] == n]
         for event in events:
             eid = event.get("event_id")
@@ -181,6 +183,11 @@ def evaluate(corpus):
                     period_flow[n]["net_loan_carrying"][component] += (
                         delta if account == "loan_asset" else -delta
                     )
+                if component == "T":
+                    if account in ("loan_asset", "interest_receivable", "deposit_asset"):
+                        sector_asset_flows[sector] += delta
+                    elif account in ("loan_liability", "interest_payable", "deposit_liability"):
+                        sector_liability_flows[sector] += delta
             if et == "creditor_write_off":
                 if event.get("legal_effect") != "accounting_derecognition_no_legal_extinguishment":
                     raise OracleError("write-off must not be treated as legal forgiveness")
@@ -215,6 +222,13 @@ def evaluate(corpus):
         actual_close = metrics(b)
         if actual_close != expected_close:
             raise OracleError(f"P{n} closing snapshot mismatch")
+        actual_nl = {sector: canonical(sector_asset_flows[sector] - sector_liability_flows[sector])
+                     for sector in sorted(entities.values())}
+        expected_nl = period.get("sector_financial_net_lending")
+        if expected_nl is None or actual_nl != expected_nl:
+            raise OracleError(f"P{n} transaction-only sector financial net lending mismatch: {actual_nl}")
+        if sum((D(v) for v in actual_nl.values()), D(0)) != 0:
+            raise OracleError(f"P{n} sector financial net lending does not consolidate to zero")
         for key in METRIC_KEYS:
             flows = period_flow[n][key]
             opening_value = D(period_open[n][key])
