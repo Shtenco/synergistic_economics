@@ -576,25 +576,102 @@
   ],
   "replay_checkpoints": [
     {
-      "after_event_id": "G2A-E01"
+      "after_event_id": "G2A-E01",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "0",
+        "interest_payable": "0",
+        "deposit_asset": "100",
+        "deposit_liability": "100"
+      }
     },
     {
-      "after_event_id": "G2A-E02"
+      "after_event_id": "G2A-E02",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "10",
+        "interest_payable": "10",
+        "deposit_asset": "100",
+        "deposit_liability": "100"
+      }
     },
     {
-      "after_event_id": "G2A-E03"
+      "after_event_id": "G2A-E03",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      }
     },
     {
-      "after_event_id": "G2A-E04"
+      "after_event_id": "G2A-E04",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "80",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      }
     },
     {
-      "after_event_id": "G2A-E05"
+      "after_event_id": "G2A-E05",
+      "balances": {
+        "loan_asset": "80",
+        "loan_liability": "80",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
     },
     {
-      "after_event_id": "G2A-E06"
+      "after_event_id": "G2A-E06",
+      "balances": {
+        "loan_asset": "65",
+        "loan_liability": "80",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
     },
     {
-      "after_event_id": "G2A-E07"
+      "after_event_id": "G2A-E07",
+      "balances": {
+        "loan_asset": "60",
+        "loan_liability": "75",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "55",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
     }
   ],
   "expected_closing": {
