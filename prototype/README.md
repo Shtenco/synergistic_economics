@@ -206,3 +206,10 @@ These tests exercise only the in-process coordinator under its own lock. They do
 
 - [P6.3 recovery contract](../research/PROTOTYPE_6_3_DURABLE_RECOVERY_SNAPSHOT_AND_RECONCILIATION_CONTRACT_V0_1.md) — defines durable commit records, multi-aggregate version vectors, idempotency receipt recovery, snapshot validation, deterministic reducers, fail-closed recovery, reconciliation states and crash-test gates.
 - This is an architecture/acceptance contract, not a persistence implementation. The current EventStore and P6.2 coordinator remain in-memory; no crash durability or state reconstruction is claimed.
+
+
+### P6.3a — Inventory lifecycle event and multi-aggregate command contract
+
+- [P6.3a contract](../research/PROTOTYPE_6_3A_INVENTORY_LIFECYCLE_EVENT_AND_COMMAND_CONTRACT_V0_1.md) defines typed lot/reservation aggregate identities, complete expected-version vectors, command-scoped idempotency, globally contiguous command event ordinals, immutable receipts, and exact event groups for register/reserve/commit/expiry/release/consume/quarantine.
+- It explicitly documents why current P6.1 event descriptions are incomplete for replay: reserve/release/expiry/consume mutate multiple aggregates but omit one or more aggregate events; child-lot state is not fully encoded.
+- P6.3a is a schema and acceptance contract only. It does not retrofit historical events, implement reducers or durable storage, or change P6.1 runtime behavior. Legacy P6.1 records require explicit migration/checkpoint treatment.
