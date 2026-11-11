@@ -1,8 +1,8 @@
 {
   "corpus_id": "SFC-GOLD-1",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "status": "FROZEN_SYNTHETIC_CONTROL_CORPUS",
-  "scope": "Independent arithmetic oracle fixture for a minimal bank-created deposit lifecycle. Synthetic data; not empirical evidence or a production chart of accounts. Version 1.1.0 additionally freezes canonical per-event replay checkpoints.",
+  "scope": "Independent arithmetic oracle fixture for a minimal bank-created deposit lifecycle. Synthetic data; not empirical evidence or a production chart of accounts. Version 1.1.0 additionally freezes canonical per-event replay checkpoints. Version 1.2.0 freezes holder and issuer identity on every expected position and rejects duplicate expected position keys.",
   "amount_representation": "base-10 decimal strings; no binary floating point",
   "periods": [
     {
@@ -257,39 +257,49 @@
         "entity_id": "bank-1",
         "account": "loan_asset",
         "instrument_id": "loan-hh-001",
-        "balance": "14"
+        "balance": "14",
+        "holder_entity_id": "bank-1",
+        "issuer_entity_id": "household-1"
       },
       {
         "entity_id": "household-1",
         "account": "loan_liability",
         "instrument_id": "loan-hh-001",
-        "balance": "14"
+        "balance": "14",
+        "holder_entity_id": "bank-1",
+        "issuer_entity_id": "household-1"
       },
       {
         "entity_id": "household-1",
         "account": "deposit_asset",
         "instrument_id": "deposit-hh-001",
-        "balance": "7"
+        "balance": "7",
+        "holder_entity_id": "household-1",
+        "issuer_entity_id": "bank-1"
       },
       {
         "entity_id": "bank-1",
         "account": "deposit_liability",
         "instrument_id": "deposit-hh-001",
         "holder_entity_id": "household-1",
-        "balance": "7"
+        "balance": "7",
+        "issuer_entity_id": "bank-1"
       },
       {
         "entity_id": "supplier-1",
         "account": "deposit_asset",
         "instrument_id": "deposit-supplier-001",
-        "balance": "7"
+        "balance": "7",
+        "holder_entity_id": "supplier-1",
+        "issuer_entity_id": "bank-1"
       },
       {
         "entity_id": "bank-1",
         "account": "deposit_liability",
         "instrument_id": "deposit-supplier-001",
         "holder_entity_id": "supplier-1",
-        "balance": "7"
+        "balance": "7",
+        "issuer_entity_id": "bank-1"
       }
     ],
     "system_deposit_liability": "14",
@@ -309,26 +319,33 @@
             "entity_id": "bank-1",
             "account": "loan_asset",
             "instrument_id": "loan-hh-001",
-            "balance": "19"
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "loan_liability",
             "instrument_id": "loan-hh-001",
-            "balance": "19"
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "deposit_asset",
             "instrument_id": "deposit-hh-001",
-            "balance": "19"
+            "balance": "19",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "bank-1",
             "account": "deposit_liability",
             "instrument_id": "deposit-hh-001",
             "holder_entity_id": "household-1",
-            "balance": "19"
+            "balance": "19",
+            "issuer_entity_id": "bank-1"
           }
         ]
       },
@@ -339,39 +356,49 @@
             "entity_id": "bank-1",
             "account": "loan_asset",
             "instrument_id": "loan-hh-001",
-            "balance": "19"
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "loan_liability",
             "instrument_id": "loan-hh-001",
-            "balance": "19"
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "deposit_asset",
             "instrument_id": "deposit-hh-001",
-            "balance": "12"
+            "balance": "12",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "bank-1",
             "account": "deposit_liability",
             "instrument_id": "deposit-hh-001",
             "holder_entity_id": "household-1",
-            "balance": "12"
+            "balance": "12",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "supplier-1",
             "account": "deposit_asset",
             "instrument_id": "deposit-supplier-001",
-            "balance": "7"
+            "balance": "7",
+            "holder_entity_id": "supplier-1",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "bank-1",
             "account": "deposit_liability",
             "instrument_id": "deposit-supplier-001",
             "holder_entity_id": "supplier-1",
-            "balance": "7"
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
           }
         ]
       },
@@ -382,39 +409,49 @@
             "entity_id": "bank-1",
             "account": "loan_asset",
             "instrument_id": "loan-hh-001",
-            "balance": "14"
+            "balance": "14",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "loan_liability",
             "instrument_id": "loan-hh-001",
-            "balance": "14"
+            "balance": "14",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
           },
           {
             "entity_id": "household-1",
             "account": "deposit_asset",
             "instrument_id": "deposit-hh-001",
-            "balance": "7"
+            "balance": "7",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "bank-1",
             "account": "deposit_liability",
             "instrument_id": "deposit-hh-001",
             "holder_entity_id": "household-1",
-            "balance": "7"
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "supplier-1",
             "account": "deposit_asset",
             "instrument_id": "deposit-supplier-001",
-            "balance": "7"
+            "balance": "7",
+            "holder_entity_id": "supplier-1",
+            "issuer_entity_id": "bank-1"
           },
           {
             "entity_id": "bank-1",
             "account": "deposit_liability",
             "instrument_id": "deposit-supplier-001",
             "holder_entity_id": "supplier-1",
-            "balance": "7"
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
           }
         ]
       }
