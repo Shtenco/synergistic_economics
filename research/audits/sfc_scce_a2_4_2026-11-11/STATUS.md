@@ -1361,3 +1361,51 @@ No local execution is claimed in this environment. No completed CI PASS,
 production event-store integration, crash recovery, exactly-once projection
 effect, empirical SFC evidence or production readiness is claimed. PR #4
 remains Draft/Open/unmerged; canonical `main` remains untouched.
+
+
+## 11 November continuation — SFC-GOLD-1 v1.2.0 identity-safe expectations
+
+A deeper review of the new frozen expected-output assertions found a subtle
+test-oracle weakness: dictionary construction could silently collapse
+duplicate expected position keys, and the expected liability-holder metadata
+was not compared against the oracle's instrument identity catalog. The event
+input itself could be correct while the gold expectation's holder label was
+tampered without detection.
+
+The corpus has been advanced to **SFC-GOLD-1 v1.2.0**. Every final-position
+and per-event checkpoint row now freezes both:
+- `holder_entity_id`;
+- `issuer_entity_id`.
+
+The independent oracle now:
+- returns its instrument identity catalog as an independently derived result;
+- compares expected holder and issuer to the catalog for every frozen
+  position;
+- rejects duplicate keys in final-position and checkpoint lists rather than
+  allowing dictionary overwrite;
+- requires expected balances to be finite, positive decimal strings;
+- requires the closing expected instrument set to match the oracle's
+  instrument catalog for this deliberately narrow v1 fixture.
+
+New expectation-integrity controls:
+13. tampered intermediate checkpoint balance;
+14. tampered expected deposit holder;
+15. duplicate frozen final-position key;
+16. duplicate frozen checkpoint-position key.
+
+The oracle now has twelve adversarial event-input mutations plus four
+frozen-expectation integrity controls. These are source-implemented controls,
+not executed test results.
+
+Relevant commits:
+- `2fb1f0493d53815ac74c822850072cfb7721d9a6` — v1.2.0 frozen holder and
+  issuer metadata on final and intermediate expected positions;
+- `558ee1841eae2be9eae108802878032db371302f` — identity-aware expected
+  position validation and additional negative controls;
+- `d1157ff43e35e2e677312a4c25360f834c64680c` — strict decimal-string
+  validation for frozen expected balances;
+- accompanying contract and status commits record the changes.
+
+**Evidence boundary:** source inspection only; no local oracle execution and
+no completed exact-head CI PASS are claimed. The gold corpus remains
+synthetic, one-period and narrow in instrument/event scope.
