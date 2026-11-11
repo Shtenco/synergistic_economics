@@ -200,3 +200,9 @@ These tests exercise only the in-process coordinator under its own lock. They do
 - `real_economy_event_replay.py` now validates required actor/authority/correlation metadata, UTC timestamp syntax, positive aggregate versions, non-negative event ordinals, non-empty unique evidence references, globally unique canonical event IDs and idempotency keys, and command-ID consistency across aggregate/version metadata.
 - `test_real_economy_event_replay.py` adds adversarial cases for blank actor metadata, non-UTC timestamps, duplicate idempotency keys, command-ID reuse and duplicate evidence references.
 - This remains an integrity audit only. It does not reconstruct lot state, restore in-memory receipts, or provide crash recovery; those require a durable persistence boundary and fully specified lifecycle reducers.
+
+
+## P6.3 — Durable recovery, snapshots and reconciliation contract
+
+- [P6.3 recovery contract](../research/PROTOTYPE_6_3_DURABLE_RECOVERY_SNAPSHOT_AND_RECONCILIATION_CONTRACT_V0_1.md) — defines durable commit records, multi-aggregate version vectors, idempotency receipt recovery, snapshot validation, deterministic reducers, fail-closed recovery, reconciliation states and crash-test gates.
+- This is an architecture/acceptance contract, not a persistence implementation. The current EventStore and P6.2 coordinator remain in-memory; no crash durability or state reconstruction is claimed.
