@@ -198,8 +198,15 @@ PR #4 must remain Draft and unmerged while these conditions are open.
 
 1. Poll the three exact-head CI runs and inspect job steps/logs; diagnose runner
    queue versus test failures without weakening assertions.
-2. Add period identity and cross-period continuity to the instrument
-   stock-flow fixture.
+2. [SOURCE IMPLEMENTED — EXECUTION PENDING] Add period identity and cross-period continuity to the instrument
+   stock-flow fixture. The implementation now carries `effective_period` on
+   holder and issuer records, includes it in mirror identity, enforces
+   adjacent-period closing/opening continuity, rejects skipped periods, and
+   requires explicit period selection for multi-period financial net lending.
+   Negative controls cover cross-period mirror substitution, discontinuity,
+   skipped periods and one-pass period-scoped aggregation. This remains a
+   synthetic component fixture; it is not event-store projection or runtime
+   integration.
 3. Freeze SFC-GOLD-1 event schemas and canonical expected outputs.
 4. Implement the independent SFC-GOLD oracle without importing production
    journal, event-store or projection code.
