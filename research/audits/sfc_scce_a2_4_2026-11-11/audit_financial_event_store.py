@@ -463,6 +463,29 @@ def main():
                     "ON event_groups(commit_sequence)")
                 target_connection.execute("PRAGMA user_version = 0")
                 target_connection.commit()
+
+        # A v3 sequence gap must not be blessed by a new chain. The failed
+        # migration must roll back its DDL and retain the original v3 layout.
+        legacy_v3_gap_db = Path(directory) / "legacy-v3-gap.sqlite3"
+        with closing(sqlite3.connect(legacy_v3_unstamped_db)) as source_connection:
+            with closing(sqlite3.connect(legacy_v3_gap_db)) as target_connection:
+                source_connection.backup(target_connection)
+                target_connection.execute(
+                    "UPDATE event_groups SET commit_sequence = 2 WHERE group_id = ?",
+                    ("v2-group-0",),
+                )
+                target_connection.commit()
+        _must_reject(
+            lambda: FinancialEventStore(legacy_v3_gap_db),
+            "v3 migration sealed a non-contiguous legacy commit sequence",
+        )
+        with closing(sqlite3.connect(legacy_v3_gap_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
+            columns = {row[1] for row in connection.execute(
+                "PRAGMA table_info(event_groups)").fetchall()}
+            assert "commit_sequence" in columns
+            assert "group_chain_hash" not in columns
+
         migrated_v3_unstamped = FinancialEventStore(legacy_v3_unstamped_db)
         assert migrated_v3_unstamped.iter_groups()[0]["commit_sequence"] == 1
         assert migrated_v3_unstamped.integrity_check()
