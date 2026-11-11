@@ -1660,3 +1660,46 @@ Commits:
   envelope before ordered replay;
 - `8cd7e030a7a399f877e29ccb8610b0303e97965b` — assert replay rejection
   after chain corruption.
+
+
+### Consolidated schema-v4 source review and final controls
+
+The final source pass confirmed these boundaries and controls:
+- v1 migration now advances through v2, v3 and v4 in explicit version steps;
+- populated multi-group v1/v2 histories without recoverable cross-group
+  chronology remain fail-closed;
+- v2 single-group migration reaches v4 and seals the one recoverable group;
+- interrupted v3-to-v4 migration and unstamped-v4 recovery have separate
+  fixtures;
+- a corrupt v3 sequence is rejected before chain sealing, with migration DDL
+  rolled back;
+- append verifies the existing chain under `BEGIN IMMEDIATE` and refuses to
+  extend a corrupt history;
+- ordered replay verifies the chain and canonical group envelope before
+  returning any groups;
+- a sequence permutation preserving `{1,2}` is explicitly rejected.
+
+The A2.4 workflow path filter now includes `prototype/**`, so prototype
+changes exercised by its audit scripts trigger the dedicated workflow.
+
+Latest implementation/control commits:
+- `42f0df86ac570064074554107f6d94c65d07f62c` — initial v4 hash chain;
+- `7a9457767d75b0f213c83cd298d0a9c0a1045839` — correct v2-to-v3 staging;
+- `a6ae33cb017456d65685bf13c07cb39e74e38551` — migration trigger handling;
+- `b7e91dc3e530d9aa2a9d526ae4cebfc9bbd37ad2` — interrupted v3/v4 fixtures;
+- `55242d9410eb0d0a13e58a22f5942c3885a242ae` — A2.4 workflow prototype
+  path trigger;
+- `90f8790bdc444863fa540ab0d6bb927a93d623e6` — legacy sequence/payload
+  preconditions;
+- `a5020ca832121ba96d1f4ba60d0ad209e86a7648` — corrupt v3 rollback test;
+- `c3cf47c284e5b85efb1beec3b94244d99b2c2748` — fail-closed append;
+- `1db4d8064df3f23ab1ccacc264845c9387c83f4b` — fail-closed ordered replay;
+- `8cd7e030a7a399f877e29ccb8610b0303e97965b` — ordered-replay rejection
+  tests;
+- `9d4bc4f71fbba48f8a2efce36e8c1cedd2653d1d` — explicit v4 audit output.
+
+No local execution is claimed. The PR-triggered Prototype and Stage-C2
+workflows have repeatedly remained queued without runner steps/logs.
+The dedicated push-triggered A2.4 workflow is not exposed by the available
+PR-only run-listing interface. A2.4.4 remains OPEN; SFC projection and cursor
+remain unimplemented; A2.4.8 remains BLOCKED.
