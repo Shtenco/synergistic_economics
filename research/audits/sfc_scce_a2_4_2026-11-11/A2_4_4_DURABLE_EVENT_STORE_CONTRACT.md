@@ -188,3 +188,10 @@ The audit fixture now covers sequence permutation with a still-contiguous
 `{1, 2}` sequence set, v2-to-v4 migration, interrupted v3-to-v4 migration,
 and interrupted v4 version stamping. These are source-level controls until
 exact-head CI completes.
+
+
+The append path also verifies the existing group chain while holding
+`BEGIN IMMEDIATE`. If the sequence, predecessor links, stored payload hashes
+or chain hashes are inconsistent, it refuses to append rather than extending
+a corrupted history. Audit controls exercise both a sequence gap and a
+sequence permutation, then verify that further appends are rejected.
