@@ -1027,3 +1027,60 @@ interest, valuation, impairment, write-off, legal forgiveness, collateral,
 guarantees and multi-period event-store projection. It is Gate 1 groundwork,
 not closure of Gate 0/1/2, A2.4.4 or A2.4.8. PR #4 remains Draft/unmerged;
 canonical `main` remains untouched.
+
+
+## 11 November continuation — SFC-GOLD-1 cross-leg economic role hardening
+
+A source review of the independent oracle found a semantic gap: the first
+version enforced per-event debit/credit equality, full holder/issuer mirrors,
+and event-specific account-side cardinality, but did not fully bind the
+borrower, lending bank, deposit holder and deposit issuer across different
+legs of the same event. Local balance and mirror equality alone are not
+sufficient to prove that the event describes the intended economic operation.
+
+The oracle now has independent cross-leg role invariants for all three v1
+event types:
+
+- **Bank loan origination:** the bank is the loan creditor and deposit issuer;
+  the borrower is the loan-liability holder/issuer and new deposit holder;
+  loan and deposit instrument classes are distinguished; loan/deposit
+  currencies match within the no-FX v1 boundary.
+- **Supplier payment:** payer and supplier are distinct deposit holders;
+  both deposits and their mirrored bank liabilities belong to the same
+  issuing bank; holder/counterparty directions are checked.
+- **Principal repayment:** the borrower, lending bank, loan claim, borrower
+  liability, borrower deposit and bank deposit liability are cross-linked;
+  instrument classes and no-FX currency consistency are checked.
+
+Two adversarial controls were added. The cross-leg borrower mutation changes
+the deposit asset holder and mirrored liability holder together, preserving
+the deposit mirror and event-wide debit/credit totals while making the
+deposit recipient differ from the loan borrower. The instrument-class
+mutation changes both mirrored loan legs together, preserving their mirror
+while misclassifying loan accounts as deposits. Both must be rejected by the
+role validator.
+
+Implementation:
+- `0ff4f68bba2214818b2dab6d2e7ec5f1beeb74c4` — cross-leg economic role
+  invariants and two additional negative controls.
+
+**Evidence boundary:** this is a source-level hardening change only. The
+oracle has not yet been executed locally or in a completed CI job. The corpus
+remains synthetic, single-period and intentionally excludes FX conversion,
+interest, revaluation, impairment, write-off and legal forgiveness.
+
+### Exact-head CI observation
+
+At the time of this update, branch HEAD before the documentation commits was
+`0ff4f68bba2214818b2dab6d2e7ec5f1beeb74c4`. The three latest runs observed
+on the prior HEAD `5fc6211057cd0d908c3178461a57ecb8a1caaa8a` remained
+`queued` with no runner steps or logs:
+
+- Prototype validation: `42935841261`;
+- SCCE Stage-C2 validation: `42935841192`;
+- A2.4 audit control fixtures: `42935834629`.
+
+These runs cannot validate the new oracle hardening commit. Earlier queued
+runs on `55e523db2eb84297962272a7d35fddf2cc082309` are also stale. No PASS
+is claimed. A fresh exact-HEAD run set and completed logs are required.
+PR #4 remains Draft/unmerged; canonical `main` remains untouched.
