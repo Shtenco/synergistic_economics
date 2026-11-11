@@ -152,3 +152,39 @@ transaction (or uses a separately specified idempotent inbox protocol).
 cross-group canonical order, durable SFC projections and crash-safe
 projection cursor remain OPEN. No production replay or exactly-once effect
 claim is made.
+
+
+## Schema v4 — tamper-evident group-order chain
+
+Schema v4 extends the global commit sequence with two fields on each event
+group:
+- `previous_group_hash`: the preceding committed group's chain hash, or a
+  fixed genesis hash for the first group;
+- `group_chain_hash`: SHA-256 over canonical JSON containing commit sequence,
+  group ID, immutable group-payload hash and previous-group hash.
+
+The chain is computed and persisted in the same `BEGIN IMMEDIATE` transaction
+as the group, events and journal postings. `integrity_check()` walks groups
+in commit order, verifies each predecessor link and recomputes every chain
+hash before checking event and posting mirrors. This detects a permutation
+of sequence numbers even when the resulting sequence set remains contiguous.
+
+Migration from v3 is transactional: it drops the event-group update trigger
+inside the migration transaction, adds the chain columns, seals the existing
+sequence order, reinstates the append-only trigger and stamps schema v4.
+If migration fails, SQLite rolls back the DDL, data updates and trigger
+changes together. A v3 database whose version marker was not stamped is
+recognized from its existing `commit_sequence` column and upgraded. An
+unstamped v4 layout is recognized from `group_chain_hash`.
+
+**Trust boundary:** this is a local tamper-evidence chain, not a cryptographic
+external anchor. A privileged actor able to rewrite all rows and recompute
+the complete chain can replace the history. Detecting full-database rewrite
+requires independently retained signed checkpoints or external anchoring.
+Migration seals the order visible at migration time; it cannot retrospectively
+prove that pre-v4 history was never modified.
+
+The audit fixture now covers sequence permutation with a still-contiguous
+`{1, 2}` sequence set, v2-to-v4 migration, interrupted v3-to-v4 migration,
+and interrupted v4 version stamping. These are source-level controls until
+exact-head CI completes.
