@@ -455,6 +455,14 @@ def _must_reject(call, label):
     raise AssertionError(f"oracle accepted adversarial case: {label}")
 
 
+def _must_reject_expected(call, label):
+    try:
+        call()
+    except AssertionError:
+        return
+    raise AssertionError(f"oracle accepted corrupted frozen expectation: {label}")
+
+
 def main():
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
     result = evaluate(corpus)
@@ -552,6 +560,14 @@ def main():
     duplicate_event["events"].append(duplicate_event["events"][0])
     _must_reject(lambda: evaluate(duplicate_event), "duplicate event ID")
 
+    # Mutation 13: the oracle must detect corruption in the corpus-authored
+    # intermediate expectation, not merely calculate a plausible final state.
+    corrupted_checkpoint = json.loads(json.dumps(corpus))
+    corrupted_checkpoint["expected"]["replay_checkpoints"][1]["positions"][2]["balance"] = "11"
+    _must_reject_expected(
+        lambda: _assert_expected(corrupted_checkpoint, evaluate(corrupted_checkpoint)),
+        "tampered supplier-payment replay checkpoint")
+
     print("SFC-GOLD-1 independent oracle: PASS")
     print("source: frozen JSON corpus; no production/audit imports")
     print(f"events={result['event_count']}; periods={result['periods']}")
@@ -561,7 +577,7 @@ def main():
     print("intermediate stocks: non-negative after every canonical event")
     print("instrument identity: immutable across all postings and events")
     print("sector financial net lending: CB=0 H=-7 NFC=+7; aggregate=0")
-    print("negative controls: holder, instrument, entity sector, bank role, event type, cross-leg role, instrument class, excessive repayment, replay order, period declaration and duplicate delivery rejected")
+    print("negative controls: 12 event mutations plus tampered frozen replay expectation rejected")
 
 
 if __name__ == "__main__":
