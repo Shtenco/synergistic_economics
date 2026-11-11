@@ -389,6 +389,15 @@ def main():
                      event["effective_period"], 0,
                      hashlib.sha256(event_json.encode("utf-8")).hexdigest(), event_json),
                 )
+                for line_no, posting in enumerate(event["postings"]):
+                    posting_json = json.dumps(
+                        posting, sort_keys=True, separators=(",", ":"),
+                        ensure_ascii=False, allow_nan=False,
+                    )
+                    connection.execute(
+                        "INSERT INTO journal_lines VALUES (?, ?, ?)",
+                        (event["event_id"], line_no, posting_json),
+                    )
         _must_reject(
             lambda: FinancialEventStore(legacy_v2_db),
             "populated schema-v2 store with ambiguous group order was migrated",
@@ -396,6 +405,38 @@ def main():
         with closing(sqlite3.connect(legacy_v2_db)) as connection:
             assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
             assert connection.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0] == 2
+
+        # A crash after the v2 DDL but before user_version stamping must
+        # be recognized as v2 from its event_index column, then fail closed.
+        legacy_v2_unstamped_db = Path(directory) / "legacy-v2-unstamped.sqlite3"
+        with closing(sqlite3.connect(legacy_v2_db)) as source_connection:
+            with closing(sqlite3.connect(legacy_v2_unstamped_db)) as target_connection:
+                source_connection.backup(target_connection)
+                target_connection.execute("PRAGMA user_version = 0")
+        _must_reject(
+            lambda: FinancialEventStore(legacy_v2_unstamped_db),
+            "unstamped populated schema-v2 store with ambiguous group order was migrated",
+        )
+        with closing(sqlite3.connect(legacy_v2_unstamped_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0] == 2
+
+        # A populated v2 store with one group has an unambiguous global order.
+        legacy_v2_single_db = Path(directory) / "legacy-v2-single-group.sqlite3"
+        with closing(sqlite3.connect(legacy_v2_db)) as source_connection:
+            with closing(sqlite3.connect(legacy_v2_single_db)) as target_connection:
+                source_connection.backup(target_connection)
+                target_connection.execute(
+                    "DELETE FROM journal_lines WHERE event_id = ?", ("v2-event-1",))
+                target_connection.execute(
+                    "DELETE FROM events WHERE event_id = ?", ("v2-event-1",))
+                target_connection.execute(
+                    "DELETE FROM event_groups WHERE group_id = ?", ("v2-group-1",))
+        migrated_v2_single = FinancialEventStore(legacy_v2_single_db)
+        assert migrated_v2_single.iter_groups()[0]["commit_sequence"] == 1
+        assert migrated_v2_single.integrity_check()
+        with closing(sqlite3.connect(legacy_v2_single_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
 
         # Out-of-band sequence corruption is caught even if an operator
         # disables the immutability trigger.
@@ -432,7 +473,8 @@ def main():
     print("schema-v1 migration preserves the sole historical group and stamps commit sequence 1")
     print("global commit_sequence is monotonic, gap-free, immutable and independent of effective_period")
     print("concurrent distinct groups receive a unique serialized commit order")
-    print("ambiguous populated v2 migration fails closed without fabricating chronology")
+    print("ambiguous populated v2 and unstamped-v2 migrations fail closed without fabricating chronology")
+    print("single-group populated v2 migration safely assigns sequence 1")
     print("tampered global commit sequence is detected by integrity_check")
 
 

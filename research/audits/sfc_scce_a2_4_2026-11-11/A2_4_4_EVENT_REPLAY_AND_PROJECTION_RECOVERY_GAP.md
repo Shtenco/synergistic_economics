@@ -175,7 +175,8 @@ documented in the durable event-store contract.
 
 - Durable group append and local atomicity: source prototype exists; execution
   evidence remains pending.
-- Cross-group canonical replay order: **OPEN — not implemented**.
+- Cross-group canonical durable group commit order: **SOURCE-IMPLEMENTED in schema v3; execution pending**.
+  Projection replay remains incomplete until the SFC projections and applied-through cursor exist.
 - Durable SFC position/sector projections: **OPEN — not implemented**.
 - Crash-safe projection cursor and exactly-once effect: **OPEN — not
   implemented**.
@@ -235,3 +236,13 @@ single SQLite store. It does not yet provide atomic SFC position/sector
 projection updates, an applied-through cursor, multi-process projection
 recovery, or a distributed ordering protocol. Those remain separate open
 gates; no exactly-once projection effect or A2.4.4 closure is claimed.
+
+
+### Recovery hardening — unstamped schema-v2 initialization
+
+The initializer now inspects the events-table layout when PRAGMA user_version
+is zero. If event_index exists, it recognizes the database as an interrupted
+v2 initialization and applies the same fail-closed v2-to-v3 migration policy;
+it no longer treats that state as a fresh database. The audit fixture covers
+both stamped and unstamped populated-v2 databases with multiple groups, plus
+a populated one-group v2 migration that safely receives sequence 1.

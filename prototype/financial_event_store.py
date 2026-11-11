@@ -142,6 +142,10 @@ class FinancialEventStore:
                     }
                     if "event_index" not in columns:
                         version = 1
+                    else:
+                        # A v2 initializer may have committed its schema but
+                        # crashed before stamping PRAGMA user_version.
+                        version = 2
             if version not in (0, 1, 2, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
                     f"unsupported event-store schema version: {version}")

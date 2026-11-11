@@ -1452,3 +1452,14 @@ source-implemented. Projection state, applied-through cursor, crash-safe
 projection recovery and exactly-once projection effect remain OPEN. A2.4.4
 remains OPEN; A2.4.8 remains BLOCKED. No production integration or empirical
 economic validation is claimed.
+
+
+### Additional migration recovery control
+
+A final schema-initialization review found that the prior crash-recovery
+detector recognized unstamped v1 layouts but not an unstamped v2 layout
+(event_index present, user_version still zero). The initializer now identifies
+that layout as v2 and applies the same ambiguity guard. Audit source now covers
+stamped and unstamped multi-group v2 rejection and successful one-group v2
+migration to sequence 1. Source implementation is committed; exact-head CI
+execution is still pending.
