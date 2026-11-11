@@ -408,7 +408,7 @@ def main():
                 posting["issuer_sector"] = "NFC"
     _must_reject(lambda: evaluate(wrong_bank_sector), "bank role assigned to non-CB sector")
 
-    # Mutation 5: locally mirrored deposit legs must still belong to the
+    # Mutation 6: locally mirrored deposit legs must still belong to the
     # borrower named by the loan legs. This mutation preserves both deposit
     # holder/issuer mirrors and global debit/credit totals.
     wrong_borrower_role = json.loads(json.dumps(corpus))
@@ -418,13 +418,13 @@ def main():
     wrong_borrower_role["events"][0]["postings"][3]["counterparty_sector"] = "NFC"
     _must_reject(lambda: evaluate(wrong_borrower_role), "deposit issued to an entity other than the borrower")
 
-    # Mutation 6: an otherwise mirrored loan may not be relabelled as a deposit.
+    # Mutation 7: an otherwise mirrored loan may not be relabelled as a deposit.
     wrong_class = json.loads(json.dumps(corpus))
     wrong_class["events"][0]["postings"][0]["instrument_class"] = "deposit"
     wrong_class["events"][0]["postings"][1]["instrument_class"] = "deposit"
     _must_reject(lambda: evaluate(wrong_class), "loan account with deposit instrument class")
 
-    # Mutation 5: duplicate delivery cannot be silently treated as a new event.
+    # Mutation 8: duplicate delivery cannot be silently treated as a new event.
     duplicate_event = json.loads(json.dumps(corpus))
     duplicate_event["events"].append(duplicate_event["events"][0])
     _must_reject(lambda: evaluate(duplicate_event), "duplicate event ID")
