@@ -72,6 +72,8 @@ def main():
         assert activate_sfc_projection(
             negative_store, [_opening("-5")], mapper_version="mapper@1",
             evidence_ref="snapshot:negative-position")
+        with sqlite3.connect(negative_path) as connection:
+            assert verify_sfc_projection_openings(connection)
         _must_reject(lambda: activate_sfc_projection(
             empty, [_opening("1")], mapper_version="mapper@1",
             evidence_ref="snapshot:opening-0"),
