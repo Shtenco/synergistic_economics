@@ -4,6 +4,7 @@ This validates canonical envelopes already stored in the existing EventStore.
 It does not rebuild business state and safely ignores legacy non-canonical events.
 """
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 import json
 
@@ -30,8 +31,35 @@ def _store_digest(event_type, payload):
     return sha256((event_type + "|" + raw).encode()).hexdigest()
 
 
+def _non_empty_text(value, field):
+    if not isinstance(value, str) or not value.strip():
+        raise EventReplayError(f"{field} must be non-empty text")
+    return value
+
+
+def _utc_timestamp(value, field):
+    _non_empty_text(value, field)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        raise EventReplayError(f"{field} must be an ISO-8601 timestamp") from None
+    if parsed.tzinfo is None or parsed.utcoffset().total_seconds() != 0:
+        raise EventReplayError(f"{field} must be UTC")
+    return parsed
+
+
+def _positive_int(value, field):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+        raise EventReplayError(f"{field} must be a positive integer")
+
+
+def _non_negative_int(value, field):
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise EventReplayError(f"{field} must be a non-negative integer")
+
+
 def audit_canonical_event_log(event_store):
-    """Validate envelope identity, payload digest, store digest and aggregate order.
+    """Validate canonical envelopes, global identities and aggregate command order.
 
     Legacy EventStore records without schema_version are counted but not decoded.
     Any record declaring schema_version is treated as an attempted canonical
@@ -41,10 +69,12 @@ def audit_canonical_event_log(event_store):
     canonical = []
     legacy = 0
     previous_sequence = 0
+    seen_event_ids = set()
+    seen_idempotency_keys = set()
+    command_facts = {}
 
     for event in events:
-        if isinstance(event.sequence, bool) or not isinstance(event.sequence, int):
-            raise EventReplayError("EventStore sequence must be an integer")
+        _positive_int(event.sequence, "EventStore sequence")
         if event.sequence <= previous_sequence:
             raise EventReplayError("EventStore sequence must be strictly increasing")
         previous_sequence = event.sequence
@@ -64,12 +94,44 @@ def audit_canonical_event_log(event_store):
         )
         if any(key not in payload for key in required):
             raise EventReplayError("canonical event envelope is missing required fields")
-        if payload["event_id"] != event.event_id:
+
+        event_id = _non_empty_text(payload["event_id"], "event_id")
+        event_type = _non_empty_text(payload["event_type"], "event_type")
+        idempotency_key = _non_empty_text(payload["idempotency_key"], "idempotency_key")
+        aggregate_type = _non_empty_text(payload["aggregate_type"], "aggregate_type")
+        aggregate_id = _non_empty_text(payload["aggregate_id"], "aggregate_id")
+        command_id = _non_empty_text(payload["command_id"], "command_id")
+        actor_id = _non_empty_text(payload["actor_id"], "actor_id")
+        authority_ref = _non_empty_text(payload["authority_ref"], "authority_ref")
+        correlation_id = _non_empty_text(payload["correlation_id"], "correlation_id")
+
+        if event_id != event.event_id:
             raise EventReplayError("envelope event_id differs from EventStore identity")
-        if payload["event_type"] != event.event_type:
+        if event_type != event.event_type:
             raise EventReplayError("envelope event_type differs from EventStore identity")
-        if payload["idempotency_key"] != event.idempotency_key:
+        if idempotency_key != event.idempotency_key:
             raise EventReplayError("envelope idempotency_key differs from EventStore identity")
+        if event_id in seen_event_ids:
+            raise EventReplayError("duplicate canonical event_id")
+        if idempotency_key in seen_idempotency_keys:
+            raise EventReplayError("duplicate canonical idempotency_key")
+        seen_event_ids.add(event_id)
+        seen_idempotency_keys.add(idempotency_key)
+
+        if "causation_id" in payload and payload["causation_id"] is not None:
+            _non_empty_text(payload["causation_id"], "causation_id")
+        _utc_timestamp(payload["occurred_at"], "occurred_at")
+        _utc_timestamp(payload["recorded_at"], "recorded_at")
+        _positive_int(payload["aggregate_version"], "aggregate_version")
+        _non_negative_int(payload["event_ordinal"], "event_ordinal")
+
+        refs = payload["evidence_refs"]
+        if not isinstance(refs, list):
+            raise EventReplayError("evidence_refs must be a list")
+        normalized_refs = [_non_empty_text(ref, "evidence_ref") for ref in refs]
+        if len(set(normalized_refs)) != len(normalized_refs):
+            raise EventReplayError("evidence_refs must be unique")
+
         if not isinstance(payload["payload"], dict):
             raise EventReplayError("canonical domain payload must be an object")
         digest = sha256(canonical_json(payload["payload"]).encode("utf-8")).hexdigest()
@@ -78,20 +140,17 @@ def audit_canonical_event_log(event_store):
         if _store_digest(event.event_type, payload) != event.digest:
             raise EventReplayError("EventStore envelope digest mismatch")
 
-        for field in ("aggregate_type", "aggregate_id", "command_id"):
-            if not isinstance(payload[field], str) or not payload[field].strip():
-                raise EventReplayError(f"{field} must be non-empty text")
-        version, ordinal = payload["aggregate_version"], payload["event_ordinal"]
-        if isinstance(version, bool) or not isinstance(version, int) or version < 1:
-            raise EventReplayError("aggregate_version must be a positive integer")
-        if isinstance(ordinal, bool) or not isinstance(ordinal, int) or ordinal < 0:
-            raise EventReplayError("event_ordinal must be a non-negative integer")
-        if not isinstance(payload["evidence_refs"], list):
-            raise EventReplayError("evidence_refs must be a list")
+        # A command has one aggregate/version and stable actor/authority/
+        # correlation metadata. This coordinator emits exactly one aggregate
+        # transition per command; cross-aggregate workflows need an explicit
+        # future schema rather than being silently accepted here.
+        facts = (aggregate_type, aggregate_id, payload["aggregate_version"],
+                 actor_id, authority_ref, correlation_id)
+        prior_facts = command_facts.setdefault(command_id, facts)
+        if prior_facts != facts:
+            raise EventReplayError("command_id reused across aggregate/version or command metadata")
         canonical.append((event.sequence, payload))
 
-    # Each aggregate advances exactly one version per command. Events belonging
-    # to one command/version must have contiguous ordinals starting at zero.
     aggregate_groups = {}
     for sequence, payload in canonical:
         key = (payload["aggregate_type"], payload["aggregate_id"])
