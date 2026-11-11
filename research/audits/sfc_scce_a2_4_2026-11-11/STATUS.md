@@ -1255,3 +1255,15 @@ executed steps and no logs. They do not validate the v1.1.0 changes. A fresh
 exact-head dispatch set and completed logs are required. PR #4 remains
 Draft/Open/unmerged; canonical `main` remains untouched. A2.4.4 remains OPEN
 and A2.4.8 remains BLOCKED.
+
+
+### Frozen expected-output integrity control
+
+Added a thirteenth negative control to the independent oracle. Unlike the
+twelve event-input mutations, this control corrupts a corpus-authored
+intermediate replay expectation while leaving the event stream unchanged.
+The expected-output comparison must reject it. This guards against a
+checkpoint fixture that is present but accidentally not asserted.
+
+The oracle now reports twelve event mutations plus one frozen-expectation
+tamper control. Source review only; exact-head CI execution remains pending.
