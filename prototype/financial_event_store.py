@@ -98,7 +98,7 @@ class FinancialEventStore:
     distributed consensus or multi-region event store.
     """
 
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
 
     def __init__(self, database_path: str | os.PathLike, timeout: float = 10.0):
         if (not isinstance(timeout, (int, float)) or isinstance(timeout, bool)
@@ -142,13 +142,19 @@ class FinancialEventStore:
                     }
                     if "event_index" not in columns:
                         version = 1
-            if version not in (0, 1, self.SCHEMA_VERSION):
+            if version not in (0, 1, 2, self.SCHEMA_VERSION):
                 raise FinancialEventStoreError(
                     f"unsupported event-store schema version: {version}")
 
             # Version 2 makes event order explicit rather than relying on
             # SQLite rowid, which is not a durable ordering contract.
             if version == 1:
+                legacy_group_count = connection.execute(
+                    "SELECT COUNT(*) FROM event_groups").fetchone()[0]
+                if legacy_group_count > 1:
+                    raise FinancialEventStoreError(
+                        "schema v1 has multiple groups but no recoverable cross-group commit order; "
+                        "export and re-import with an operator-attested sequence map")
                 connection.execute("BEGIN IMMEDIATE")
                 try:
                     connection.execute(
@@ -176,8 +182,36 @@ class FinancialEventStore:
                         BEFORE UPDATE ON events
                         BEGIN SELECT RAISE(ABORT, 'events are append-only'); END
                     """)
+                    connection.execute("PRAGMA user_version = 2")
+                    connection.execute("COMMIT")
+                    version = 2
+                except Exception:
+                    if connection.in_transaction:
+                        connection.execute("ROLLBACK")
+                    raise
+
+            # Schema v2 has only per-group event_index. A global sequence can
+            # be reconstructed only when there is at most one historical group.
+            # Never invent cross-group chronology from IDs, rowid or periods.
+            if version == 2:
+                legacy_group_count = connection.execute(
+                    "SELECT COUNT(*) FROM event_groups").fetchone()[0]
+                if legacy_group_count > 1:
+                    raise FinancialEventStoreError(
+                        "schema v2 contains multiple groups without a global commit order; "
+                        "automatic migration is unsafe; export and re-import with an "
+                        "operator-attested sequence map")
+                connection.execute("BEGIN IMMEDIATE")
+                try:
+                    connection.execute(
+                        "ALTER TABLE event_groups ADD COLUMN commit_sequence "
+                        "INTEGER NOT NULL DEFAULT 1 CHECK (commit_sequence > 0)")
+                    connection.execute(
+                        "CREATE UNIQUE INDEX event_groups_commit_sequence "
+                        "ON event_groups(commit_sequence)")
                     connection.execute(f"PRAGMA user_version = {self.SCHEMA_VERSION}")
                     connection.execute("COMMIT")
+                    version = self.SCHEMA_VERSION
                 except Exception:
                     if connection.in_transaction:
                         connection.execute("ROLLBACK")
@@ -187,6 +221,7 @@ class FinancialEventStore:
                 CREATE TABLE IF NOT EXISTS event_groups (
                     group_id TEXT PRIMARY KEY,
                     causation_id TEXT,
+                    commit_sequence INTEGER NOT NULL CHECK (commit_sequence > 0),
                     payload_sha256 TEXT NOT NULL,
                     payload_json TEXT NOT NULL
                 );
@@ -205,6 +240,8 @@ class FinancialEventStore:
                     posting_json TEXT NOT NULL,
                     PRIMARY KEY (event_id, line_no)
                 );
+                CREATE UNIQUE INDEX IF NOT EXISTS event_groups_commit_sequence
+                    ON event_groups(commit_sequence);
                 CREATE INDEX IF NOT EXISTS events_by_group
                     ON events(group_id, event_id);
                 CREATE UNIQUE INDEX IF NOT EXISTS events_group_order
@@ -280,10 +317,14 @@ class FinancialEventStore:
                         raise FinancialEventStoreError(
                             f"event ID already belongs to group {row['group_id']}: {event_id}")
 
+                next_sequence = connection.execute(
+                    "SELECT COALESCE(MAX(commit_sequence), 0) + 1 "
+                    "FROM event_groups"
+                ).fetchone()[0]
                 connection.execute(
-                    "INSERT INTO event_groups(group_id, causation_id, payload_sha256, payload_json) "
-                    "VALUES (?, ?, ?, ?)",
-                    (group_id, causation_id, payload_hash, payload_json),
+                    "INSERT INTO event_groups(group_id, causation_id, commit_sequence, "
+                    "payload_sha256, payload_json) VALUES (?, ?, ?, ?, ?)",
+                    (group_id, causation_id, next_sequence, payload_hash, payload_json),
                 )
                 for event_id, event_type, period, event_index, event_hash, event_json, postings in event_rows:
                     connection.execute(
@@ -303,6 +344,23 @@ class FinancialEventStore:
                 if connection.in_transaction:
                     connection.execute("ROLLBACK")
                 raise
+
+    def iter_groups(self) -> list[dict]:
+        """Return committed groups in immutable database commit order.
+
+        Each item contains the database-assigned commit_sequence separately
+        from the original hashed economic envelope.
+        """
+        with closing(self._connect()) as connection:
+            rows = connection.execute(
+                "SELECT commit_sequence, payload_json FROM event_groups "
+                "ORDER BY commit_sequence"
+            ).fetchall()
+        return [
+            {"commit_sequence": row["commit_sequence"],
+             "group": json.loads(row["payload_json"])}
+            for row in rows
+        ]
 
     def get_group(self, group_id: str) -> dict | None:
         _nonempty_string(group_id, "group_id")
@@ -333,9 +391,16 @@ class FinancialEventStore:
                 if result != "ok" or foreign_keys:
                     return False
 
+                sequence_rows = connection.execute(
+                    "SELECT commit_sequence FROM event_groups ORDER BY commit_sequence"
+                ).fetchall()
+                if [row["commit_sequence"] for row in sequence_rows] != list(
+                        range(1, len(sequence_rows) + 1)):
+                    return False
+
                 groups = connection.execute(
-                    "SELECT group_id, causation_id, payload_sha256, payload_json "
-                    "FROM event_groups ORDER BY group_id"
+                    "SELECT group_id, causation_id, commit_sequence, payload_sha256, payload_json "
+                    "FROM event_groups ORDER BY commit_sequence"
                 ).fetchall()
                 for group in groups:
                     if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:

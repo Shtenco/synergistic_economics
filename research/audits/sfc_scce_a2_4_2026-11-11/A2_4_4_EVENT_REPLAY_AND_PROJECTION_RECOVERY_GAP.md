@@ -184,3 +184,54 @@ documented in the durable event-store contract.
 
 No claim of production readiness, completed crash testing, or empirical
 validation follows from this design document.
+
+
+## 11 November implementation update — schema v3 global commit sequence
+
+The SQLite event store has advanced from schema v2 to schema v3. Each
+new transaction group receives a database-assigned, positive, unique
+commit_sequence while holding the same BEGIN IMMEDIATE write transaction
+that inserts the group, event envelopes and journal postings. The sequence
+is committed atomically with the group; an identical replay returns before
+sequence allocation. iter_groups() exposes groups in ascending sequence
+order while keeping the sequence outside the original hashed economic
+envelope. The integrity checker requires the committed sequence to be
+contiguous from 1 through N.
+
+The sequence represents durable store commit order, not event effective
+period, legal priority, causal order across independent upstream systems,
+or a claim that late-arriving events are economically later. Consumers must
+retain effective_period separately and define any domain-specific
+restatement/replay policy.
+
+### Legacy migration boundary
+
+- Fresh stores start at schema v3.
+- An empty v2 store can be upgraded safely.
+- A populated v2 store with exactly one group can be upgraded with sequence 1:
+  its sole group's position in cross-group chronology is unambiguous.
+- A populated v2 store with more than one group is rejected. The old schema
+  contains no cross-group order, so assigning one automatically would invent
+  history. Recovery requires an explicit operator-attested sequence map and
+  a controlled export/re-import procedure; no automatic mapping is inferred.
+- The v1 migration path is likewise fail-closed when more than one group
+  exists. A single group's within-group order is retained and its global
+  sequence becomes 1.
+- The failed migration is transactional and leaves the original v2 database
+  at schema version 2.
+
+### Adversarial controls added to source
+
+The event-store audit now includes backdated effective periods, replay without
+sequence consumption, concurrent independent writers, contiguous sequence
+verification, out-of-band sequence tampering, and rejection of ambiguous
+populated-v2 migration. These controls are committed source fixtures; they
+are not a completed execution result until exact-head CI logs are inspected.
+
+### Remaining open boundary
+
+Schema v3 provides a deterministic order of durable group commits on this
+single SQLite store. It does not yet provide atomic SFC position/sector
+projection updates, an applied-through cursor, multi-process projection
+recovery, or a distributed ordering protocol. Those remain separate open
+gates; no exactly-once projection effect or A2.4.4 closure is claimed.

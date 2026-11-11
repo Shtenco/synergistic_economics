@@ -241,8 +241,11 @@ def main():
             migrated = FinancialEventStore(legacy_db)
             assert migrated.integrity_check()
             assert migrated.get_group("legacy-group") == legacy_group
+            assert migrated.iter_groups() == [{
+                "commit_sequence": 1, "group": legacy_group,
+            }]
             with closing(sqlite3.connect(legacy_db)) as connection:
-                assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+                assert connection.execute("PRAGMA user_version").fetchone()[0] == 3
                 assert connection.execute(
                     "SELECT event_id, event_index FROM events "
                     "WHERE group_id = ? ORDER BY event_index",
@@ -293,6 +296,121 @@ def main():
         }
         assert cross_group_store.integrity_check()
 
+        # Global commit order is independent of economic effective_period.
+        order_db = Path(directory) / "commit-order.sqlite3"
+        order_store = FinancialEventStore(order_db)
+        first_event = _event("ordered-1", "first-committed", (
+            _posting("cash", "D", "1", "entity-a"),
+            _posting("equity", "C", "1", "entity-a"),
+        ))
+        second_event = _event("ordered-2", "late-arriving-backdated", (
+            _posting("cash", "D", "2", "entity-b"),
+            _posting("equity", "C", "2", "entity-b"),
+        ))
+        second_event["effective_period"] = 2018
+        assert order_store.append_group("ordered-group-1", (first_event,))
+        assert order_store.append_group("ordered-group-2", (second_event,))
+        assert order_store.append_group("ordered-group-1", (first_event,)) is False
+        ordered = order_store.iter_groups()
+        assert [item["commit_sequence"] for item in ordered] == [1, 2]
+        assert [item["group"]["group_id"] for item in ordered] == [
+            "ordered-group-1", "ordered-group-2",
+        ]
+        assert [item["group"]["events"][0]["effective_period"]
+                for item in ordered] == [2021, 2018]
+        assert order_store.integrity_check()
+
+        # Concurrent independent writers allocate one gap-free sequence under
+        # BEGIN IMMEDIATE, regardless of which writer wins the lock first.
+        concurrent_order_db = Path(directory) / "concurrent-commit-order.sqlite3"
+        concurrent_order_store = FinancialEventStore(concurrent_order_db)
+        order_barrier = Barrier(4)
+        def ordered_writer(index):
+            event = _event(f"concurrent-order-{index}", "concurrent-append", (
+                _posting("cash", "D", str(index + 1), f"entity-{index}"),
+                _posting("equity", "C", str(index + 1), f"entity-{index}"),
+            ))
+            order_barrier.wait()
+            return concurrent_order_store.append_group(
+                f"concurrent-group-{index}", (event,))
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            assert all(pool.map(ordered_writer, range(4)))
+        concurrent_sequences = [
+            item["commit_sequence"] for item in concurrent_order_store.iter_groups()
+        ]
+        assert concurrent_sequences == [1, 2, 3, 4]
+        assert concurrent_order_store.integrity_check()
+
+        # A populated v2 database with multiple groups has no recoverable
+        # cross-group chronology. Migration must fail closed and leave it v2.
+        legacy_v2_db = Path(directory) / "legacy-v2-multi-group.sqlite3"
+        with closing(sqlite3.connect(legacy_v2_db)) as connection:
+            connection.execute("PRAGMA journal_mode = WAL")
+            connection.executescript("""
+                CREATE TABLE event_groups (
+                    group_id TEXT PRIMARY KEY, causation_id TEXT,
+                    payload_sha256 TEXT NOT NULL, payload_json TEXT NOT NULL
+                );
+                CREATE TABLE events (
+                    event_id TEXT PRIMARY KEY,
+                    group_id TEXT NOT NULL REFERENCES event_groups(group_id),
+                    event_type TEXT NOT NULL,
+                    effective_period INTEGER NOT NULL CHECK (effective_period >= 0),
+                    event_index INTEGER NOT NULL CHECK (event_index >= 0),
+                    payload_sha256 TEXT NOT NULL, payload_json TEXT NOT NULL
+                );
+                CREATE TABLE journal_lines (
+                    event_id TEXT NOT NULL REFERENCES events(event_id),
+                    line_no INTEGER NOT NULL CHECK (line_no >= 0),
+                    posting_json TEXT NOT NULL,
+                    PRIMARY KEY (event_id, line_no)
+                );
+                PRAGMA user_version = 2;
+            """)
+            for index in range(2):
+                event = _event(f"v2-event-{index}", "legacy-v2", (
+                    _posting("cash", "D", "1", f"entity-{index}"),
+                    _posting("equity", "C", "1", f"entity-{index}"),
+                ))
+                envelope = {"group_id": f"v2-group-{index}",
+                            "causation_id": None, "events": [event]}
+                group_json = json.dumps(envelope, sort_keys=True, separators=(",", ":"),
+                                         ensure_ascii=False, allow_nan=False)
+                event_json = json.dumps(event, sort_keys=True, separators=(",", ":"),
+                                        ensure_ascii=False, allow_nan=False)
+                connection.execute(
+                    "INSERT INTO event_groups VALUES (?, ?, ?, ?)",
+                    (envelope["group_id"], None,
+                     hashlib.sha256(group_json.encode("utf-8")).hexdigest(), group_json),
+                )
+                connection.execute(
+                    "INSERT INTO events VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (event["event_id"], envelope["group_id"], event["event_type"],
+                     event["effective_period"], 0,
+                     hashlib.sha256(event_json.encode("utf-8")).hexdigest(), event_json),
+                )
+        _must_reject(
+            lambda: FinancialEventStore(legacy_v2_db),
+            "populated schema-v2 store with ambiguous group order was migrated",
+        )
+        with closing(sqlite3.connect(legacy_v2_db)) as connection:
+            assert connection.execute("PRAGMA user_version").fetchone()[0] == 2
+            assert connection.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0] == 2
+
+        # Out-of-band sequence corruption is caught even if an operator
+        # disables the immutability trigger.
+        tamper_db = Path(directory) / "commit-sequence-tamper.sqlite3"
+        tamper_store = FinancialEventStore(tamper_db)
+        tamper_store.append_group("tamper-group-1", (first_event,))
+        tamper_store.append_group("tamper-group-2", (second_event,))
+        with closing(sqlite3.connect(tamper_db)) as connection:
+            connection.execute("DROP TRIGGER event_groups_no_update")
+            connection.execute(
+                "UPDATE event_groups SET commit_sequence = 9 WHERE group_id = ?",
+                ("tamper-group-2",),
+            )
+        assert not tamper_store.integrity_check()
+
         # An out-of-band extra posting is detectable even if SQLite itself
         # remains structurally valid and foreign keys still hold.
         with closing(sqlite3.connect(database)) as connection:
@@ -311,7 +429,11 @@ def main():
     print("injected mid-write failure rolls back group, events and postings together")
     print("concurrent identical group delivery serializes to one durable insert")
     print("concurrent cross-group event-ID collision admits exactly one winner")
-    print("schema-v1 migration preserves explicit transaction event order")
+    print("schema-v1 migration preserves the sole historical group and stamps commit sequence 1")
+    print("global commit_sequence is monotonic, gap-free, immutable and independent of effective_period")
+    print("concurrent distinct groups receive a unique serialized commit order")
+    print("ambiguous populated v2 migration fails closed without fabricating chronology")
+    print("tampered global commit sequence is detected by integrity_check")
 
 
 if __name__ == "__main__":

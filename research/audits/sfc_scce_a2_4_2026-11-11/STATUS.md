@@ -1423,3 +1423,32 @@ Each workflow job was still `queued`, with null conclusion and zero executed
 steps. No execution logs or artifacts were available. This is an exact-SHA
 dispatch set only; no PASS is claimed. A subsequent status-only commit will
 change HEAD and therefore requires a new exact-head CI observation.
+
+
+## 11 November continuation — schema v3 durable cross-group commit order
+
+The financial event store now has a schema-v3 global ordering primitive:
+event_groups.commit_sequence. The value is assigned under the same
+BEGIN IMMEDIATE transaction as the group, events and postings; identical
+replay does not consume a sequence. iter_groups() exposes canonical durable
+group order. The integrity checker verifies a gap-free sequence 1..N.
+effective_period remains independent and is not used as a commit-order key.
+
+Legacy migration is fail-closed:
+- empty v2 and single-group populated v2 stores can be upgraded;
+- populated v2 stores with multiple groups are rejected because their
+  historical cross-group order is not recoverable from schema v2;
+- v1 migration is also rejected when multiple groups exist;
+- a one-group legacy store receives sequence 1 without fabricating a
+  multi-group chronology.
+
+The audit source adds controls for backdated periods, idempotent replay
+sequence stability, concurrent distinct group commits, sequence tampering,
+and ambiguous populated-v2 migration rejection. Source controls are
+implemented; exact-head execution remains pending.
+
+**Gate update:** durable single-store cross-group commit ordering is now
+source-implemented. Projection state, applied-through cursor, crash-safe
+projection recovery and exactly-once projection effect remain OPEN. A2.4.4
+remains OPEN; A2.4.8 remains BLOCKED. No production integration or empirical
+economic validation is claimed.
