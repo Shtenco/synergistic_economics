@@ -156,3 +156,25 @@ Adversarial controls cover over-repayment despite balanced journal legs,
 out-of-order repayment, changed maturity under a reused instrument ID, and
 events assigned to an undeclared period. These controls are source implemented;
 their execution remains subject to exact-head CI.
+
+
+## Replay checkpoint extension — corpus v1.1.0
+
+Version 1.1.0 preserves the v1 event economics and adds frozen expected
+instrument positions after each canonical event. The oracle records the
+running state after G1-E1, G1-E2 and G1-E3 and compares each checkpoint with
+the corpus-authored expectation, rather than checking only the final state.
+
+This closes a specific blind spot: a sequence could theoretically reach the
+right closing balances while passing through an incorrect intermediate
+allocation that later postings reverse. The checkpoint comparison now
+constrains the complete path at each event boundary.
+
+The checkpoints are data in the frozen corpus; the oracle does not generate
+the expected values from its own result. The final checkpoint is consistent
+with the six final holder/instrument positions already frozen in v1.0.0.
+
+The extension does not add new economic event types, opening stocks,
+multi-period accounting, interest, FX, impairment, write-off or legal
+forgiveness. It remains a synthetic single-period reference case. Exact-head
+CI execution is still required; no PASS is claimed.
