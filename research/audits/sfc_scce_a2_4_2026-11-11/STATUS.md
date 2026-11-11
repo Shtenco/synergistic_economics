@@ -1505,3 +1505,29 @@ v2 and v3 by the event_groups column set. The audit fixture clones a migrated
 v3 store, clears user_version, reopens it, and verifies sequence preservation,
 integrity and schema version restoration. This is source-level implementation;
 exact-head CI execution remains pending.
+
+
+### Audit-fixture transaction durability correction
+
+A source-level review found that several SQLite fixture setup/tampering blocks
+used `contextlib.closing` without explicitly committing their writes.
+`closing` closes the connection but does not commit an open transaction;
+uncommitted DML is rolled back on close. This made legacy fixture population,
+single-group v2 fixture pruning, and two out-of-band corruption injections
+non-durable. In particular, the migration and integrity assertions could
+otherwise run against empty or unmodified fixture state rather than the
+intended adversarial database.
+
+The audit fixture now explicitly commits:
+- v1 legacy group/event/posting rows and their schema-version marker;
+- the two populated v2 legacy groups;
+- deletion of the second group when deriving the single-group v2 fixture;
+- user_version reset on copied v2 and v3 stores;
+- commit-sequence tampering after dropping the immutability trigger;
+- the injected extra journal-line row used by the integrity checker control.
+
+This is a correction to the test harness, not a change to event-store
+production logic. It makes the existing migration and tamper assertions
+exercise durable database state. The audit fixture has not yet been executed
+on this revised HEAD; exact-head CI remains the required execution evidence.
+A2.4.4 remains OPEN and A2.4.8 remains BLOCKED.
