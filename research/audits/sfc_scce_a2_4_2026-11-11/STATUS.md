@@ -1206,3 +1206,52 @@ contains twelve adversarial rejection calls, including sequential overpayment,
 out-of-order replay, changed instrument identity and undeclared-period
 mutations. The script has not been executed locally in this environment; CI
 must execute it before its printed PASS line can be treated as evidence.
+
+
+## 11 November continuation — SFC-GOLD-1 event-boundary replay checkpoints
+
+A further independent arithmetic review identified a remaining weakness in
+final-state-only gold assertions: locally balanced events and a correct final
+position vector do not, by themselves, freeze the expected allocation after
+each event. A later event could reverse an earlier misallocation and conceal
+the intermediate defect.
+
+The frozen corpus has therefore been advanced to **SFC-GOLD-1 v1.1.0** while
+preserving the same three event semantics and single-period scope. It now
+contains canonical expected position snapshots after:
+- G1-E1 bank loan origination: loan 19 and household deposit 19;
+- G1-E2 supplier payment: loan 19, household deposit 12, supplier deposit 7;
+- G1-E3 principal repayment: loan 14, household deposit 7, supplier deposit 7.
+
+The independent oracle records its running positions after every complete
+event and compares each checkpoint to the corpus-authored expected positions.
+It still separately checks debit/credit equality, cross-leg economic roles,
+holder/issuer mirrors, instrument identity immutability, non-negative
+intermediate stocks, final balances, system deposit equality and sector
+financial net lending.
+
+Files changed:
+- `SFC_GOLD_1_CORPUS.json` — version 1.1.0 and three frozen replay snapshots;
+- `audit_sfc_gold_oracle.py` — checkpoint capture and independent comparison;
+- `SFC_GOLD_1_CONTRACT.md` — checkpoint semantics and limits.
+
+Implementation commits:
+- `efbf39726f8ad2b8a2677535318cf16191d1e239` — freeze v1.1.0 event
+  checkpoints;
+- `9c128837325e017fcf9fd90b92edc1f0e95d04ab` — compare every replay
+  checkpoint in the independent oracle;
+- the following documentation commit records this extension.
+
+**Evidence boundary:** source and frozen expected-data review only. The oracle
+has not been executed locally in this environment, and no completed exact-head
+CI PASS is available. The v1.1.0 checkpoints are synthetic expectations, not
+empirical observations or proof of production runtime integration. SFC-GOLD-1
+remains single-period and excludes opening stocks, overdrafts, interest, FX,
+valuation, impairment, write-off and legal forgiveness.
+
+The three latest known CI runs on the preceding HEAD
+`19e5a3abc3a955c62a6867ad524fd5d8be8cf096` were still queued with zero
+executed steps and no logs. They do not validate the v1.1.0 changes. A fresh
+exact-head dispatch set and completed logs are required. PR #4 remains
+Draft/Open/unmerged; canonical `main` remains untouched. A2.4.4 remains OPEN
+and A2.4.8 remains BLOCKED.
