@@ -52,6 +52,28 @@ def _group_chain_hash(commit_sequence: int, group_id: str,
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
+def _verify_group_chain(connection: sqlite3.Connection) -> bool:
+    groups = connection.execute(
+        "SELECT group_id, commit_sequence, previous_group_hash, group_chain_hash, "
+        "payload_sha256, payload_json FROM event_groups ORDER BY commit_sequence"
+    ).fetchall()
+    previous_hash = _CHAIN_GENESIS
+    for expected_sequence, group in enumerate(groups, start=1):
+        if group["commit_sequence"] != expected_sequence:
+            return False
+        if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
+            return False
+        if group["previous_group_hash"] != previous_hash:
+            return False
+        expected_hash = _group_chain_hash(
+            group["commit_sequence"], group["group_id"],
+            group["payload_sha256"], previous_hash)
+        if group["group_chain_hash"] != expected_hash:
+            return False
+        previous_hash = expected_hash
+    return True
+
+
 def _validate_group(group_id: Any, causation_id: Any,
                     events: Sequence[Mapping[str, Any]]) -> tuple[str, str | None, list[dict]]:
     group_id = _nonempty_string(group_id, "group_id")
@@ -375,6 +397,9 @@ class FinancialEventStore:
         with closing(self._connect()) as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                if not _verify_group_chain(connection):
+                    raise FinancialEventStoreError(
+                        "event-group history chain is corrupt; append is refused")
                 existing = connection.execute(
                     "SELECT payload_sha256 FROM event_groups WHERE group_id = ?",
                     (group_id,),
@@ -478,24 +503,13 @@ class FinancialEventStore:
                 if result != "ok" or foreign_keys:
                     return False
 
+                if not _verify_group_chain(connection):
+                    return False
                 groups = connection.execute(
-                    "SELECT group_id, causation_id, commit_sequence, previous_group_hash, "
-                    "group_chain_hash, payload_sha256, payload_json "
+                    "SELECT group_id, causation_id, commit_sequence, payload_sha256, payload_json "
                     "FROM event_groups ORDER BY commit_sequence"
                 ).fetchall()
-                if [group["commit_sequence"] for group in groups] != list(
-                        range(1, len(groups) + 1)):
-                    return False
-                previous_hash = _CHAIN_GENESIS
                 for group in groups:
-                    if group["previous_group_hash"] != previous_hash:
-                        return False
-                    expected_chain_hash = _group_chain_hash(
-                        group["commit_sequence"], group["group_id"],
-                        group["payload_sha256"], previous_hash)
-                    if group["group_chain_hash"] != expected_chain_hash:
-                        return False
-                    previous_hash = expected_chain_hash
                     if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
                         return False
                     envelope = json.loads(group["payload_json"])
