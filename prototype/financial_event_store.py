@@ -81,6 +81,62 @@ def _verify_group_chain(connection: sqlite3.Connection) -> bool:
     return True
 
 
+def _verify_event_posting_mirrors(connection: sqlite3.Connection) -> bool:
+    """Verify normalized event/posting rows against immutable group envelopes."""
+    try:
+        if connection.execute("PRAGMA foreign_key_check").fetchall():
+            return False
+        groups = connection.execute(
+            "SELECT group_id, causation_id, payload_sha256, payload_json "
+            "FROM event_groups ORDER BY commit_sequence"
+        ).fetchall()
+        for group in groups:
+            if hashlib.sha256(group["payload_json"].encode("utf-8")).hexdigest() != group["payload_sha256"]:
+                return False
+            envelope = json.loads(group["payload_json"])
+            if (not isinstance(envelope, dict)
+                    or _canonical_json(envelope) != group["payload_json"]
+                    or envelope.get("group_id") != group["group_id"]
+                    or envelope.get("causation_id") != group["causation_id"]):
+                return False
+            payload_events = envelope.get("events")
+            if not isinstance(payload_events, list) or not payload_events:
+                return False
+            stored_events = connection.execute(
+                "SELECT event_id, event_type, effective_period, event_index, "
+                "payload_sha256, payload_json FROM events WHERE group_id = ? "
+                "ORDER BY event_index",
+                (group["group_id"],),
+            ).fetchall()
+            if len(stored_events) != len(payload_events):
+                return False
+            for event_index, (payload_event, stored) in enumerate(zip(payload_events, stored_events)):
+                if not isinstance(payload_event, dict) or stored["event_index"] != event_index:
+                    return False
+                event_json = _canonical_json(payload_event)
+                if (payload_event.get("event_id") != stored["event_id"]
+                        or payload_event.get("event_type") != stored["event_type"]
+                        or payload_event.get("effective_period") != stored["effective_period"]
+                        or hashlib.sha256(event_json.encode("utf-8")).hexdigest() != stored["payload_sha256"]
+                        or event_json != stored["payload_json"]):
+                    return False
+                stored_lines = connection.execute(
+                    "SELECT line_no, posting_json FROM journal_lines "
+                    "WHERE event_id = ? ORDER BY line_no",
+                    (stored["event_id"],),
+                ).fetchall()
+                payload_lines = payload_event.get("postings")
+                if not isinstance(payload_lines, list) or len(stored_lines) != len(payload_lines):
+                    return False
+                if ([row["line_no"] for row in stored_lines] != list(range(len(payload_lines)))
+                        or [row["posting_json"] for row in stored_lines] != [
+                            _canonical_json(line) for line in payload_lines]):
+                    return False
+        return True
+    except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError):
+        return False
+
+
 def _validate_group(group_id: Any, causation_id: Any,
                     events: Sequence[Mapping[str, Any]]) -> tuple[str, str | None, list[dict]]:
     group_id = _nonempty_string(group_id, "group_id")
@@ -421,6 +477,9 @@ class FinancialEventStore:
                 if not _verify_group_chain(connection):
                     raise FinancialEventStoreError(
                         "event-group history chain is corrupt; append is refused")
+                if not _verify_event_posting_mirrors(connection):
+                    raise FinancialEventStoreError(
+                        "event/posting mirrors are corrupt; append is refused")
                 existing = connection.execute(
                     "SELECT payload_sha256 FROM event_groups WHERE group_id = ?",
                     (group_id,),
@@ -488,6 +547,9 @@ class FinancialEventStore:
             if not _verify_group_chain(connection):
                 raise FinancialEventStoreError(
                     "event-group history chain is corrupt; ordered replay is refused")
+            if not _verify_event_posting_mirrors(connection):
+                raise FinancialEventStoreError(
+                    "event/posting mirrors are corrupt; ordered replay is refused")
             rows = connection.execute(
                 "SELECT commit_sequence, payload_json FROM event_groups "
                 "ORDER BY commit_sequence"
@@ -501,6 +563,12 @@ class FinancialEventStore:
     def get_group(self, group_id: str) -> dict | None:
         _nonempty_string(group_id, "group_id")
         with closing(self._connect()) as connection:
+            if not _verify_group_chain(connection):
+                raise FinancialEventStoreError(
+                    "event-group history chain is corrupt; group read is refused")
+            if not _verify_event_posting_mirrors(connection):
+                raise FinancialEventStoreError(
+                    "event/posting mirrors are corrupt; group read is refused")
             row = connection.execute(
                 "SELECT payload_json FROM event_groups WHERE group_id = ?",
                 (group_id,),
