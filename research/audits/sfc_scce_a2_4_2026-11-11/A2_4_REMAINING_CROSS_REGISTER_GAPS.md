@@ -207,9 +207,16 @@ PR #4 must remain Draft and unmerged while these conditions are open.
    skipped periods and one-pass period-scoped aggregation. This remains a
    synthetic component fixture; it is not event-store projection or runtime
    integration.
-3. Freeze SFC-GOLD-1 event schemas and canonical expected outputs.
-4. Implement the independent SFC-GOLD oracle without importing production
-   journal, event-store or projection code.
+3. [SOURCE IMPLEMENTED — EXECUTION PENDING] Freeze the initial SFC-GOLD-1
+   event schema and canonical expected outputs. The v1 corpus now covers bank
+   loan origination, supplier payment and principal repayment, with frozen
+   final instrument balances and sector financial net-lending outputs.
+4. [SOURCE IMPLEMENTED — EXECUTION PENDING] Implement and wire an independent
+   SFC-GOLD-1 arithmetic oracle. It imports no production journal, event store
+   or projection code; it independently validates decimal amounts, entity/
+   sector identity, event composition, double-entry, holder/issuer mirrors,
+   closing positions and sector net lending. Adversarial mutations cover
+   holder, instrument, sector, event-type and duplicate-event failures.
 5. Add crash/replay tests for the event-store-to-position projection boundary.
 6. Bind capital/product/physical-flow/labour fixtures to real runtime schemas.
 7. Only then run the full multi-register replay and evaluate Gate 2.
@@ -223,3 +230,18 @@ path and an independent gold oracle that proves all projections agree.
 
 No PASS, production readiness, Gate 0 closure, A2.4.4 closure, A2.4.8 closure,
 or empirical net-synergy result is claimed by this audit.
+
+
+## 12. SFC-GOLD-1 implementation status
+
+The initial frozen corpus and independent oracle are now present:
+- `SFC_GOLD_1_CORPUS.json`;
+- `SFC_GOLD_1_CONTRACT.md`;
+- `audit_sfc_gold_oracle.py`.
+
+The corpus is intentionally narrow and single-period. It is a baseline
+control, not the full credit lifecycle. Exact-head CI execution remains
+pending. Interest, FX revaluation, other-volume changes, impairment,
+write-off, legal forgiveness, collateral/guarantees, multiple periods and
+event-store projection are explicit future extensions. No Gate PASS or
+A2.4.4/A2.4.8 closure is implied.
