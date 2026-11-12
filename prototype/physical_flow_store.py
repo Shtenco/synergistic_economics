@@ -1,4 +1,5 @@
-"""Durable append-only physical-flow register with paired endpoints and replay verification."""
+"""Durable append-only physical-flow register with paired endpoints and replay verification.
+Historical flows are immutable; corrections must be separately identified compensating flows."""
 from __future__ import annotations
 from dataclasses import asdict, dataclass
 from contextlib import closing
@@ -166,10 +167,13 @@ class PhysicalFlowStore:
         with closing(self._connect()) as con:
             return con.execute("SELECT COUNT(*) FROM physical_flows").fetchone()[0]
 
-    def node_net(self, node_id, product_id, grade_id, period, unit=None):
+    def node_net(self, node_id, product_id, grade_id, period, unit):
+        for value, field in ((node_id,"node_id"),(product_id,"product_id"),(grade_id,"grade_id"),(period,"period"),(unit,"unit")):
+            _text(value,field)
         total = D("0")
         for row in self._rows():
-            out, inc = json.loads(row["payload_json"])["outflow"], json.loads(row["payload_json"])["inflow"]
+            payload = json.loads(row["payload_json"])
+            out, inc = payload["outflow"], payload["inflow"]
             if (out["product_id"],out["grade_id"],out["period"]) != (product_id,grade_id,period):
                 continue
             if unit is not None and out["unit"] != unit:
@@ -178,8 +182,11 @@ class PhysicalFlowStore:
             if inc["node_id"] == node_id: total += D(inc["quantity"])
         return total
 
-    def consolidated_net(self, node_ids, product_id, grade_id, period, unit=None):
-        return sum((self.node_net(n,product_id,grade_id,period,unit) for n in set(node_ids)), D("0"))
+    def consolidated_net(self, node_ids, product_id, grade_id, period, unit):
+        nodes=set(node_ids)
+        if not nodes: raise PhysicalFlowError("consolidation requires at least one node")
+        for node in nodes: _text(node,"node_id")
+        return sum((self.node_net(n,product_id,grade_id,period,unit) for n in nodes), D("0"))
 
     def verify(self):
         try:
