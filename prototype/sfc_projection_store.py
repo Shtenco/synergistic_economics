@@ -15,7 +15,7 @@ import sqlite3
 from typing import Sequence
 
 import financial_event_store as fes
-from entity_journal import EntityJournal, JournalEvent, SECTORS
+from entity_journal import EntityJournal, JournalEvent, SECTORS, EVENT_SEMANTICS, EXPECTED_ACCOUNTS
 from financial_event_store import FinancialEventStore, FinancialEventStoreError
 from sfc_projection_kernel import SFCIdentity, canonical_decimal
 from sfc_projection_registry import verify_sfc_projection_openings
@@ -258,14 +258,57 @@ def _position_key(identity):
     return tuple(getattr(identity, f) for f in SFCIdentity.__dataclass_fields__)
 
 
+def _verify_event_payload_semantics(event_payload):
+    """Fail-closed recovery validation of GOLD-2A source-event semantics."""
+    event_type = event_payload.get("event_type")
+    if event_type not in EVENT_SEMANTICS:
+        raise SFCProjectionStoreError("stored event uses a non-canonical GOLD-2A event type")
+    expected_component, expected_legal_effect = EVENT_SEMANTICS[event_type]
+    if (event_payload.get("component") != expected_component
+            or event_payload.get("legal_effect") != expected_legal_effect):
+        raise SFCProjectionStoreError("stored event T/V/O or legal-effect metadata mismatch")
+    postings = event_payload.get("postings")
+    if not isinstance(postings,list) or not postings:
+        raise SFCProjectionStoreError("stored event postings are missing")
+    actual = {}
+    debit = D("0")
+    credit = D("0")
+    amounts = set()
+    for line in postings:
+        account, side = line.get("account"), line.get("side")
+        amount = D(line.get("amount"))
+        if not amount.is_finite() or amount <= 0 or side not in ("D","C"):
+            raise SFCProjectionStoreError("stored event contains an invalid amount or side")
+        amounts.add(amount)
+        debit += amount if side=="D" else D("0")
+        credit += amount if side=="C" else D("0")
+        actual.setdefault(account,[]).append(side)
+    expected = EXPECTED_ACCOUNTS[event_type]
+    if set(actual) != set(expected) or debit != credit or len(amounts) != 1:
+        raise SFCProjectionStoreError("stored event balance/account composition mismatch")
+    for account,(side,count) in expected.items():
+        if actual.get(account,[]).count(side) != count or len(actual.get(account,[])) != count:
+            raise SFCProjectionStoreError("stored event account-side contract mismatch")
+    amount = next(iter(amounts))
+    if event_type == "creditor_write_off":
+        if D(event_payload.get("writeoff_claim_delta")) != amount:
+            raise SFCProjectionStoreError("stored write-off memo delta mismatch")
+    if event_type == "legal_debt_forgiveness":
+        evidence = event_payload.get("legal_evidence")
+        if (D(event_payload.get("forgiven_principal")) != amount or not isinstance(evidence,dict)
+                or not all(isinstance(evidence.get(k),str) and evidence[k].strip()
+                           for k in ("evidence_ref","authority","effective_at","scope"))
+                or not isinstance(evidence.get("parties"),list) or len(evidence["parties"]) < 2):
+            raise SFCProjectionStoreError("stored legal forgiveness lacks complete legal evidence")
+
+
 def _map_payload_event(event_payload):
     """Re-derive projection deltas from the immutable source event envelope."""
+    _verify_event_payload_semantics(event_payload)
     instruments, controls = [], []
     component = event_payload.get("component")
     event_type = event_payload.get("event_type")
     postings = event_payload.get("postings")
-    if component not in ("T","V","O") or not isinstance(postings,list):
-        raise SFCProjectionStoreError("stored event lacks canonical projection metadata")
     for line in postings:
         if line.get("account") in INSTRUMENT_ACCOUNTS:
             identity = SFCIdentity(
