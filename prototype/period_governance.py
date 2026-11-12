@@ -443,7 +443,7 @@ class PeriodGovernance:
                            checkpoint_ref, checkpoint_digest):
         request_id = _required(request_id, "request_id")
         global_reconcile = _sha256(global_reconciliation_hash, "global_reconciliation_hash")
-        ref, digest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
+        ref, digest, manifest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
