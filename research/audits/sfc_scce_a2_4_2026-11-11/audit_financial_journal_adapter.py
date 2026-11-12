@@ -68,6 +68,12 @@ def main():
                  EntityJournalError, "interest_payment with wrong T/V/O component was accepted")
     _must_reject(lambda: EntityJournal(registry).post(replace(events[6], legal_evidence=None)),
                  EntityJournalError, "legal forgiveness without legal evidence was accepted")
+    bad_allowance = replace(events[3], lines=tuple(
+        replace(line, currency=None, valuation_basis=None)
+        if line.account == "impairment_allowance" else line
+        for line in events[3].lines))
+    _must_reject(lambda: EntityJournal(registry).post(bad_allowance),
+                 EntityJournalError, "impairment control without explicit valuation dimensions was accepted")
     _must_reject(lambda: _posting_payload(replace(events[1].lines[1], currency="")),
                  JournalStoreAdapterError, "empty optional field was silently discarded")
 
@@ -87,6 +93,10 @@ def main():
         }
         saved = store.get_group("gold2a-complete")
         assert [e["event_type"] for e in saved["events"]] == [e.event_type for e in events]
+        allowance_posting = next(p for p in saved["events"][3]["postings"]
+                                 if p["account"] == "impairment_allowance")
+        assert allowance_posting["currency"] == "LCU"
+        assert allowance_posting["valuation_basis"] == "NOMINAL"
         writeoff = saved["events"][5]
         assert (writeoff["component"], writeoff["legal_effect"], writeoff["writeoff_claim_delta"]) == (
             "O", "accounting_derecognition_no_legal_extinguishment", "15")
