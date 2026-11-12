@@ -318,6 +318,39 @@ def _verify_event_payload_semantics(event_payload):
         if actual.get(account,[]).count(side) != count or len(actual.get(account,[])) != count:
             raise SFCProjectionStoreError("stored event account-side contract mismatch")
     amount = next(iter(amounts))
+    claim_accounts = {"loan_asset","loan_liability","deposit_asset","deposit_liability",
+                      "interest_receivable","interest_payable"}
+    asset_claims, liability_claims = {}, {}
+    for line in postings:
+        account = line.get("account")
+        if account not in claim_accounts:
+            continue
+        identity_fields = ("instrument_id","instrument_class","currency","maturity",
+                           "denomination","valuation_basis")
+        if any(not isinstance(line.get(field),str) or not line[field].strip()
+               for field in identity_fields):
+            raise SFCProjectionStoreError("stored claim posting has incomplete instrument identity")
+        if account in {"loan_asset","deposit_asset","interest_receivable"}:
+            if not all(isinstance(line.get(field),str) and line[field].strip()
+                       for field in ("entity_id","institutional_sector","issuer_entity_id","issuer_sector")):
+                raise SFCProjectionStoreError("stored claim asset lacks holder/issuer identity")
+            key = tuple(line[field] for field in identity_fields[:2]) + (
+                line["entity_id"],line["institutional_sector"],line["issuer_entity_id"],
+                line["issuer_sector"]) + tuple(line[field] for field in identity_fields[2:])
+            signed = D(line["amount"]) if line["side"]=="D" else -D(line["amount"])
+            asset_claims[key] = _sum_exact((asset_claims.get(key,D("0")),signed))
+        else:
+            if not all(isinstance(line.get(field),str) and line[field].strip()
+                       for field in ("entity_id","institutional_sector","counterparty_entity_id","counterparty_sector")):
+                raise SFCProjectionStoreError("stored claim liability lacks issuer/holder identity")
+            key = tuple(line[field] for field in identity_fields[:2]) + (
+                line["counterparty_entity_id"],line["counterparty_sector"],line["entity_id"],
+                line["institutional_sector"]) + tuple(line[field] for field in identity_fields[2:])
+            signed = D(line["amount"]) if line["side"]=="C" else -D(line["amount"])
+            liability_claims[key] = _sum_exact((liability_claims.get(key,D("0")),signed))
+    if event_type in {"bank_loan_origination","interest_accrual","interest_payment",
+                      "principal_repayment","legal_debt_forgiveness"} and asset_claims != liability_claims:
+        raise SFCProjectionStoreError("stored claim holder/issuer movement mirror mismatch")
     if event_type == "creditor_write_off":
         if D(event_payload.get("writeoff_claim_delta")) != amount:
             raise SFCProjectionStoreError("stored write-off memo delta mismatch")
