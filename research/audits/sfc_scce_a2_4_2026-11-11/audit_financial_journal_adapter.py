@@ -37,6 +37,9 @@ def _fixture():
     # dimensions, including an explicitly selected local currency, survive.
     expense = make_line(registry, period, "ordinary_expense", "D", 1, "household-1")
     expense_payload = _posting_payload(expense)
+    assert expense.counterparty_entity_id is None
+    assert expense.issuer_entity_id is None
+    assert expense.currency is None
     assert "currency" not in expense_payload
     assert "instrument_id" not in expense_payload
     explicit_currency = make_line(

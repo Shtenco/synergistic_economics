@@ -116,8 +116,8 @@ def make_line(registry, period, account, side, amount, entity_id,
               instrument_class=None, currency=None, maturity=None,
               denomination=None, valuation_basis=None):
     sector = registry.sector_of(entity_id, period)
-    counterparty_sector = registry.sector_of(counterparty, period) if counterparty else ""
-    issuer_sector = registry.sector_of(issuer, period) if issuer else ""
+    counterparty_sector = registry.sector_of(counterparty, period) if counterparty else None
+    issuer_sector = registry.sector_of(issuer, period) if issuer else None
     return JournalLine(
         account, side, D(str(amount)), entity_id, sector,
         counterparty, counterparty_sector, issuer, issuer_sector,
