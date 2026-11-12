@@ -52,8 +52,9 @@ def main():
                 availability=1.0, utilization=1.0, service_quality=1.0))
     opening_cohorts = tuple(cohorts)
     cohort_state = initial_cohort_state(opening_cohorts)
+    capital_event_id = f"{scenario_id}::CAPITAL::001"
     cohort_event = CohortEvent(
-        scenario_id, "asset-cell-4-A", "state_transition", 1.0,
+        capital_event_id, "asset-cell-4-A", "state_transition", 1.0,
         "operating", "repair")
     cohort_result = advance_cohort_period(cohort_state, (cohort_event,), (), 1)
     baseline_services = {cell_id: (2.0 if cell_id == "cell-4" else 1.0)
@@ -72,8 +73,9 @@ def main():
 
     # 2) Physical flow endpoint register and native-unit product valuation.
     physical = PhysicalFlowRegister()
+    physical_flow_id = f"{scenario_id}::PHYSICAL::001"
     outflow, inflow = pair(
-        scenario_id, "cell-2", "cell-4", "2.5",
+        physical_flow_id, "cell-2", "cell-4", "2.5",
         product="materials", grade="standard", unit="t",
         period="P1", flow_class="internal_transfer",
         origin_boundary="SCCE", destination_boundary="SCCE",
@@ -87,7 +89,7 @@ def main():
     product = ProductSpec("materials","standard","mass","t","stockable","period_flow")
     quantity = PhysicalQuantity("materials","standard",D("2.5"),"t","P1","SCCE")
     price = UnitPrice("materials","standard",D("4"),"t","LCU","P1",
-                      "synthetic_basic_price",scenario_id)
+                      "synthetic_basic_price",f"{scenario_id}::PRICE::001")
     valuation = value_quantity(product,quantity,price)
     assert valuation.quantity == D("2.5") and valuation.value == D("10")
     assert valuation.source_id == scenario_id
@@ -99,7 +101,8 @@ def main():
         Interval("rest",D("48"),D("104"),"rest"),
     ))
     delivered = delivered_hours(8,7,6,5,"delivered",6)
-    labour_event = {"event_id":scenario_id,"period":1,"allocated_hours":allocated,
+    labour_event = {"event_id":f"{scenario_id}::LABOUR::001","scenario_id":scenario_id,
+                    "period":1,"allocated_hours":allocated,
                     "delivered_hours":delivered,"consent_state":"delivered"}
     assert labour_event["delivered_hours"] <= labour_event["allocated_hours"]
 
@@ -148,6 +151,14 @@ def main():
         "valuation_source_id":valuation.source_id,
         "financial_causation_id":group["causation_id"],
         "scce_event_key":model.events[-1]["key"],
+        "register_envelopes": (
+            {"register":"scce","scenario_id":scenario_id,"event_id":model.events[-1]["key"]},
+            {"register":"physical","scenario_id":scenario_id,"event_id":outflow.flow_id},
+            {"register":"capital","scenario_id":scenario_id,"event_id":cohort_event.event_id},
+            {"register":"labour","scenario_id":scenario_id,"event_id":labour_event["event_id"]},
+            {"register":"product_valuation","scenario_id":scenario_id,"event_id":valuation.source_id},
+            {"register":"financial","scenario_id":scenario_id,"event_id":group["group_id"]},
+        ),
         "physical_period":outflow.period,
         "capital_period":cohort_result.period,
         "labour_period":labour_event["period"],
@@ -155,9 +166,16 @@ def main():
         "physical_unit":valuation.native_unit,
         "financial_currency":valuation.currency,
     }
-    assert {manifest[k] for k in (
-        "scenario_id","physical_flow_id","capital_event_id","labour_event_id",
-        "valuation_source_id","financial_causation_id","scce_event_key")} == {scenario_id}
+    envelopes = manifest["register_envelopes"]
+    assert len(envelopes) == 6
+    assert {row["scenario_id"] for row in envelopes} == {scenario_id}
+    assert {row["event_id"] for row in envelopes} == {
+        manifest["physical_flow_id"], manifest["capital_event_id"],
+        manifest["labour_event_id"], manifest["valuation_source_id"],
+        manifest["scce_event_key"], group["group_id"],
+    }
+    assert len({row["event_id"] for row in envelopes}) == 6
+    assert manifest["financial_causation_id"] == scenario_id
     assert manifest["physical_period"] == "P1"
     assert manifest["capital_period"] == manifest["labour_period"] == 1
     assert manifest["financial_event_periods"] == [1,2,3,4]
@@ -166,7 +184,7 @@ def main():
     print("A2.4.7 unified synthetic cross-register fixture: PASS")
     print("SCCE production, cohort service, physical flow, product valuation and labour/consent controls closed")
     print("GOLD-2A financial event store, T/V/O, control positions, coverage and replay closed")
-    print("one scenario provenance ID links all registers; native units and currency remain distinct")
+    print("one scenario root links six distinct register event IDs; native units and currency remain distinct")
     print("LIMIT: no single production transaction spans all registers; Gate 2 runtime closure remains OPEN")
 
 
