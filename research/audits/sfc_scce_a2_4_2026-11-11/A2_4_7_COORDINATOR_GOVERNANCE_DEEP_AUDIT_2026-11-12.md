@@ -14,16 +14,17 @@ No successful execution is inferred from source inspection. The six SQLite parti
 
 ## Findings
 
-### F-CR-01 — execute retry is not idempotent after terminal state
+### F-CR-01 — execute retry idempotency (IMPLEMENTED; CI PENDING)
 
 `submit()` treats identical transaction-envelope delivery as idempotent, and `recover()` returns terminal state. However, `execute()` unconditionally attempts `NEW/PREPARING` transition before inspecting the existing transaction state. Re-executing an already `COMMITTED` or `ABORTED` transaction therefore raises an illegal-transition error rather than returning its durable terminal result.
 
-**Required remediation**
-- Make `execute(txid)` inspect durable state first.
-- For `COMMITTED`, verify all six participant effects and receipts, then return the committed result without mutation.
-- For `ABORTED`, return the terminal abort result without retrying prepare.
-- Reject changed-envelope reuse as today.
-- Add tests for retry after lost client response, retry after process restart, and retry of terminal abort.
+**Remediation committed**
+- `execute(txid)` now inspects durable state before attempting any transition.
+- `COMMITTED` returns only after native-event visibility verification; `ABORTED` returns the terminal abort result; decision-in-progress states resume through recovery.
+- The crash matrix now retries `execute()` after recovery at all 27 crash points and tests terminal committed/aborted retries.
+- A lost-response retry and changed-envelope replay controls are included.
+
+**Remaining validation:** execute the complete crash matrix on the exact resulting HEAD. Concurrent worker fencing remains a separate open finding (F-CR-02).
 
 ### F-CR-02 — concurrent coordinator workers are not fenced
 
@@ -34,15 +35,16 @@ The coordinator uses SQLite transactions for individual state changes, but the p
 - Require every state transition and participant call sequence to carry the current fencing epoch.
 - Add two-process race tests for execute-vs-execute, execute-vs-recover, and recover-vs-recover at prepare and commit boundaries.
 
-### F-CR-03 — visibility barrier verifies inbox receipts, not the native event row
+### F-CR-03 — native-event visibility verification (IMPLEMENTED; CI PENDING)
 
 `is_visible()` checks coordinator state, participant inbox state and receipt equality. It does not independently read the participant's native event row and verify native event ID, stream, revision and payload digest. The current SQLite participant writes event and receipt in one transaction, but the barrier's proof is weaker than the production contract it is intended to represent.
 
-**Required remediation**
-- Add a participant-side `verify_committed_effect(txid, expected_operation, receipt)` contract.
-- Verify exactly one native event exists with matching transaction ID, event ID, stream ID, next revision and canonical payload digest.
-- Have `is_visible()` call all six participant verifiers and fail closed on missing, duplicated, altered or inaccessible native records.
-- Add tamper controls that remove or alter a native event while leaving inbox/receipt metadata intact.
+**Remediation committed**
+- The protocol participant now exposes its persisted native event record separately from its inbox receipt.
+- `is_visible()` requires exactly one native event and verifies transaction ID, native event ID, stream, next revision, canonical payload and digest against the coordinator operation.
+- The crash-matrix audit deletes a native event while retaining the committed inbox/receipt and requires visibility to fail closed; a repeated execute must reject the inconsistent terminal transaction.
+
+**Remaining validation:** execute the tamper control and full crash matrix on the exact resulting HEAD. Production adapters still need their own authoritative-store verifier.
 
 ### F-GOV-01 — approval roles are caller-asserted, not authenticated
 
@@ -93,6 +95,13 @@ The DR fixture computes `event_log_root` from the coordinator transaction envelo
 - Include the participant set and schema/version domain separator.
 - Recompute the root independently before and after restore and compare it to the signed manifest.
 - Add reorder, omission, duplicate, changed-payload and changed-receipt negative controls.
+
+## Remediation commits — 12 November 2026
+
+- `209c442b3f8f9093c2bbd4f405a097a6efc6ef10`: terminal-state idempotent execute/recovery handling and native-event verification in the visibility barrier.
+- `5921b7ede87aee223042d83fe9f08efd8b039a5f`: crash-matrix assertions for repeated execute, terminal abort retry and native-event deletion tampering.
+
+These are source/test commits, not execution evidence. The full CI run must complete on the resulting exact HEAD before either remediation is marked PASS.
 
 ## Crash matrix review
 
