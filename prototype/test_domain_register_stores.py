@@ -67,7 +67,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
         for name,sql in cases:
             with self.subTest(name=name),tempfile.TemporaryDirectory() as tmp:
                 db=Path(tmp)/"p.db"; st=PhysicalFlowStore(db); st.append(*flow_pair("F-1","mine","mill",12))
-                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER physical_flows_no_update"); con.execute(sql)
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER physical_flows_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
                 for read in (st.flow_count,lambda:st.node_net("mine","steel","S235","P1","t"),lambda:st.consolidated_net({"mine","mill"},"steel","S235","P1","t")):
                     with self.assertRaises(Exception): read()
@@ -80,7 +80,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 opening=(CapitalCohort("C1","cell-1","machine",2020,6,10,10,"operating",.9,.8,.95),)
                 ev=(CohortEvent("E1","C1","physical_loss",2,"operating",None,"accident"),)
                 st.initialize(opening); st.append_period(2026,ev,())
-                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER capital_cohort_periods_no_update"); con.execute(sql)
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER capital_cohort_periods_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
                 with self.assertRaises(Exception): st.current_state()
 
@@ -94,7 +94,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 price=PriceQuote("P1-PRICE","steel","S235",D("2"),"t","LCU","P1","basic_price","SRC-1","PRICE-E1")
                 val=ValuationRecord("V1","B1","P1-PRICE","output",D("20"),"VAL-E1")
                 st.register_product(spec); st.record_balance(bal); st.record_price(price); st.record_valuation(val)
-                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER product_events_no_update"); con.execute(sql)
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER product_events_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
                 with self.assertRaises(Exception): st.valuation("V1")
 
@@ -114,7 +114,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 prev=con.execute("SELECT chain_hash FROM physical_flows WHERE flow_id='ORIG'").fetchone()[0]
                 chain=PhysicalFlowStore._chain_hash(seq,"CORR",digest,prev)
                 con.execute("UPDATE physical_flows SET payload_json=?,payload_sha256=?,previous_hash=?,chain_hash=? WHERE flow_id='CORR'",(encoded,digest,prev,chain))
-                con.execute("UPDATE physical_flow_meta SET tail_hash=? WHERE singleton_id=1",(chain,))
+                con.execute("UPDATE physical_flow_meta SET tail_hash=? WHERE singleton_id=1",(chain,)); con.commit()
             self.assertFalse(st.verify())
             with self.assertRaises(Exception): st.node_net("mine","steel","S235","P1","t")
 
