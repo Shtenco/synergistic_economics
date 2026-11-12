@@ -10,10 +10,7 @@ on:
       - "prototype/**"
       - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - ".github/workflows/scc-c2-validation.yml"
-    paths:
-      - "prototype/**"
-      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
-      - ".github/workflows/scc-c2-validation.yml"
+
   workflow_dispatch:
 
 jobs:
