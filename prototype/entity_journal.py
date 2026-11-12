@@ -363,8 +363,9 @@ class EntityJournal:
 
         # Reserve is a contra-asset: recognition credits it, write-off consumes it.
         if event.event_type == "impairment_allowance_recognition":
-            if event.lines[1].account != "impairment_allowance":
-                raise EntityJournalError("impairment event must recognize the allowance")
+            allowance = composition["impairment_allowance"][0]
+            _required_text(allowance.currency, "impairment_allowance.currency")
+            _required_text(allowance.valuation_basis, "impairment_allowance.valuation_basis")
         if event.event_type == "creditor_write_off":
             loan = composition["loan_asset"][0]
             allowance = composition["impairment_allowance"][0]
