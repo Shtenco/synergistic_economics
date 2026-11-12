@@ -352,8 +352,8 @@ class PeriodGovernance:
                 request = con.execute(
                     "SELECT state FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()
-                if request is None or request["state"] != "REQUESTED":
-                    raise PeriodGovernanceError("reopen request is not awaiting approvals")
+                if request is None:
+                    raise PeriodGovernanceError("unknown reopen request")
                 existing = con.execute(
                     "SELECT approver_id,evidence_ref FROM reopen_approvals "
                     "WHERE request_id=? AND approval_role=?", (request_id, role)
@@ -363,6 +363,8 @@ class PeriodGovernance:
                         raise PeriodGovernanceError("approval role already recorded by another approver")
                     con.execute("COMMIT")
                     return False
+                if request["state"] != "REQUESTED":
+                    raise PeriodGovernanceError("reopen request is not awaiting approvals")
                 other = con.execute(
                     "SELECT approver_id FROM reopen_approvals WHERE request_id=?",
                     (request_id,)
