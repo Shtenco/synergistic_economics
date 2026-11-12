@@ -65,6 +65,10 @@ def main():
         close_ref, close_digest = _checkpoint(signer, anchor, 1, 0)
         verify = lambda ref, digest: _verify_bool(ref, digest, trust, anchor)
         governance = PeriodGovernance(root / "period-governance.sqlite3", verify, "synergy-period-governance")
+        wrong_service = PeriodGovernance(root / "wrong-service.sqlite3", verify, "another-ledger")
+        _rejects(lambda: wrong_service.close_period(
+            7, 0, close_ref, close_digest, "controller-A"
+        ), "checkpoint from another service identity was accepted")
 
         assert governance.close_period(7, 0, close_ref, close_digest, "controller-A")
         assert not governance.close_period(7, 0, close_ref, close_digest, "controller-A")
