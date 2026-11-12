@@ -128,6 +128,16 @@ class SQLiteRepositoryTests(unittest.TestCase):
         with self.assertRaises(SQLiteRepositoryError):
             self.repo.recover()
 
+    def test_aggregate_version_divergence_from_event_log_fails_closed(self):
+        self.execute()
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE aggregates SET version=2")
+        con.commit()
+        con.close()
+        with self.assertRaises(SQLiteRepositoryError):
+            self.repo.recover()
+
     def test_event_tampering_fails_closed(self):
         self.execute()
         import sqlite3

@@ -393,6 +393,16 @@ class SQLiteEventRepository:
         for key, versions in aggregate_versions.items():
             if versions != set(range(1, max(versions) + 1)):
                 raise SQLiteRepositoryError("aggregate event version history has a gap")
+        heads = con.execute(
+            "SELECT aggregate_type,aggregate_id,version FROM aggregates"
+        ).fetchall()
+        for head in heads:
+            key = (head["aggregate_type"], head["aggregate_id"])
+            expected_head = max(aggregate_versions.get(key, {0}))
+            if head["version"] != expected_head:
+                raise SQLiteRepositoryError("aggregate head version differs from canonical event history")
+        if set(aggregate_versions) - {(h["aggregate_type"], h["aggregate_id"]) for h in heads}:
+            raise SQLiteRepositoryError("event history references an unregistered aggregate")
         event_by_id = {e["event_id"]: e for e in events}
         for row in outbox:
             linked = event_by_id.get(row["event_id"])
