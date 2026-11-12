@@ -15,6 +15,7 @@ AUDIT_DIR = ROOT / "research" / "audits" / "sfc_scce_a2_4_2026-11-11"
 from entity_journal import EntityJournal, EntityJournalError, EntityRegistry, JournalEvent, LegalEvidence, SectorMembership, make_line
 from financial_event_store import FinancialEventStore
 from financial_journal_adapter import JournalStoreAdapterError, _posting_payload, append_validated_group
+from sfc_projection_store import _map_event
 
 
 def _corpus_events():
@@ -76,6 +77,10 @@ def main():
                  EntityJournalError, "impairment control without explicit valuation dimensions was accepted")
     _must_reject(lambda: _posting_payload(replace(events[1].lines[1], currency="")),
                  JournalStoreAdapterError, "empty optional field was silently discarded")
+    usd_allowance = replace(events[3], lines=tuple(
+        replace(line, currency="USD") if line.account == "impairment_allowance" else line
+        for line in events[3].lines))
+    assert _map_event(usd_allowance)[1][0][3:5] == ("USD", "NOMINAL")
 
     # A non-instrument journal line retains absent dimensions as absent.
     payload = _posting_payload(events[1].lines[1])
