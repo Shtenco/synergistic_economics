@@ -22,11 +22,19 @@ from sfc_projection_store import append_projected_group, verify_projection_repla
 
 CRASH_EXIT = 83
 STAGES = (
+    "INSERT INTO SFC_PROJECTION_POSITIONS",
+    "INSERT INTO SFC_CONTROL_POSITIONS",
+    "INSERT INTO SFC_PROJECTION_RUNTIME",
     "INSERT INTO EVENT_GROUPS",
     "INSERT INTO EVENTS(",
     "INSERT INTO JOURNAL_LINES",
+    "INSERT INTO SFC_PROJECTION_POSITIONS",
+    "UPDATE SFC_PROJECTION_POSITIONS SET",
+    "UPDATE SFC_PROJECTION_RUNTIME SET CURRENT_PERIOD",
+    "INSERT INTO SFC_SECTOR_FLOWS",
     "INSERT INTO SFC_EVENT_COVERAGE",
     "INSERT INTO SFC_INSTRUMENT_DELTAS",
+    "UPDATE SFC_CONTROL_POSITIONS SET",
     "INSERT INTO SFC_CONTROL_DELTAS",
     "INSERT INTO SFC_PROJECTION_EVENT_CHECKPOINTS",
     "UPDATE SFC_PROJECTION_RUNTIME SET APPLIED_COMMIT_SEQUENCE",
@@ -120,6 +128,7 @@ def _run_parent():
         with closing(source._connect()) as src, closing(sqlite3.connect(backup_path)) as dst:
             src.backup(dst)
             assert dst.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert dst.execute("PRAGMA foreign_key_check").fetchall() == []
         backup = FinancialEventStore(backup_path)
         assert verify_projection_replay(backup), "backup failed independent projection replay"
 
