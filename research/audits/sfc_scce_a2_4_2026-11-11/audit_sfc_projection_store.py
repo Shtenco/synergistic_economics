@@ -136,6 +136,16 @@ def main():
             con.execute("""UPDATE sfc_projection_positions SET closing_balance='61'
                 WHERE instrument_id='LOAN-001' AND period=4""")
         assert verify_projection_replay(reopened) is False
+        corrupted_retry_journal = EntityJournal(registry)
+        try:
+            append_projected_group(
+                corrupted_retry_journal,reopened,"gold2a-p2",events,
+                causation_id="gold2a-atomic-control")
+        except SFCProjectionStoreError:
+            pass
+        else:
+            raise AssertionError("idempotent retry accepted a corrupted materialized projection")
+        assert corrupted_retry_journal.events == {}
 
     print("A2.4.4 P2 projection-aware atomic append: PASS")
     print("event journal, instrument/control positions, per-event coverage and cursor committed atomically")
