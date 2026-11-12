@@ -120,12 +120,22 @@ class SQLiteEventRepository:
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS events_aggregate_order
                     ON events(aggregate_type,aggregate_id,aggregate_version,event_ordinal);
+                CREATE TRIGGER IF NOT EXISTS events_no_update BEFORE UPDATE ON events
+                    BEGIN SELECT RAISE(ABORT,'canonical events are immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS events_no_delete BEFORE DELETE ON events
+                    BEGIN SELECT RAISE(ABORT,'canonical events are immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS commands_no_update BEFORE UPDATE ON commands
+                    BEGIN SELECT RAISE(ABORT,'command receipts are immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS commands_no_delete BEFORE DELETE ON commands
+                    BEGIN SELECT RAISE(ABORT,'command receipts are immutable'); END;
                 CREATE TABLE IF NOT EXISTS outbox(
                     event_id TEXT PRIMARY KEY REFERENCES events(event_id),
                     sequence INTEGER NOT NULL,
                     published_at TEXT,
                     attempts INTEGER NOT NULL DEFAULT 0
                 );
+                CREATE TRIGGER IF NOT EXISTS outbox_no_delete BEFORE DELETE ON outbox
+                    BEGIN SELECT RAISE(ABORT,'outbox delivery records are immutable'); END;
             """)
             version = con.execute(
                 "SELECT schema_version FROM repository_meta WHERE singleton=1"

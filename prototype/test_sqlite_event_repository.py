@@ -138,10 +138,26 @@ class SQLiteRepositoryTests(unittest.TestCase):
         with self.assertRaises(SQLiteRepositoryError):
             self.repo.recover()
 
+    def test_canonical_events_and_receipts_are_immutable(self):
+        self.execute()
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("UPDATE events SET event_type='forged'")
+        con.rollback()
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("UPDATE commands SET result_json='{}'")
+        con.rollback()
+        with self.assertRaises(sqlite3.IntegrityError):
+            con.execute("DELETE FROM outbox")
+        con.rollback()
+        con.close()
+
     def test_event_tampering_fails_closed(self):
         self.execute()
         import sqlite3
         con = sqlite3.connect(self.db)
+        con.execute("DROP TRIGGER events_no_update")
         con.execute("UPDATE events SET envelope_json=?", ('{"tampered":true}',))
         con.commit()
         con.close()
