@@ -106,23 +106,30 @@ class SignedApprovalVerifier:
             con.commit()
 
     def _decode_and_verify(self, token):
-        if not isinstance(token, str) or len(token) > 16384 or token.count(".") != 1:
-            raise ApprovalAssertionError("approval evidence must be a compact payload.signature assertion")
-        payload_segment, signature_segment = token.split(".")
+        if not isinstance(token, str) or len(token) > 16384 or token.count(".") != 2:
+            raise ApprovalAssertionError("approval evidence must be a compact EdDSA JWS")
+        header_segment, payload_segment, signature_segment = token.split(".")
+        header_bytes = _b64decode(header_segment)
         payload_bytes = _b64decode(payload_segment)
         signature = _b64decode(signature_segment)
         if len(signature) != 64:
             raise ApprovalAssertionError("Ed25519 signature must contain 64 bytes")
         try:
+            header = json.loads(header_bytes.decode("utf-8"))
             payload = json.loads(payload_bytes.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-            raise ApprovalAssertionError("assertion payload is not valid UTF-8 JSON") from exc
+            raise ApprovalAssertionError("JWS header or payload is not valid UTF-8 JSON") from exc
+        if not isinstance(header, dict) or set(header) != _HEADER_FIELDS:
+            raise ApprovalAssertionError("JWS protected header does not match the strict schema")
+        if (_canonical(header) != header_bytes or header["alg"] != "EdDSA"
+                or header["typ"] != "JWT"):
+            raise ApprovalAssertionError("only canonical JWT JWS with EdDSA is accepted")
+        if not isinstance(header["kid"], str) or not header["kid"] or header["kid"] != header["kid"].strip():
+            raise ApprovalAssertionError("JWS kid must be trimmed non-empty text")
         if not isinstance(payload, dict) or set(payload) != _FIELDS:
             raise ApprovalAssertionError("assertion claims do not match the strict schema")
         if _canonical(payload) != payload_bytes:
             raise ApprovalAssertionError("assertion payload is not canonical JSON")
-        if payload["alg"] != "EdDSA":
-            raise ApprovalAssertionError("only EdDSA/Ed25519 assertions are accepted")
         for field in ("iss", "sub", "aud", "service_id", "request_id",
                       "request_digest", "role", "evidence_ref", "jti", "kid"):
             value = payload[field]
@@ -141,19 +148,19 @@ class SignedApprovalVerifier:
         if payload["iss"] != self.issuer or payload["aud"] != self.audience:
             raise ApprovalAssertionError("assertion issuer or audience is not trusted")
         try:
-            raw_key = self.key_resolver(payload["iss"], payload["kid"])
+            raw_key = self.key_resolver(payload["iss"], header["kid"])
         except Exception as exc:
             raise ApprovalAssertionError("trusted signing-key lookup failed") from exc
         if not isinstance(raw_key, bytes) or len(raw_key) != 32:
             raise ApprovalAssertionError("assertion signing key is not trusted")
         try:
             Ed25519PublicKey.from_public_bytes(raw_key).verify(
-                signature, _DOMAIN + payload_segment.encode("ascii")
+                signature, (header_segment + "." + payload_segment).encode("ascii")
             )
         except (InvalidSignature, ValueError) as exc:
             raise ApprovalAssertionError("approval assertion signature is invalid") from exc
         try:
-            revoked = self.is_revoked(payload["iss"], payload["kid"], payload["jti"])
+            revoked = self.is_revoked(payload["iss"], header["kid"], payload["jti"])
         except Exception as exc:
             raise ApprovalAssertionError("live revocation check failed") from exc
         if revoked is not False:
@@ -182,7 +189,7 @@ class SignedApprovalVerifier:
         for claim, value in expected.items():
             if payload[claim] != value:
                 raise ApprovalAssertionError(f"approval assertion {claim} does not match the request")
-        assertion_digest = hashlib.sha256(canonical).hexdigest()
+        assertion_digest = hashlib.sha256(token.encode("ascii")).hexdigest()
         with closing(sqlite3.connect(self.database_path, timeout=30)) as con:
             con.execute("PRAGMA synchronous=FULL")
             con.execute("BEGIN IMMEDIATE")
