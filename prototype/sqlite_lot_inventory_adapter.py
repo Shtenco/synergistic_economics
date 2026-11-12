@@ -139,6 +139,13 @@ def _replay_inventory_projection(events):
     for envelope in events:
         if envelope.get("aggregate_type") != AGGREGATE_TYPE or envelope.get("aggregate_id") != AGGREGATE_ID:
             raise SQLiteLotInventoryError("inventory replay encountered a foreign aggregate event")
+        payload = envelope.get("payload")
+        domain_id = payload.get("domain_aggregate_id") if isinstance(payload, dict) else None
+        domain_version = payload.get("domain_aggregate_version") if isinstance(payload, dict) else None
+        if (not isinstance(domain_id, str) or not domain_id.strip()
+                or isinstance(domain_version, bool) or not isinstance(domain_version, int)
+                or domain_version < 1):
+            raise SQLiteLotInventoryError("canonical event lost its original P6.1 aggregate identity/version")
         commands.setdefault(envelope.get("command_id"), []).append(envelope)
     for command_id, group in commands.items():
         deltas = [
@@ -156,8 +163,29 @@ def _replay_inventory_projection(events):
             "lots_upsert", "lots_remove",
             "reservations_upsert", "reservations_remove",
         }
-        if not isinstance(delta, dict) or set(delta) != required:
+        if (not isinstance(delta, dict) or set(delta) != required
+                or any(not isinstance(delta[key], list) for key in required)):
             raise SQLiteLotInventoryError("malformed inventory projection delta")
+        lot_removals = delta["lots_remove"]
+        reservation_removals = delta["reservations_remove"]
+        if (any(not isinstance(key, str) or not key for key in lot_removals + reservation_removals)
+                or len(set(lot_removals)) != len(lot_removals)
+                or len(set(reservation_removals)) != len(reservation_removals)):
+            raise SQLiteLotInventoryError("projection removals require unique non-empty identities")
+        lot_upserts = delta["lots_upsert"]
+        reservation_upserts = delta["reservations_upsert"]
+        lot_upsert_ids = [row.get("lot_id") for row in lot_upserts if isinstance(row, dict)]
+        reservation_upsert_ids = [
+            row.get("reservation_id") for row in reservation_upserts if isinstance(row, dict)
+        ]
+        if (len(lot_upsert_ids) != len(lot_upserts)
+                or len(reservation_upsert_ids) != len(reservation_upserts)
+                or any(not isinstance(key, str) or not key for key in lot_upsert_ids + reservation_upsert_ids)
+                or len(set(lot_upsert_ids)) != len(lot_upsert_ids)
+                or len(set(reservation_upsert_ids)) != len(reservation_upsert_ids)
+                or set(lot_upsert_ids) & set(lot_removals)
+                or set(reservation_upsert_ids) & set(reservation_removals)):
+            raise SQLiteLotInventoryError("projection upserts/removals contain conflicting identities")
         lots = {row["lot_id"]: row for row in state["lots"]}
         reservations = {row["reservation_id"]: row for row in state["reservations"]}
         for lot_id in delta["lots_remove"]:
@@ -246,7 +274,15 @@ class SQLiteLotInventory:
             raw_events = []
             for raw in receipt.events:
                 event = dict(raw)
-                # One root version covers every record touched by this command.
+                payload = event.get("payload")
+                if not isinstance(payload, dict):
+                    raise SQLiteLotInventoryError("domain event payload must be a mapping")
+                payload = dict(payload)
+                # Preserve the original P6.1 aggregate identity/version while
+                # assigning the durable inventory-book root version.
+                payload["domain_aggregate_id"] = event.get("aggregate_id")
+                payload["domain_aggregate_version"] = event.get("aggregate_version")
+                event["payload"] = payload
                 event["aggregate_id"] = AGGREGATE_ID
                 event["aggregate_version"] = version + 1
                 raw_events.append(event)

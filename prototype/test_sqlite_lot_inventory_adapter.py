@@ -88,6 +88,18 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
         self.assertEqual(reservation.remaining_quantity, Decimal("0"))
         self.assertEqual(reservation.status, "RELEASED")
 
+        canonical_events = self.inventory.repository.verified_snapshot(
+            "inventory_book", "inventory-book"
+        )["events"]
+        self.assertEqual(
+            [row["payload"]["domain_aggregate_id"] for row in canonical_events],
+            ["lot-1", "lot-1", "reservation-1", "lot-1", "reservation-1", "lot-1"],
+        )
+        self.assertEqual(
+            [row["payload"]["domain_aggregate_version"] for row in canonical_events],
+            [1, 2, 2, 3, 3, 4],
+        )
+
         # A retry of the first command after five later commands must use its
         # original expected aggregate version and return the original receipt.
         version_before = self.inventory.repository.load_aggregate(
