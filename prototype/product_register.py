@@ -195,12 +195,16 @@ class ProductRegister:
             typ=row["event_type"]
             if typ=="product_spec":
                 s=ProductSpec(**payload); _validate_spec(s)
+                if row["event_id"] != f"SPEC:{s.product_id}:{s.grade_id}":
+                    raise ProductRegisterError("product specification event ID mismatch")
                 key=(s.product_id,s.grade_id)
                 if key in specs: raise ProductRegisterError("duplicate product/grade specification")
                 specs[key]=s
             elif typ=="product_balance":
                 b=ProductBalance(**(payload | {k:D(payload[k]) for k in
                     ("opening","output","imports","intermediate","final","gfcf","exports","losses","closing")}))
+                if row["event_id"] != b.balance_id:
+                    raise ProductRegisterError("product balance event ID mismatch")
                 key=(b.product_id,b.grade_id)
                 if key not in specs: raise ProductRegisterError("balance references unknown product")
                 stream=(b.product_id,b.grade_id,b.boundary)
@@ -209,6 +213,8 @@ class ProductRegister:
                 balances[b.balance_id]=b; streams[stream]=b
             elif typ=="price_quote":
                 p=PriceQuote(**(payload | {"price":D(payload["price"])}))
+                if row["event_id"] != p.price_id:
+                    raise ProductRegisterError("price quote event ID mismatch")
                 key=(p.product_id,p.grade_id)
                 if key not in specs: raise ProductRegisterError("price references unknown product")
                 _validate_price(p,specs[key])
@@ -216,6 +222,8 @@ class ProductRegister:
                 prices[p.price_id]=p
             elif typ=="valuation":
                 v=ValuationRecord(**(payload | {"value":D(payload["value"])}))
+                if row["event_id"] != v.valuation_id:
+                    raise ProductRegisterError("valuation event ID mismatch")
                 if v.price_id not in prices or v.balance_id not in balances:
                     raise ProductRegisterError("valuation references unknown price or balance")
                 _validate_valuation(v,prices[v.price_id],balances[v.balance_id])
