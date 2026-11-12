@@ -127,3 +127,18 @@ therefore remains OPEN even if this fixture passes.
 
 No empirical synergy claim, legal enforceability opinion, distributed
 exactly-once guarantee or production readiness follows from this implementation.
+
+
+## 8. Crash/restart and backup audit extension — 12 November 2026
+
+The independent replay query was corrected to select the coverage row's own `group_id` before comparing it with the immutable event envelope. Without that selected column, the verifier would fail closed with a missing-row-key error rather than complete the intended ownership check.
+
+Added `audit_p2_crash_recovery.py`. It launches a child process and terminates it with `os._exit` after each selected SQL boundary: group envelope, event envelope, journal posting, coverage, instrument delta, control delta, event checkpoint, cursor update, group checkpoint and COMMIT. On restart it requires all pre-COMMIT crashes to leave zero committed event groups and then verifies a successful idempotent retry; a post-COMMIT crash must recover the fully committed group and refuse duplicate application. The audit also creates a SQLite online backup, runs `integrity_check`, replays the backup, simulates an invalid primary image and verifies restoration from the backup.
+
+The dedicated A2.4 workflow now executes this crash/restart and backup audit. The test is committed but has not been locally executed in this session; exact-HEAD CI is the required execution evidence. It does not yet test physical power-loss durability, filesystem/controller cache behavior, real host reboot, encrypted backup custody, RPO/RTO, or external signed checkpoint verification.
+
+## 9. Cross-register coordinator and period governance
+
+`A2_4_7_CROSS_REGISTER_COORDINATOR_AND_RECOVERY_PROTOCOL.md` defines the required durable prepare/commit participant contract for physical, capital, labour, product, legal/rights and financial registers; commit-barrier visibility; retry/recovery semantics; closed-period correction and generation-based reopening; external asymmetric signed checkpoints; backup/restore; and the full distributed crash matrix. This is an architecture/acceptance contract, not a claim that the production coordinator, participant adapters, signing service or governed reopen workflow have been implemented.
+
+The P2 financial atomic boundary is SQLite-local. A2.4.7 remains OPEN until all six real participant adapters and the durable coordinator are implemented and fault-tested.
