@@ -5,7 +5,7 @@ import json
 import sys
 import tempfile
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization\nfrom cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
@@ -66,7 +66,7 @@ def _rejects(call, reason):
 def main():
     with tempfile.TemporaryDirectory(prefix="synergy-signed-approval-") as directory:
         private = Ed25519PrivateKey.generate()
-        public = private.public_key().public_bytes_raw()
+        public = private.public_key().public_bytes(\n            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw\n        )
         revoked_keys = set()
         revoked_jtis = set()
         resolver_calls = []
@@ -74,7 +74,7 @@ def main():
 
         def key_resolver(issuer, kid):
             resolver_calls.append((issuer, kid))
-            return public if issuer == ISSUER and kid == KID and (issuer, kid) not in revoked_keys else None
+            return public if issuer == ISSUER and kid == KID else None
 
         def is_revoked(issuer, kid, jti):
             revocation_calls.append((issuer, kid, jti))
@@ -125,6 +125,12 @@ def main():
         _rejects(lambda: verifier("controller-A", "period_owner", context, revoked),
                  "revoked assertion ID was accepted")
 
+        revoked_keys.add((ISSUER, KID))
+        revoked_key_token = _sign(_payload(context, jti="jti-revoked-key"), private)
+        _rejects(lambda: verifier("controller-A", "period_owner", context, revoked_key_token),
+                 "revoked signing key was accepted")
+        revoked_keys.clear()
+
         wrong_audience = _sign(_payload(context, jti="jti-wrong-aud", aud="other-service"), private)
         _rejects(lambda: verifier("controller-A", "period_owner", context, wrong_audience),
                  "wrong audience was accepted")
@@ -166,7 +172,7 @@ def main():
         print("PASS: Ed25519 assertion signature, issuer and audience verified")
         print("PASS: service, subject, role and canonical request digest bound")
         print("PASS: expiry, not-before and maximum lifetime enforced")
-        print("PASS: revoked jti, unknown key, changed signature and role escalation rejected")
+        print("PASS: revoked jti, revoked signing key, unknown key, changed signature and role escalation rejected")
         print("PASS: revocation-provider outage fails closed")
         print("PASS: assertion jti is durable; exact retry idempotent and changed-content reuse rejected")
 
