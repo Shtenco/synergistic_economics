@@ -1990,3 +1990,12 @@ At HEAD fde0e72189d2a18b231b40a565a243eec9ae8a87:
 PR #4 remains Draft/Open/unmerged. Main remains unchanged. The cross-register fixture remains synthetic and does not establish a single production transaction coordinator. P2's code-level atomic boundary is SQLite-local; it does not establish distributed atomicity across the physical, cohort, labour, product, rights and financial registers.
 
 Next verification gate: wait for the exact HEAD workflows to leave QUEUED, inspect the A2.4 job logs step-by-step, repair any failures, and only then advance to crash/restart and cross-register recovery controls.
+
+
+### P2 control-identity hardening — 12 November
+
+A source audit found that impairment-allowance projection was assigning LCU/NOMINAL inside the mapper rather than requiring those dimensions on the source allowance posting. This would silently invent a control valuation identity outside the frozen corpus. The production journal now requires explicit currency and valuation basis on the impairment-allowance line; the synthetic corpus adapter supplies LCU/NOMINAL explicitly as test-fixture metadata; both the live mapper and independent recovery mapper now preserve those source fields without defaults. The adapter test rejects missing dimensions and checks a USD variant maps to USD rather than a hard-coded currency. The P2 test also asserts the final control-position currency and basis.
+
+The allowance invariant no longer hard-codes instrument ID LOAN-001. It checks recognized gross loan assets by the same holder, currency and valuation basis as each allowance control. This keeps the contra-asset bound tied to the correct valuation identity when multiple loan instruments exist.
+
+Latest code commit at the time of this note: 9109961119f747822e93bf6ec062e8e2b4a24de4. A2.4 run 43191870095 is PENDING/QUEUED; no test step has executed and no PASS is claimed. The branch remains separate from main; PR #4 remains Draft/Open/unmerged.
