@@ -24,6 +24,7 @@ def _sha(value):
 def _checkpoint(signer, anchor, sequence, generation):
     backup = f"period-{7}-generation-{generation}-backup".encode()
     manifest = {
+        "manifest_schema_version": 1,
         "service_id": "synergy-period-governance",
         "database_schema_version": 4,
         "mapper_version": "gold2a-entity-journal-mapper@1",
