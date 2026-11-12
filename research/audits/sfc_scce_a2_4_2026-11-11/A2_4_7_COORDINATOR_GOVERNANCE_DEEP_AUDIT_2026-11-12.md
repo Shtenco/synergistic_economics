@@ -145,3 +145,76 @@ At the subsequent live poll, the three previously identified jobs had been cance
 - External checkpoint: Ed25519 manifest verification implemented; local anchor remains conformance-only and its direct mutation contract needs hardening.
 - Disaster recovery: protocol-store backup/restore fixture implemented; authoritative domain-store recovery and canonical participant event-root verification remain open.
 - Production: NOT READY. Keep PR #4 Draft/Open and do not merge. Canonical `main` remains unchanged.
+
+
+---
+
+## Continuation addendum — signed identity and recovery race controls
+
+This addendum supersedes the earlier open statements below where explicitly noted. It records source changes only; exact-HEAD execution is still required.
+
+### F-CR-02 — execute/recover race coverage extended (IMPLEMENTED; CI PENDING)
+
+The subprocess crash matrix now forces a crash immediately after the durable commit decision, then launches one independent process calling `execute()` and another calling `recover()`. Both launch orders are tested:
+
+- execute worker launched before recover worker;
+- recover worker launched before execute worker.
+
+Each case requires terminal `COMMITTED`, a valid native visibility barrier, and exactly one native event in each of the six protocol participants. This complements execute/execute and recover/recover controls. It does not change the deployment limitation: the SQLite lock is still a shared-filesystem single-writer mechanism, not multi-host distributed fencing.
+
+### F-DR-01 — canonical native-event root (IMPLEMENTED IN PROTOCOL FIXTURE; CI PENDING)
+
+The former coordinator-envelope digest has been replaced in the DR fixture with a domain-separated SHA-256 commitment over a canonical, participant-name-ordered inventory containing, for each of the six participants:
+
+- native event ID, stream ID and committed revision;
+- canonical payload digest and independently recomputed payload SHA-256;
+- parsed durable commit receipt.
+
+The signed checkpoint manifest now carries this root. The fixture independently recomputes the root and complete inventory after restoring the seven SQLite protocol databases, and requires exact equality with the pre-backup values. Negative controls reject reordering, omission, duplication, payload-digest tampering and receipt revision tampering.
+
+**Boundary:** this proves protocol-store event/receipt preservation only. It is not yet a reconciliation of the economic balances and stocks in six authoritative domain stores.
+
+### F-GOV-01 — signed approval assertion verifier (IMPLEMENTED; PRODUCTION TRUST PROVIDERS STILL REQUIRED)
+
+Added `prototype/signed_approval_assertions.py`, a callable implementation of the `PeriodGovernance.authorization_verifier` boundary. It accepts compact JWT/JWS assertions with an EdDSA protected header and Ed25519 signature. It enforces:
+
+- strict protected-header and claim schemas; canonical JSON and canonical base64url encoding;
+- trusted issuer, audience, key ID and Ed25519 signature;
+- request-bound subject, service ID, request ID, role and canonical request digest;
+- integer `iat`/`exp`, maximum assertion lifetime and bounded clock skew;
+- online fail-closed key/assertion revocation lookup;
+- durable `jti` replay protection in a separate SQLite ledger; exact assertion retry is idempotent, but reusing a `jti` with changed signed content is rejected.
+
+The A2.4 workflow now invokes `audit_signed_approval_assertions.py`. The audit covers signature tampering, unknown/revoked keys, revoked `jti`, wrong audience/service/role/request digest, expiry, not-before, revocation-service outage and integration with the real period-governance dual-approval transition.
+
+`approve_reopen()` now calls the external verifier outside its SQLite write transaction, then reacquires the write lock, reloads the request and recomputes the digest before persisting the approval. This removes remote identity-provider latency from the governance critical section and closes the request-mutation TOCTOU window.
+
+**Production dependency:** the repository still does not operate the identity provider. Deployment must inject a live key resolver backed by a separately administered issuer/JWKS trust root and a live revocation checker with documented availability, freshness, key rotation and emergency revocation semantics. The test signer is not a production issuer.
+
+### F-GOV-03 — six authoritative register adapters (OPEN; NOT MISREPRESENTED)
+
+The source inventory still does not establish six independently durable authoritative domain stores. Existing components include the financial event store/journal adapter, capital cohort bridge and SFC projection store; physical flow, labour and product controls remain primarily fixture/contract implementations, and the protocol coordinator's six SQLite participants are not substitutes for them.
+
+No synthetic adapter has been added to make the inventory appear complete. Production rebuild integration remains blocked until each register supplies an actual durable store with:
+- immutable event append and query by source cursor;
+- generation-scoped opening and closing snapshots;
+- deterministic replay from the same immutable source root;
+- durable rebuild artifact identity and independently verifiable receipt;
+- native-unit and domain-specific invariants;
+- atomic publication/read semantics preserving the previous generation.
+
+The legal-rights register also needs explicit authoritative persistence and evidence/authority verification; a legal-evidence field in a financial journal event is not itself a legal-rights register.
+
+### Exact-HEAD workflow state and change history
+
+The continuation commits after the prior `a3ab10d` head added the execute/recover race matrix, canonical DR event-root inventory, signed JWS verifier, request-digest recheck outside/inside the governance transaction, adversarial verifier integration tests and the A2.4 workflow invocation. The final source commit before this report update is `e62da13ee9011f4ad3814eba5b868f5f5e82b055`; this report update itself creates a newer HEAD and therefore requires a fresh exact-HEAD CI run.
+
+Earlier runs on intermediate SHAs were cancelled by the branch workflows' `cancel-in-progress: true` concurrency policy. The last observed three-workflow set was still queued/pending on an earlier SHA; it cannot validate the later signed-assertion commits. After this addendum push, wait for and inspect the three fresh runs on the final report HEAD, including job logs and step conclusions. No PASS is claimed until all required jobs complete successfully on that exact SHA.
+
+### Updated disposition
+
+- Execute/recover race: source and subprocess controls implemented; CI pending.
+- DR native-event root: protocol-level before/after restore equality implemented; CI pending; authoritative economic-state reconciliation open.
+- Signed identity assertions: cryptographic JWT/JWS verifier and governance integration tests implemented; CI pending; live issuer/JWKS/revocation service integration open.
+- Six authoritative stores: open; do not treat fixtures or protocol stores as production adapters.
+- PR #4 remains Draft/Open; do not merge. `main` must remain unchanged.
