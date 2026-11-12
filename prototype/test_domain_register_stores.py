@@ -4,10 +4,10 @@ import unittest
 from decimal import Decimal as D
 from pathlib import Path
 
-from physical_flow_store import FlowPosting, PhysicalFlowStore
+from physical_flow_store import FlowPosting, PhysicalFlowStore, PhysicalFlowError
 from capital_cohort_bridge import CapitalCohort, CohortEvent
-from capital_cohort_store import CapitalCohortStore
-from product_register import ProductSpec, ProductBalance, PriceQuote, ValuationRecord, ProductRegister
+from capital_cohort_store import CapitalCohortStore, CapitalCohortStoreError
+from product_register import ProductSpec, ProductBalance, PriceQuote, ValuationRecord, ProductRegister, ProductRegisterError
 
 
 def flow_pair(flow_id, origin, destination, quantity, unit="t"):
@@ -70,7 +70,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER physical_flows_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
                 for read in (st.flow_count,lambda:st.node_net("mine","steel","S235","P1","t"),lambda:st.consolidated_net({"mine","mill"},"steel","S235","P1","t")):
-                    with self.assertRaises(Exception): read()
+                    with self.assertRaises(PhysicalFlowError): read()
 
     def test_capital_integrity_matrix(self):
         cases=[("payload","UPDATE capital_cohort_periods SET payload_json='{}' WHERE period=2026"),("payload_hash","UPDATE capital_cohort_periods SET payload_sha256='bad' WHERE period=2026"),("chain","UPDATE capital_cohort_periods SET chain_hash='bad' WHERE period=2026"),("closing","UPDATE capital_cohort_periods SET closing_state_json='{}' WHERE period=2026"),("closing_hash","UPDATE capital_cohort_periods SET state_sha256='bad' WHERE period=2026"),("tail","UPDATE capital_cohort_meta SET tail_hash='bad' WHERE singleton_id=1"),("count","UPDATE capital_cohort_meta SET period_count=8 WHERE singleton_id=1"),("opening","UPDATE capital_cohort_meta SET opening_state_json='{}' WHERE singleton_id=1"),("opening_hash","UPDATE capital_cohort_meta SET opening_state_sha256='bad' WHERE singleton_id=1")]
@@ -82,7 +82,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 st.initialize(opening); st.append_period(2026,ev,())
                 with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER capital_cohort_periods_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
-                with self.assertRaises(Exception): st.current_state()
+                with self.assertRaises(CapitalCohortStoreError): st.current_state()
 
     def test_product_integrity_matrix(self):
         cases=[("payload","UPDATE product_events SET payload_json='{}' WHERE event_id='V1'"),("digest","UPDATE product_events SET payload_sha256='bad' WHERE event_id='V1'"),("chain","UPDATE product_events SET chain_hash='bad' WHERE event_id='V1'"),("tail","UPDATE product_register_meta SET tail_hash='bad' WHERE singleton_id=1"),("count","UPDATE product_register_meta SET event_count=8 WHERE singleton_id=1")]
@@ -96,7 +96,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 st.register_product(spec); st.record_balance(bal); st.record_price(price); st.record_valuation(val)
                 with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER product_events_no_update"); con.execute(sql); con.commit()
                 self.assertFalse(st.verify())
-                with self.assertRaises(Exception): st.valuation("V1")
+                with self.assertRaises(ProductRegisterError): st.valuation("V1")
 
     def test_correction_lineage_replayed_after_fully_rehashed_orphan_tamper(self):
         import hashlib,json
@@ -116,7 +116,7 @@ class DurableDomainRegisterTests(unittest.TestCase):
                 con.execute("UPDATE physical_flows SET payload_json=?,payload_sha256=?,previous_hash=?,chain_hash=? WHERE flow_id='CORR'",(encoded,digest,prev,chain))
                 con.execute("UPDATE physical_flow_meta SET tail_hash=? WHERE singleton_id=1",(chain,)); con.commit()
             self.assertFalse(st.verify())
-            with self.assertRaises(Exception): st.node_net("mine","steel","S235","P1","t")
+            with self.assertRaises(PhysicalFlowError): st.node_net("mine","steel","S235","P1","t")
 
 if __name__=="__main__":
     unittest.main()
