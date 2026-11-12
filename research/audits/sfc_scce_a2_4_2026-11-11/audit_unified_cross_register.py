@@ -156,12 +156,12 @@ def main():
         "financial_causation_id":group["causation_id"],
         "scce_event_key":model.events[-1]["key"],
         "register_envelopes": (
-            {"register":"scce","scenario_id":scenario_id,"event_id":model.events[-1]["key"]},
-            {"register":"physical","scenario_id":scenario_id,"event_id":outflow.flow_id},
-            {"register":"capital","scenario_id":scenario_id,"event_id":cohort_event.event_id},
-            {"register":"labour","scenario_id":scenario_id,"event_id":labour_event["event_id"]},
-            {"register":"product_valuation","scenario_id":scenario_id,"event_id":valuation.source_id},
-            {"register":"financial","scenario_id":scenario_id,"event_id":group["group_id"]},
+            {"register":"scce","scenario_id":scenario_id,"record_id":model.events[-1]["key"]},
+            {"register":"physical","scenario_id":scenario_id,"record_id":outflow.flow_id},
+            {"register":"capital","scenario_id":scenario_id,"record_id":cohort_event.event_id},
+            {"register":"labour","scenario_id":scenario_id,"record_id":labour_event["record_id"]},
+            {"register":"product_valuation","scenario_id":scenario_id,"record_id":valuation.source_id},
+            {"register":"financial","scenario_id":scenario_id,"record_id":group["group_id"]},
         ),
         "physical_period":outflow.period,
         "capital_period":cohort_result.period,
@@ -173,12 +173,12 @@ def main():
     envelopes = manifest["register_envelopes"]
     assert len(envelopes) == 6
     assert {row["scenario_id"] for row in envelopes} == {scenario_id}
-    assert {row["event_id"] for row in envelopes} == {
+    assert {row["record_id"] for row in envelopes} == {
         manifest["physical_flow_id"], manifest["capital_event_id"],
         manifest["labour_event_id"], manifest["valuation_source_id"],
         manifest["scce_event_key"], group["group_id"],
     }
-    assert len({row["event_id"] for row in envelopes}) == 6
+    assert len({row["record_id"] for row in envelopes}) == 6
     assert manifest["financial_causation_id"] == scenario_id
     assert manifest["physical_period"] == "P1"
     assert manifest["capital_period"] == manifest["labour_period"] == 1
