@@ -204,15 +204,18 @@ class PeriodGovernance:
         digest = _required(digest, "checkpoint_digest")
         if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
             raise PeriodGovernanceError("checkpoint digest must be lowercase SHA-256 hex")
-        if self.checkpoint_verifier(ref, digest) is not True:
-            raise PeriodGovernanceError("external checkpoint verification failed")
-        return ref, digest
+        manifest = self.checkpoint_verifier(ref, digest)
+        if not isinstance(manifest, dict):
+            raise PeriodGovernanceError("external checkpoint verifier must return the verified manifest")
+        return ref, digest, manifest
 
     def close_period(self, period, generation, checkpoint_ref, checkpoint_digest, closed_by):
         period = _period(period)
         if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
             raise PeriodGovernanceError("generation must be a non-negative integer")
-        ref, digest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
+        ref, digest, manifest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
+        if manifest.get("period") != period or manifest.get("projection_generation") != generation or manifest.get("period_closed") is not True:
+            raise PeriodGovernanceError("close checkpoint does not identify this closed period and generation")
         actor = _required(closed_by, "closed_by")
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
@@ -295,7 +298,7 @@ class PeriodGovernance:
         if set(scope_clean) != set(REGISTERS):
             raise PeriodGovernanceError("generation rebuild scope must include all six registers")
         scope_json = _canonical(scope_clean)
-        ref, digest = self._verify_checkpoint(pre_reopen_checkpoint_ref, pre_reopen_checkpoint_digest)
+        ref, digest, manifest = self._verify_checkpoint(pre_reopen_checkpoint_ref, pre_reopen_checkpoint_digest)
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
@@ -307,6 +310,10 @@ class PeriodGovernance:
                     raise PeriodGovernanceError("only a closed period can be reopened")
                 if (closure["checkpoint_ref"], closure["checkpoint_digest"]) != (ref, digest):
                     raise PeriodGovernanceError("pre-reopen checkpoint must match the currently active generation")
+                if (manifest.get("period") != period
+                        or manifest.get("projection_generation") != closure["generation"]
+                        or manifest.get("period_closed") is not True):
+                    raise PeriodGovernanceError("pre-reopen signed checkpoint has the wrong period/generation identity")
                 old = con.execute(
                     "SELECT period,reason,evidence_ref,scope_json,pre_reopen_checkpoint_ref,pre_reopen_checkpoint_digest "
                     "FROM reopen_requests WHERE request_id=?", (request_id,)
@@ -445,6 +452,10 @@ class PeriodGovernance:
                 ).fetchone()
                 if request is None or request["state"] != "REBUILDING":
                     raise PeriodGovernanceError("generation publication requires a rebuilding request")
+                if (manifest.get("period") != request["period"]
+                        or manifest.get("projection_generation") != request["new_generation"]
+                        or manifest.get("period_closed") is not True):
+                    raise PeriodGovernanceError("publication checkpoint does not identify the rebuilt generation")
                 receipts = con.execute(
                     "SELECT * FROM rebuild_receipts WHERE request_id=? ORDER BY register_name",
                     (request_id,)
