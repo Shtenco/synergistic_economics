@@ -267,6 +267,19 @@ class CrossRegisterCoordinator:
                       ('NEW','PREPARING','PREPARED','ABORT_DECIDED','ABORTED',
                        'COMMIT_DECIDED','COMMITTING','COMMITTED'))
                 );
+                CREATE TABLE IF NOT EXISTS coordinator_transitions(
+                    transition_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transaction_id TEXT NOT NULL REFERENCES coordinator_transactions(transaction_id),
+                    from_state TEXT,
+                    to_state TEXT NOT NULL,
+                    reason TEXT NOT NULL
+                );
+                CREATE TRIGGER IF NOT EXISTS coordinator_transitions_no_update
+                    BEFORE UPDATE ON coordinator_transitions
+                    BEGIN SELECT RAISE(ABORT,'coordinator transition history is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS coordinator_transitions_no_delete
+                    BEFORE DELETE ON coordinator_transitions
+                    BEGIN SELECT RAISE(ABORT,'coordinator transition history is immutable'); END;
                 CREATE TABLE IF NOT EXISTS coordinator_operations(
                     transaction_id TEXT NOT NULL REFERENCES coordinator_transactions(transaction_id),
                     participant TEXT NOT NULL,
@@ -301,14 +314,28 @@ class CrossRegisterCoordinator:
                 if old is None:
                     raise CoordinatorError("unknown coordinator transaction")
                 current = old["state"]
-                if current == "COMMIT_DECIDED" and state in {"ABORT_DECIDED","ABORTED"}:
-                    raise CoordinatorError("COMMIT_DECIDED is irreversible")
-                if current == "COMMITTED" and state != "COMMITTED":
-                    raise CoordinatorError("COMMITTED is terminal")
+                allowed = {
+                    "NEW": {"PREPARING", "ABORT_DECIDED"},
+                    "PREPARING": {"PREPARED", "ABORT_DECIDED"},
+                    "PREPARED": {"COMMIT_DECIDED", "ABORT_DECIDED"},
+                    "ABORT_DECIDED": {"ABORTED"},
+                    "ABORTED": set(),
+                    "COMMIT_DECIDED": {"COMMITTING"},
+                    "COMMITTING": {"COMMITTED"},
+                    "COMMITTED": set(),
+                }
+                if current == state:
+                    con.execute("COMMIT")
+                    return
+                if state not in allowed.get(current, set()):
+                    raise CoordinatorError(f"illegal coordinator transition: {current} -> {state}")
                 con.execute(
                     "UPDATE coordinator_transactions SET state=? WHERE transaction_id=?",
                     (state, txid)
                 )
+                con.execute("""INSERT INTO coordinator_transitions(
+                    transaction_id,from_state,to_state,reason) VALUES(?,?,?,?)""",
+                    (txid, current, state, "protocol"))
                 con.execute("COMMIT")
             except Exception:
                 if con.in_transaction:
@@ -420,12 +447,17 @@ class CrossRegisterCoordinator:
 
     def _commit_after_decision(self, txid):
         self._set_state(txid, "COMMITTING")
-        for row in self._operations(txid):
+        operations = self._operations(txid)
+        if len(operations) != len(PARTICIPANTS) or {row["participant"] for row in operations} != set(PARTICIPANTS):
+            return False
+        for row in operations:
             name = row["participant"]
             status = self.participants[name].status(txid)
             if status is None or status["state"] == "ABORTED":
                 raise CoordinatorError(f"{name} has no recoverable prepared record")
-            token = row["prepare_token"] or status["prepare_token"]
+            token = row["prepare_token"]
+            if not token or token != status["prepare_token"]:
+                raise CoordinatorError(f"{name} durable prepare receipt is missing or mismatched")
             receipt = self.participants[name].commit(txid, token)
             self._record_committed(txid, name, receipt)
         self._set_state(txid, "COMMITTED")
