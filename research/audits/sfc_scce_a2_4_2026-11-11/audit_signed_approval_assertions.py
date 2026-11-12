@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import sqlite3
 import sys
 import tempfile
 
@@ -10,7 +11,7 @@ from cryptography.hazmat.primitives import serialization\nfrom cryptography.hazm
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
 
-from signed_approval_assertions import (
+from period_governance import REGISTERS, PeriodGovernance, PeriodGovernanceError\nfrom signed_approval_assertions import (
     ApprovalAssertionError, SignedApprovalVerifier, encode_assertion_payload,
 )
 
@@ -168,13 +169,91 @@ def main():
                                 _sign(_payload(context, jti="jti-revocation-outage"), private)),
                  "revocation service outage did not fail closed")
 
+        # Exercise the verifier through the actual period-governance approval
+        # boundary, including durable two-person approval and idempotent retry.
+        service_id = "synergy-period-governance-integration"
+        manifest = {
+            "service_id": service_id, "period": 7,
+            "projection_generation": 0, "period_closed": True,
+        }
+        governance_verifier = SignedApprovalVerifier(
+            Path(directory) / "governance-assertion-replay.sqlite3",
+            issuer=ISSUER, audience=AUDIENCE, key_resolver=key_resolver,
+            is_revoked=is_revoked, clock=lambda: NOW,
+        )
+        governance = PeriodGovernance(
+            Path(directory) / "period-governance.sqlite3",
+            lambda _ref, _digest: manifest, service_id, governance_verifier,
+        )
+        checkpoint_digest = "a" * 64
+        assert governance.close_period(
+            7, 0, "checkpoint://period-7-generation-0",
+            checkpoint_digest, "closing-controller",
+        )
+        assert governance.request_reopen(
+            "reopen-signed-001", 7, "verified late physical evidence",
+            "evidence://reopen-signed-001", list(REGISTERS),
+            "checkpoint://period-7-generation-0", checkpoint_digest,
+        )
+        with sqlite3.connect(Path(directory) / "period-governance.sqlite3") as con:
+            con.row_factory = sqlite3.Row
+            request = con.execute(
+                "SELECT * FROM reopen_requests WHERE request_id=?",
+                ("reopen-signed-001",),
+            ).fetchone()
+        gov_context = {
+            "service_id": service_id,
+            "request_id": request["request_id"],
+            "period": request["period"],
+            "old_generation": request["old_generation"],
+            "new_generation": request["new_generation"],
+            "reason": request["reason"],
+            "evidence_ref": request["evidence_ref"],
+            "scope": json.loads(request["scope_json"]),
+            "pre_reopen_checkpoint_ref": request["pre_reopen_checkpoint_ref"],
+            "pre_reopen_checkpoint_digest": request["pre_reopen_checkpoint_digest"],
+        }
+        gov_context["request_digest"] = hashlib.sha256(_canonical(gov_context)).hexdigest()
+        owner_assertion = _sign(_payload(
+            gov_context, sub="signed-owner-A", role="period_owner",
+            jti="jti-governance-owner",
+        ), private)
+        assert governance.approve_reopen(
+            "reopen-signed-001", "signed-owner-A", "period_owner", owner_assertion
+        )
+        assert not governance.approve_reopen(
+            "reopen-signed-001", "signed-owner-A", "period_owner", owner_assertion
+        )
+        same_person_assertion = _sign(_payload(
+            gov_context, sub="signed-owner-A", role="independent_controller",
+            jti="jti-governance-same-person",
+        ), private)
+        _rejects(lambda: governance.approve_reopen(
+            "reopen-signed-001", "signed-owner-A", "independent_controller",
+            same_person_assertion,
+        ), "same signed identity satisfied both governance approval roles")
+        controller_assertion = _sign(_payload(
+            gov_context, sub="signed-controller-B", role="independent_controller",
+            jti="jti-governance-controller",
+        ), private)
+        assert governance.approve_reopen(
+            "reopen-signed-001", "signed-controller-B",
+            "independent_controller", controller_assertion,
+        )
+        with sqlite3.connect(Path(directory) / "period-governance.sqlite3") as con:
+            state = con.execute(
+                "SELECT state FROM reopen_requests WHERE request_id=?",
+                ("reopen-signed-001",),
+            ).fetchone()[0]
+        assert state == "APPROVED"
+
         assert resolver_calls and revocation_calls
         print("PASS: Ed25519 assertion signature, issuer and audience verified")
         print("PASS: service, subject, role and canonical request digest bound")
         print("PASS: expiry, not-before and maximum lifetime enforced")
         print("PASS: revoked jti, revoked signing key, unknown key, changed signature and role escalation rejected")
         print("PASS: revocation-provider outage fails closed")
-        print("PASS: assertion jti is durable; exact retry idempotent and changed-content reuse rejected")
+        print("PASS: assertion jti is durable; exact retry idempotent and changed-content reuse rejected")\n        print("PASS: signed assertions authorize the real period-governance dual-approval transition")
 
 
 if __name__ == "__main__":
