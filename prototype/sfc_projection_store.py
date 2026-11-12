@@ -859,6 +859,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 return False
             if runtime["state_sha256"] != _state_hash(con,current):
                 return False
+            _validate_instrument_kernel_replay(con)
             expected_flows = {}
             for row in deltas:
                 if row["component"] != "T":
