@@ -330,7 +330,7 @@ def _verify_event_payload_semantics(event_payload):
         if (D(event_payload.get("forgiven_principal")) != amount or not isinstance(evidence,dict)
                 or not all(isinstance(evidence.get(k),str) and evidence[k].strip()
                            for k in ("evidence_ref","authority","effective_at","scope"))
-                or evidence.get("scope") != f"principal:{amount}"
+                or evidence.get("scope") != f"principal:{_canon(amount)}"
                 or not isinstance(parties,list) or len(parties) < 2
                 or len(set(parties)) != len(parties)
                 or not set(parties).issubset(event_entities)):
