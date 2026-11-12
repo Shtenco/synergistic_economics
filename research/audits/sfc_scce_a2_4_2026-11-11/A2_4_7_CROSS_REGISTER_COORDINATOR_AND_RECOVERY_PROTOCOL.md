@@ -118,3 +118,24 @@ For every point, restart coordinator and all participants independently, replay 
 This gate is not closed until all six real register adapters implement the durable participant contract; coordinator and participant state machines are persisted; crash/restart and duplicate-delivery tests pass on the exact same commit; signed checkpoints are independently verified; restore drills meet approved RPO/RTO; closed-period correction/reopen workflow has dual approval and generation rebuild; and the full three-workflow CI set is green on one HEAD.
 
 Until then, A2.4.7 remains OPEN. The current cross-register fixture is valuable integration evidence but is not a production coordinator and must not be presented as distributed ACID or exactly-once delivery.
+
+
+## 10. Coordinator protocol implementation — 12 November 2026
+
+Added `prototype/cross_register_coordinator.py` with a durable coordinator state machine and six independent SQLite participant stores. The implementation provides:
+
+- immutable canonical transaction envelope and per-participant payload digests;
+- native event identity, expected stream revision and deterministic participant ordering;
+- durable participant inbox/prepare token and revision compare-and-swap;
+- participant-local immutable event rows and receipts;
+- durable coordinator decision state, with `COMMIT_DECIDED` irreversible;
+- abort recovery before the commit decision and commit replay after the decision;
+- commit-barrier visibility only after six matching durable participant receipts;
+- immutable coordinator and participant transition-history tables;
+- idempotent prepare/commit/recovery and rejection of stale revisions or changed-content transaction-ID reuse.
+
+Added `audit_cross_register_crash_matrix.py`. It launches a fresh subprocess for 25 termination points: after each of six participant prepares, each coordinator prepare receipt, each participant commit, each coordinator commit receipt, and after commit-barrier publication. It then reconstructs all seven database connections, recovers the transaction and checks that pre-decision crashes abort without effects, post-decision crashes commit exactly one effect per participant, partial state never crosses the visibility barrier, and repeated recovery does not duplicate events. Additional controls cover changed-content replay, stale revision rejection and immutable state-transition history. The audit is wired into the A2.4 workflow and the Prototype unittest wrapper.
+
+**Strict implementation boundary:** these six SQLite participants are independent durable protocol conformance stores, not yet adapters to the authoritative domain stores. They prove the coordinator protocol mechanics only. The production gate still requires replacing each conformance participant with a domain adapter that durably prepares and commits its actual physical, capital, labour, product, legal/rights or financial records in that register's authoritative storage. In particular, this module does not make the current synthetic cross-register fixture distributed-atomic.
+
+The new subprocess matrix is committed but has not yet been executed successfully in this session. Exact-HEAD CI completion and log inspection are required before marking it PASS. Host/power-loss testing, external signatures/WORM storage, period-generation reopening and full multi-register disaster recovery remain open.
