@@ -17,7 +17,7 @@ from typing import Sequence
 import financial_event_store as fes
 from entity_journal import EntityJournal, JournalEvent, SECTORS, EVENT_SEMANTICS, EXPECTED_ACCOUNTS
 from financial_event_store import FinancialEventStore, FinancialEventStoreError
-from sfc_projection_kernel import SFCIdentity, canonical_decimal
+from sfc_projection_kernel import SFCIdentity, canonical_decimal, replay_positions
 from sfc_projection_registry import verify_sfc_projection_openings
 
 D = Decimal
@@ -377,6 +377,55 @@ def _state_hash(con, period):
     return hashlib.sha256(_json(_state_payload(con, period)).encode("utf-8")).hexdigest()
 
 
+def _validate_instrument_kernel_replay(con):
+    """Use the pure SFC kernel as an independent instrument roll-forward oracle."""
+    event_rows = con.execute("""SELECT e.event_id,e.effective_period
+        FROM events e JOIN event_groups g ON g.group_id=e.group_id
+        WHERE EXISTS(SELECT 1 FROM sfc_instrument_deltas d WHERE d.event_id=e.event_id)
+        ORDER BY g.commit_sequence,e.event_index""").fetchall()
+    projection_events = []
+    event_specs = []
+    for event in event_rows:
+        rows = con.execute("SELECT * FROM sfc_instrument_deltas WHERE event_id=? ORDER BY delta_index",
+                           (event["event_id"],)).fetchall()
+        raw_deltas = []
+        for row in rows:
+            identity = {field:row[field] for field in SFCIdentity.__dataclass_fields__}
+            raw_deltas.append({
+                "event_id":event["event_id"],"delta_index":row["delta_index"],
+                "effective_period":row["effective_period"],"identity":identity,
+                "component":row["component"],"amount":row["amount"],
+                "opening_balance":row["opening_balance"],
+            })
+        event_specs.append({"event_id":event["event_id"],"effective_period":event["effective_period"]})
+        projection_events.append({"event_id":event["event_id"],"disposition":"mapped","deltas":raw_deltas})
+    if not event_specs:
+        return True
+    openings = {}
+    for row in con.execute("SELECT * FROM sfc_projection_positions").fetchall():
+        identity = SFCIdentity(**{field:row[field] for field in SFCIdentity.__dataclass_fields__})
+        openings[(identity,row["period"])] = row["opening_balance"]
+    identities = {key[0] for key in openings}
+    replayed = replay_positions(
+        event_specs, {"mapping_version":MAPPER_VERSION,"events":projection_events},
+        openings, nonnegative_identities=identities)
+    for (identity,period),roll in replayed.items():
+        key = _position_key(identity)
+        where = " AND ".join(f"{field}=?" for field in SFCIdentity.__dataclass_fields__)
+        row = con.execute(f"SELECT * FROM sfc_projection_positions WHERE {where} AND period=?",
+                          key+(period,)).fetchone()
+        if row is None:
+            raise SFCProjectionStoreError("pure kernel replay produced a missing materialized position")
+        actual = tuple(D(row[field]) for field in (
+            "opening_balance","transaction_delta","revaluation_delta",
+            "other_volume_delta","closing_balance"))
+        expected = (roll.opening,roll.transactions,roll.revaluations,
+                    roll.other_volume_changes,roll.closing)
+        if actual != expected:
+            raise SFCProjectionStoreError("pure SFC kernel replay differs from materialized instrument positions")
+    return True
+
+
 def _initialize_runtime(con):
     existing = con.execute("SELECT singleton_id FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
     if existing:
@@ -617,6 +666,7 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                     digest = _state_hash(con,event.effective_period)
                     con.execute("INSERT INTO sfc_projection_event_checkpoints VALUES(?,?,?,?,?)",
                         (event.event_id,next_sequence,index,event.effective_period,digest))
+                _validate_instrument_kernel_replay(con)
                 runtime = con.execute("SELECT current_period FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
                 digest = _state_hash(con,runtime["current_period"])
                 con.execute("UPDATE sfc_projection_runtime SET applied_commit_sequence=?,state_sha256=? WHERE singleton_id=1",
