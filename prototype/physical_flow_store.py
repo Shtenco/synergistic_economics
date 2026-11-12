@@ -10,7 +10,7 @@ from pathlib import Path
 D = Decimal
 EVIDENCE = {"measured", "documented", "estimated", "simulated"}
 GENESIS = "0" * 64
-DOMAIN = b"SYNERGY_PHYSICAL_FLOW_CHAIN_V1\\0"
+DOMAIN = b"SYNERGY_PHYSICAL_FLOW_CHAIN_V1\0"
 
 
 class PhysicalFlowError(ValueError):
