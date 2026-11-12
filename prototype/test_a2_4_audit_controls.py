@@ -104,6 +104,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_sfc_projection_store(self):
         self._run_script("audit_sfc_projection_store.py")
 
+    def test_audit_p2_crash_recovery(self):
+        self._run_script("audit_p2_crash_recovery.py")
+
     def test_audit_unified_cross_register(self):
         self._run_script("audit_unified_cross_register.py")
 
