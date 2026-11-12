@@ -2030,3 +2030,8 @@ Outstanding gates remain explicit:
 - operational disaster-recovery restore with approved RPO/RTO.
 
 PR #4 remains Draft/Open/unmerged; main is unchanged. No production readiness or distributed exactly-once claim is made.
+
+
+### Exact-head crash harness and CI fan-out — 12 November 2026
+
+The crash/restart harness, recovery-query correction, backup/restore drill, and production coordinator/period-governance contract are now present on this branch. Prototype validation and SCCE Stage-C2 path filters were widened to include the A2.4 audit tree so the three independent validation directions can be scheduled against integrated changes rather than silently skipping unrelated audit commits. This status entry intentionally triggers the three path-filtered gates on the final source revision. The next accepted evidence is each workflow's run SHA, completed job steps, and logs; queued/cancelled attempts on older SHAs do not count.
