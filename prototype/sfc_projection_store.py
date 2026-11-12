@@ -604,20 +604,27 @@ def _update_sector_flows(con, identity, component, amount, period):
 
 
 def _assert_control_invariants(con, period):
-    instruments = con.execute("SELECT instrument_id,closing_balance FROM sfc_projection_positions WHERE period=?", (period,)).fetchall()
-    balances = {row["instrument_id"]: D(row["closing_balance"]) for row in instruments}
-    controls = con.execute("SELECT control_id,closing_balance FROM sfc_control_positions WHERE period=?", (period,)).fetchall()
-    controls = {row["control_id"]: D(row["closing_balance"]) for row in controls}
-    loan = balances.get("LOAN-001", D("0"))
-    allowance = controls.get("impairment_allowance", D("0"))
-    memo = controls.get("writeoff_memorandum", D("0"))
-    if allowance < 0 or allowance > loan:
-        raise SFCProjectionStoreError("impairment allowance must remain between zero and recognized gross loan")
-    if memo < 0:
-        raise SFCProjectionStoreError("written-off legal claim memorandum cannot be negative")
-    if _sum_exact((loan,memo)) < 0:
-        raise SFCProjectionStoreError("contractual principal cannot be negative")
-    sector_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?", (period,)).fetchall()
+    instruments = con.execute(
+        "SELECT * FROM sfc_projection_positions WHERE period=?", (period,)).fetchall()
+    controls = con.execute(
+        "SELECT * FROM sfc_control_positions WHERE period=?", (period,)).fetchall()
+    for control in controls:
+        amount = D(control["closing_balance"])
+        if control["control_id"] == "impairment_allowance":
+            gross_loan = _sum_exact(
+                D(position["closing_balance"]) for position in instruments
+                if position["instrument_class"] == "loan"
+                and position["holder_entity_id"] == control["entity_id"]
+                and position["currency"] == control["currency"]
+                and position["valuation_basis"] == control["valuation_basis"])
+            if amount < 0 or amount > gross_loan:
+                raise SFCProjectionStoreError(
+                    "impairment allowance must remain between zero and gross loan assets "
+                    "for the same holder, currency and valuation basis")
+        elif control["control_id"] == "writeoff_memorandum" and amount < 0:
+            raise SFCProjectionStoreError("written-off legal claim memorandum cannot be negative")
+    sector_rows = con.execute(
+        "SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?", (period,)).fetchall()
     if _sum_exact(D(row[0]) for row in sector_rows) != 0:
         raise SFCProjectionStoreError("transaction-only sector financial net lending must sum to zero")
 
