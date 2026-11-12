@@ -50,8 +50,15 @@ class CrashConnection(sqlite3.Connection):
 
     def execute(self, sql, parameters=()):
         result = super().execute(sql, parameters)
-        normalized = " ".join(str(sql).upper().split())
-        if self.crash_stage and self.crash_stage in normalized:
+        normalized = " ".join(str(sql).upper().split()).rstrip(";")
+        # COMMIT is a transaction-control statement, not a substring:
+        # names such as commit_sequence must never trigger this fault point.
+        matched = (
+            normalized == "COMMIT"
+            if self.crash_stage == "COMMIT"
+            else bool(self.crash_stage and self.crash_stage in normalized)
+        )
+        if matched:
             type(self).crash_hits += 1
             if type(self).crash_hits >= type(self).crash_occurrence:
                 os._exit(CRASH_EXIT)
