@@ -1954,3 +1954,22 @@ A previously recorded source-level contradiction was corrected in the audit bran
 - `audit_sfc_projection_registry.py` now explicitly reopens the negative-opening database and verifies its persisted snapshot after activation.
 
 This fixes the generic snapshot-integrity contradiction only. It does not mean every instrument may have a negative balance: instrument-specific nonnegative/short-position rules remain the projection contract's responsibility. Exact-head execution is pending; no PASS is claimed for this correction until CI logs complete.
+
+
+### Production journal + P2 projection implementation — 12 November 2026
+
+The previous statement that P2 projection-aware append had not yet been implemented is superseded by the committed implementation below. This is a source-code milestone, not a verified PASS or production-readiness claim.
+
+- Added prototype/entity_journal.py as the typed canonical GOLD-2A journal for the seven frozen event names. Old event aliases are rejected. It validates event-specific debit/credit composition, T/V/O, legal effect, effective-dated entity/sector identity, full instrument identity, write-off metadata and typed legal evidence.
+- Replaced the adapter boundary with strict canonical EntityJournal/JournalEvent/JournalLine acceptance and lossless serialization of component, legal effect, writeoff_claim_delta, forgiven_principal and legal_evidence. Missing dimensions remain absent; empty optional strings are rejected.
+- Added prototype/sfc_projection_store.py. append_projected_group commits the v4 group/event/posting log, instrument T/V/O positions, separate allowance and write-off memorandum control positions, per-event coverage, transaction-only sector flows, event/group checkpoints and applied-through cursor in one SQLite BEGIN IMMEDIATE transaction.
+- Added a separately sealed, hashed control-opening registry. Each control owner must provide both allowance and write-off memorandum period-0 openings; these are not synthetic financial instruments.
+- Closing-to-opening carry-forward is automatic. Backdated appends are rejected. The legacy append path remains blocked after P1 activation.
+- Recovery re-derives event-to-position deltas from immutable event envelopes, revalidates canonical GOLD-2A semantics and legal evidence scope, invokes the pure SFC kernel for an independent instrument roll-forward, rebuilds control positions and sector transaction flows using exact Decimal arithmetic, and checks coverage, checkpoints, materialized positions and cursor.
+- Added audit_financial_journal_adapter.py, audit_sfc_projection_store.py and audit_unified_cross_register.py; the dedicated A2.4 workflow invokes these new controls. The unified fixture links the SCCE engine event, cohort event, physical flow, product valuation, labour reference and financial causation under one scenario ID. It remains a synthetic fixture: there is no single production transaction coordinator across all registers.
+
+The frozen GOLD-2A corpus is unchanged. Its legal-forgiveness event has no legal evidence payload, so the adapter test supplies synthetic evidence separately. Live use must receive authoritative evidence from the legal workflow.
+
+Current branch HEAD: 3c999606a3a07ca8ee91791dfd7a4a08971d87f8. Exact-head Prototype validation run 43189796647 and A2.4 audit-control run 43189787395 are QUEUED; another Prototype run 43189787855 is also QUEUED. No conclusion, job steps or logs are available yet; no PASS is claimed. PR #4 remains Draft/Open and main is unchanged.
+
+Remaining open gates: exact-head CI execution; a production cross-register transaction/recovery coordinator; P5 sidecar recovery; external signed checkpoints and operational multi-writer/crash testing; authoritative legal-evidence integration; closed-period correction/reopen governance. A2.4.7 Gate 2 and A2.4.8 remain OPEN/BLOCKED. No empirical synergy, legal enforceability or production-readiness claim follows from this implementation.
