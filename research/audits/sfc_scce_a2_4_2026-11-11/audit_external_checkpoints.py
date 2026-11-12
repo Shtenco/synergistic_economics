@@ -18,6 +18,7 @@ from external_checkpoints import (
 
 def _manifest(signer, sequence, backup):
     return {
+        "manifest_schema_version": 1,
         "service_id": "synergy-test-ledger",
         "database_schema_version": 4,
         "mapper_version": "gold2a-entity-journal-mapper@1",
