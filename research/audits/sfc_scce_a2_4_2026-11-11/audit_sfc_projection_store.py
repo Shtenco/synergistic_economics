@@ -68,6 +68,24 @@ def main():
         }
         assert verify_projection_replay(store)
 
+        # Same-process retries must be idempotent too: the already-populated
+        # EntityJournal must not reject event IDs before the durable group check.
+        assert append_projected_group(
+            journal, store, "gold2a-p2", events,
+            causation_id="gold2a-atomic-control") is False
+        assert len(journal.events) == len(events)
+        assert store.counts()["events"] == 7
+        try:
+            append_projected_group(
+                journal, store, "gold2a-p2", events,
+                causation_id="changed-causation")
+        except SFCProjectionStoreError:
+            pass
+        else:
+            raise AssertionError("same group ID accepted changed immutable content")
+        assert len(journal.events) == len(events)
+        assert store.counts()["events"] == 7
+
         with closing(store._connect()) as con:
             runtime = con.execute("SELECT * FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
             assert runtime["applied_commit_sequence"] == 1

@@ -638,16 +638,37 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
         raise SFCProjectionStoreError("a non-empty sequence of canonical JournalEvent values is required")
     initial_ids = set(journal.events)
     try:
-        for event in events:
-            result = journal.post(event)
-            if result[0] != result[1]:
-                raise SFCProjectionStoreError("unbalanced validated journal event")
+        # Prepare the immutable group identity before touching the in-memory
+        # journal. This makes an exact retry idempotent even when the caller
+        # reuses the same EntityJournal instance.
         from financial_journal_adapter import _event_payload
         payloads = [_event_payload(e) for e in events]
         group_id, causation_id, normalized = fes._validate_group(group_id, causation_id, payloads)
         envelope = {"group_id":group_id,"causation_id":causation_id,"events":normalized}
         payload_json = fes._canonical_json(envelope)
         payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+
+        # Fast-path an already committed group before journal.post() can reject
+        # its event IDs as duplicates. The write transaction below repeats this
+        # check under BEGIN IMMEDIATE to close the concurrent-writer race.
+        with closing(store._connect()) as probe:
+            probe.execute("BEGIN")
+            existing = probe.execute(
+                "SELECT payload_sha256 FROM event_groups WHERE group_id=?", (group_id,)
+            ).fetchone()
+            probe.execute("ROLLBACK")
+        if existing is not None:
+            if existing["payload_sha256"] != payload_hash:
+                raise SFCProjectionStoreError("group ID reused with changed immutable content")
+            if not verify_projection_replay(store):
+                raise SFCProjectionStoreError(
+                    "idempotent replay refused because the persisted projection fails independent recovery")
+            return False
+
+        for event in events:
+            result = journal.post(event)
+            if result[0] != result[1]:
+                raise SFCProjectionStoreError("unbalanced validated journal event")
         event_rows = []
         for event in normalized:
             event_json = fes._canonical_json(event)
@@ -682,6 +703,11 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                     if not verify_projection_replay(store):
                         raise SFCProjectionStoreError(
                             "idempotent replay refused because the persisted projection fails independent recovery")
+                    # Another writer may have committed after the read-only
+                    # preflight. Undo this caller's temporary in-memory posts.
+                    for event in events:
+                        if event.event_id not in initial_ids and journal.events.get(event.event_id) == event:
+                            journal.events.pop(event.event_id, None)
                     return False
                 for event_id,*_ in event_rows:
                     if con.execute("SELECT 1 FROM events WHERE event_id=?",(event_id,)).fetchone():
