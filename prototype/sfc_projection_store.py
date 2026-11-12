@@ -258,6 +258,42 @@ def _position_key(identity):
     return tuple(getattr(identity, f) for f in SFCIdentity.__dataclass_fields__)
 
 
+def _map_payload_event(event_payload):
+    """Re-derive projection deltas from the immutable source event envelope."""
+    instruments, controls = [], []
+    component = event_payload.get("component")
+    event_type = event_payload.get("event_type")
+    postings = event_payload.get("postings")
+    if component not in ("T","V","O") or not isinstance(postings,list):
+        raise SFCProjectionStoreError("stored event lacks canonical projection metadata")
+    for line in postings:
+        if line.get("account") in INSTRUMENT_ACCOUNTS:
+            identity = SFCIdentity(
+                instrument_id=line.get("instrument_id"),
+                instrument_class=line.get("instrument_class"),
+                holder_entity_id=line.get("entity_id"),
+                holder_sector=line.get("institutional_sector"),
+                issuer_entity_id=line.get("issuer_entity_id"),
+                issuer_sector=line.get("issuer_sector"),
+                currency=line.get("currency"), maturity=line.get("maturity"),
+                denomination=line.get("denomination"), valuation_basis=line.get("valuation_basis"),
+            )
+            amount = D(line["amount"])
+            instruments.append((identity,component,amount if line.get("side")=="D" else -amount))
+    if event_type == "impairment_allowance_recognition":
+        allowance = next(x for x in postings if x.get("account")=="impairment_allowance")
+        controls.append(("impairment_allowance",allowance["entity_id"],allowance["institutional_sector"],
+                         "LCU","NOMINAL",component,D(allowance["amount"])))
+    elif event_type == "creditor_write_off":
+        allowance = next(x for x in postings if x.get("account")=="impairment_allowance")
+        loan = next(x for x in postings if x.get("account")=="loan_asset")
+        controls.append(("impairment_allowance",allowance["entity_id"],allowance["institutional_sector"],
+                         loan["currency"],loan["valuation_basis"],component,-D(allowance["amount"])))
+        controls.append(("writeoff_memorandum",loan["entity_id"],loan["institutional_sector"],
+                         loan["currency"],loan["valuation_basis"],component,D(event_payload["writeoff_claim_delta"])))
+    return instruments, controls
+
+
 def _state_payload(con, period):
     instrument = [dict(row) for row in con.execute(
         "SELECT instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,currency,maturity,denomination,valuation_basis,opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance FROM sfc_projection_positions WHERE period=? ORDER BY instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,currency,maturity,denomination,valuation_basis",
