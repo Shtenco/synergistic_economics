@@ -6,6 +6,7 @@ is a separate gate and is deliberately not inferred from this test.
 """
 from pathlib import Path
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -14,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
 
 from cross_register_coordinator import (
-    CRASH_EXIT, PARTICIPANTS, CrossRegisterCoordinator, SQLiteParticipant,
+    CRASH_EXIT, PARTICIPANTS, CoordinatorError, CrossRegisterCoordinator, SQLiteParticipant,
 )
 
 
@@ -49,6 +50,71 @@ def _child(root, crash_point):
     coordinator, _ = _paths(Path(root))
     coordinator.execute("coordinator-crash-matrix-001")
     raise AssertionError(f"crash point was not reached: {crash_point}")
+
+
+def _negative_controls():
+    with tempfile.TemporaryDirectory(prefix="synergy-coord-negative-") as directory:
+        root = Path(directory)
+        coordinator, participants = _paths(root)
+        operations = _operations()
+        assert coordinator.submit(
+            "coordinator-negative-001", "scenario-negative",
+            "negative-control", operations,
+        ) is True
+        assert coordinator.submit(
+            "coordinator-negative-001", "scenario-negative",
+            "negative-control", operations,
+        ) is False
+
+        changed = _operations()
+        changed["physical"]["payload"]["quantity"] = "999"
+        try:
+            coordinator.submit(
+                "coordinator-negative-001", "scenario-negative",
+                "negative-control", changed,
+            )
+        except CoordinatorError:
+            pass
+        else:
+            raise AssertionError("changed-content transaction ID reuse was accepted")
+
+        coordinator.execute("coordinator-negative-001")
+        assert coordinator.is_visible("coordinator-negative-001")
+        physical = participants["physical"]
+        token = physical.status("coordinator-negative-001")["prepare_token"]
+        receipt = physical.commit("coordinator-negative-001", token)
+        assert receipt["native_event_id"] == "physical-event-001"
+        assert physical.event_count("coordinator-negative-001") == 1
+
+        with sqlite3.connect(root / "coordinator.sqlite3") as con:
+            states = [row[0] for row in con.execute(
+                "SELECT to_state FROM coordinator_transitions "
+                "WHERE transaction_id=? ORDER BY transition_id",
+                ("coordinator-negative-001",),
+            )]
+        assert states == ["NEW", "PREPARING", "PREPARED", "COMMIT_DECIDED",
+                          "COMMITTING", "COMMITTED"], states
+
+        stale = _operations()
+        for name in PARTICIPANTS:
+            stale[name]["native_event_id"] = f"{name}-event-stale"
+        coordinator.submit(
+            "coordinator-negative-002", "scenario-negative",
+            "stale-revision-control", stale,
+        )
+        try:
+            coordinator.execute("coordinator-negative-002")
+        except Exception:
+            pass
+        else:
+            raise AssertionError("stale participant revision was accepted")
+        assert coordinator.state("coordinator-negative-002") == "ABORTED"
+        for participant in participants.values():
+            assert participant.event_count("coordinator-negative-002") == 0
+
+    print("PASS: changed-content replay rejected; identical submit and commit are idempotent")
+    print("PASS: immutable coordinator transition history records the decision barrier")
+    print("PASS: stale participant revision aborts the pre-decision transaction")
 
 
 def _run_parent():
@@ -113,6 +179,7 @@ def _run_parent():
             for participant in participants.values():
                 assert participant.event_count("coordinator-crash-matrix-001") == expected_events
 
+    _negative_controls()
     print(f"PASS: {len(crash_points)} subprocess termination points")
     print("PASS: pre-COMMIT_DECIDED recovery aborts all prepared participants")
     print("PASS: post-COMMIT_DECIDED recovery completes all six participants")
