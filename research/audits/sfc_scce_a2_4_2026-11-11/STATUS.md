@@ -1999,3 +1999,12 @@ A source audit found that impairment-allowance projection was assigning LCU/NOMI
 The allowance invariant no longer hard-codes instrument ID LOAN-001. It checks recognized gross loan assets by the same holder, currency and valuation basis as each allowance control. This keeps the contra-asset bound tied to the correct valuation identity when multiple loan instruments exist.
 
 Latest code commit at the time of this note: 9109961119f747822e93bf6ec062e8e2b4a24de4. A2.4 run 43191870095 is PENDING/QUEUED; no test step has executed and no PASS is claimed. The branch remains separate from main; PR #4 remains Draft/Open/unmerged.
+
+
+### Unified fixture identity and CI wiring — 12 November
+
+The cross-register fixture now separates scenario correlation from each register's own record identity: SCCE event key, physical-flow ID, capital cohort event ID, labour event ID, product-price source ID and financial group ID are all distinct. The shared scenario root is carried in six register envelopes and remains the financial causation ID. The fixture also asserts that the cohort-derived capital multiplier is actually applied to the live SCCE cell before its period transition, and that the physical unit (tonnes) remains distinct from the LCU valuation.
+
+The Prototype test wrapper now executes both the P2 atomic projection audit and the unified cross-register fixture. The dedicated A2.4 workflow compiles both prototype and audit source trees before running its controls. The three workflows have branch/workflow concurrency limits so stale revisions are canceled in favour of the newest pending run.
+
+Latest reviewed code commit before this status update: 031e05b96ebd3392a1d88349eeea56036f698b91; subsequent workflow compile update: 7f4c57d60f99be938420f971787dc01e07f09554. At the latter HEAD, A2.4 run 43192091654, Prototype run 43192102537 and SCCE Stage-C2 run 43192102507 are QUEUED; their jobs have not started. No PASS is claimed. PR #4 remains Draft/Open/unmerged; main remains unchanged.
