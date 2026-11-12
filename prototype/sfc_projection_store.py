@@ -547,16 +547,40 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
             event_count = con.execute("SELECT COUNT(*) FROM events").fetchone()[0]
             if coverage != event_count:
                 return False
+            runtime_meta = con.execute("SELECT mapper_version FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+            if runtime_meta is None or runtime_meta["mapper_version"] != MAPPER_VERSION:
+                return False
+            if con.execute("SELECT COUNT(*) FROM sfc_projection_event_checkpoints").fetchone()[0] != event_count:
+                return False
+            if con.execute("SELECT COUNT(*) FROM sfc_projection_group_checkpoints").fetchone()[0] != len(groups):
+                return False
+            coverage_rows = con.execute("""SELECT c.event_id,c.commit_sequence,c.event_index,c.mapping_version,
+                c.disposition,c.delta_count,e.group_id,e.event_index AS stored_event_index,
+                g.commit_sequence AS stored_sequence,e.payload_json
+                FROM sfc_event_coverage c JOIN events e ON e.event_id=c.event_id
+                JOIN event_groups g ON g.group_id=e.group_id""").fetchall()
+            event_components = {}
+            for item in coverage_rows:
+                event_payload = json.loads(item["payload_json"])
+                event_components[item["event_id"]] = event_payload.get("component")
+                if (item["commit_sequence"] != item["stored_sequence"]
+                        or item["event_index"] != item["stored_event_index"]
+                        or item["mapping_version"] != MAPPER_VERSION
+                        or event_payload.get("component") not in ("T","V","O")):
+                    return False
             deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_instrument_deltas d
                 JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
                 ORDER BY g.commit_sequence,e.event_index,d.delta_index""").fetchall()
             control_deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_control_deltas d
                 JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
                 ORDER BY g.commit_sequence,e.event_index,d.delta_index""").fetchall()
-            # Every covered event's disposition and delta count must reconcile.
+            # Every covered event's disposition, component and delta count reconcile.
             for row in con.execute("SELECT event_id,disposition,delta_count FROM sfc_event_coverage").fetchall():
                 n = con.execute("SELECT (SELECT COUNT(*) FROM sfc_instrument_deltas WHERE event_id=?)+(SELECT COUNT(*) FROM sfc_control_deltas WHERE event_id=?)",(row["event_id"],row["event_id"])).fetchone()[0]
                 if n != row["delta_count"] or (row["disposition"]=="mapped" and n==0) or (row["disposition"]=="no_stock_effect" and n!=0):
+                    return False
+            for row in con.execute("SELECT event_id,component FROM sfc_instrument_deltas UNION ALL SELECT event_id,component FROM sfc_control_deltas").fetchall():
+                if event_components.get(row["event_id"]) != row["component"]:
                     return False
             # Rebuild positions using the same explicit openings, never zero defaults.
             instrument_expected = {}
