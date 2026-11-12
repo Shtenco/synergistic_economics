@@ -3,7 +3,6 @@ from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 import sqlite3
-import shutil
 import sys
 import tempfile
 
