@@ -156,7 +156,7 @@ class LotInventoryTests(unittest.TestCase):
         ).result
         with self.assertRaises(RealEconomyError):
             stock.quarantine("lot-potato-001", "operator-a", "quarantine-1", 2, "quality hold")
-        stock.release("r-1", "release-1", reserved.version)
+        stock.release("r-1", "operator-a", "release-1", reserved.version)
         quarantined = stock.quarantine(
             "lot-potato-001", "farm-a", "quarantine-1", 3, "quality hold"
         )
