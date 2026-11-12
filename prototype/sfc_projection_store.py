@@ -266,8 +266,10 @@ def _map_event(event: JournalEvent):
     if event.event_type == "impairment_allowance_recognition":
         line = next(x for x in event.lines if x.account == "impairment_allowance")
         loan = next(x for x in event.lines if x.account == "impairment_expense")
+        if not line.currency or not line.valuation_basis:
+            raise SFCProjectionStoreError("impairment allowance requires explicit currency and valuation basis")
         controls.append(("impairment_allowance", line.entity_id, line.institutional_sector,
-                         "LCU", "NOMINAL", event.component, line.amount))
+                         line.currency, line.valuation_basis, event.component, line.amount))
     elif event.event_type == "creditor_write_off":
         allowance = next(x for x in event.lines if x.account == "impairment_allowance")
         loan = next(x for x in event.lines if x.account == "loan_asset")
@@ -351,6 +353,12 @@ def _verify_event_payload_semantics(event_payload):
     if event_type in {"bank_loan_origination","interest_accrual","interest_payment",
                       "principal_repayment","legal_debt_forgiveness"} and asset_claims != liability_claims:
         raise SFCProjectionStoreError("stored claim holder/issuer movement mirror mismatch")
+    if event_type == "impairment_allowance_recognition":
+        allowance = next(x for x in postings if x.get("account")=="impairment_allowance")
+        if (not isinstance(allowance.get("currency"),str) or not allowance["currency"].strip()
+                or not isinstance(allowance.get("valuation_basis"),str)
+                or not allowance["valuation_basis"].strip()):
+            raise SFCProjectionStoreError("stored impairment allowance lacks explicit currency/valuation basis")
     if event_type == "creditor_write_off":
         if D(event_payload.get("writeoff_claim_delta")) != amount:
             raise SFCProjectionStoreError("stored write-off memo delta mismatch")
@@ -404,8 +412,10 @@ def _map_payload_event(event_payload):
             instruments.append((identity,component,amount if line.get("side")=="D" else -amount))
     if event_type == "impairment_allowance_recognition":
         allowance = next(x for x in postings if x.get("account")=="impairment_allowance")
+        if not allowance.get("currency") or not allowance.get("valuation_basis"):
+            raise SFCProjectionStoreError("stored impairment allowance lacks explicit valuation dimensions")
         controls.append(("impairment_allowance",allowance["entity_id"],allowance["institutional_sector"],
-                         "LCU","NOMINAL",component,D(allowance["amount"])))
+                         allowance["currency"],allowance["valuation_basis"],component,D(allowance["amount"])))
     elif event_type == "creditor_write_off":
         allowance = next(x for x in postings if x.get("account")=="impairment_allowance")
         loan = next(x for x in postings if x.get("account")=="loan_asset")
