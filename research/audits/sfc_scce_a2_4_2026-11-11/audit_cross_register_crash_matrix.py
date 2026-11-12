@@ -126,7 +126,7 @@ def _run_parent():
             f"after_commit:{name}",
             f"after_commit_receipt:{name}",
         ))
-    crash_points.append("after_commit_barrier")
+    crash_points.extend(("after_prepared_barrier", "after_commit_decision", "after_commit_barrier"))
 
     for index, point in enumerate(crash_points):
         with tempfile.TemporaryDirectory(prefix=f"synergy-coord-{index}-") as directory:
@@ -154,7 +154,7 @@ def _run_parent():
                 f"{point}: partially committed transaction crossed read barrier"
             )
             state = recovered.recover("coordinator-crash-matrix-001")
-            predecision = point.startswith(("after_prepare:", "after_prepare_receipt:"))
+            predecision = point.startswith(("after_prepare:", "after_prepare_receipt:")) or point == "after_prepared_barrier"
             if predecision:
                 assert state == "ABORTED", f"{point}: pre-decision recovery must abort"
                 expected_events = 0
