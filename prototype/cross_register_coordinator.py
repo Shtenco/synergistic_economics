@@ -103,6 +103,10 @@ class SQLiteParticipant:
                 CREATE TRIGGER IF NOT EXISTS participant_transitions_no_delete
                     BEFORE DELETE ON participant_transitions
                     BEGIN SELECT RAISE(ABORT,'participant transition history is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS participant_inbox_payload_no_update
+                    BEFORE UPDATE OF transaction_id,stream_id,native_event_id,payload_digest,payload_json,expected_revision,prepare_token
+                    ON participant_inbox
+                    BEGIN SELECT RAISE(ABORT,'participant prepared payload is immutable'); END;
                 CREATE TABLE IF NOT EXISTS participant_events(
                     native_event_id TEXT PRIMARY KEY,
                     transaction_id TEXT NOT NULL UNIQUE,
@@ -134,6 +138,8 @@ class SQLiteParticipant:
         stream = _required(operation.get("stream_id"), "stream_id")
         native_id = _required(operation.get("native_event_id"), "native_event_id")
         payload = operation.get("payload")
+        if not isinstance(payload, Mapping):
+            raise CoordinatorError("participant payload must be a JSON object")
         payload_json = _canonical(payload)
         digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
         revision = operation.get("expected_revision")
@@ -316,9 +322,15 @@ class CrossRegisterCoordinator:
                     PRIMARY KEY(transaction_id,participant),
                     UNIQUE(participant,native_event_id)
                 );
+                CREATE TRIGGER IF NOT EXISTS coordinator_transactions_payload_no_update
+                    BEFORE UPDATE OF transaction_id,envelope_json,envelope_digest ON coordinator_transactions
+                    BEGIN SELECT RAISE(ABORT,'coordinator transaction envelope is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS coordinator_transactions_no_delete
                     BEFORE DELETE ON coordinator_transactions
                     BEGIN SELECT RAISE(ABORT,'coordinator history is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS coordinator_operations_payload_no_update
+                    BEFORE UPDATE OF transaction_id,participant,stream_id,native_event_id,payload_json,payload_digest,expected_revision ON coordinator_operations
+                    BEGIN SELECT RAISE(ABORT,'coordinator operation payload is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS coordinator_operations_no_delete
                     BEFORE DELETE ON coordinator_operations
                     BEGIN SELECT RAISE(ABORT,'coordinator operations are immutable'); END;
@@ -382,7 +394,10 @@ class CrossRegisterCoordinator:
                 raise CoordinatorError(f"{name} operation must be a mapping")
             stream = _required(op.get("stream_id"), f"{name}.stream_id")
             native_id = _required(op.get("native_event_id"), f"{name}.native_event_id")
-            payload_json = _canonical(op.get("payload"))
+            payload = op.get("payload")
+            if not isinstance(payload, Mapping):
+                raise CoordinatorError(f"{name}.payload must be a JSON object")
+            payload_json = _canonical(payload)
             digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
             revision = op.get("expected_revision")
             if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
