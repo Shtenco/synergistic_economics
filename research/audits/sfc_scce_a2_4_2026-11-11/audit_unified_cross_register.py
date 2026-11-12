@@ -159,7 +159,7 @@ def main():
             {"register":"scce","scenario_id":scenario_id,"record_id":model.events[-1]["key"]},
             {"register":"physical","scenario_id":scenario_id,"record_id":outflow.flow_id},
             {"register":"capital","scenario_id":scenario_id,"record_id":cohort_event.event_id},
-            {"register":"labour","scenario_id":scenario_id,"record_id":labour_event["record_id"]},
+            {"register":"labour","scenario_id":scenario_id,"record_id":labour_event["event_id"]},
             {"register":"product_valuation","scenario_id":scenario_id,"record_id":valuation.source_id},
             {"register":"financial","scenario_id":scenario_id,"record_id":group["group_id"]},
         ),
