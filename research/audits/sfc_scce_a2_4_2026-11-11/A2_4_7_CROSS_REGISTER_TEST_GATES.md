@@ -128,7 +128,7 @@ not execution evidence.
 | G0-D: financial | balanced journal fixtures plus instrument-level stock-flow and holder/issuer mirrors | **IMPLEMENTED / EXECUTION PENDING** — `audit_financial_journal.py`, `audit_instrument_stock_flow.py`; synthetic component controls, not a general ledger/runtime |
 | G0-E: labour/rights | interval-overlap, consent, delivery, compensation accrual/settlement and rights non-inference tests | **IMPLEMENTED / EXECUTION PENDING** — `audit_labour_consent.py`; component fixture, not a complete rights engine |
 | G1: interface closure | all A2.4.1–A2.4.7 interfaces pass, typed conversions explicit, no balancing plug | **OPEN** |
-| G2: end-to-end | one frozen period with linked physical, capital, labour and financial event IDs; all stock/flow and mirror identities close | **NOT STARTED** |
+| G2: end-to-end | one frozen period with linked physical, capital, labour and financial event IDs; all stock/flow and mirror identities close | **SYNTHETIC FIXTURE IMPLEMENTED / CI PENDING; production runtime closure OPEN** — `audit_unified_cross_register.py` |
 | G3: comparative | preregistered matched-seed regimes, paired outcomes, uncertainty, sensitivity and adverse effects | **NOT STARTED** |
 | G4: empirical | provenance, calibration, held-out observations, identification and external validation for each claimed effect | **NOT STARTED** |
 
@@ -318,3 +318,10 @@ stock-flow identities from actual event records and period results. It is
 included in the standalone branch-push workflow and the PR-observable
 unittest wrapper, bringing the wrapper to twelve tests. Exact execution is
 pending; this is an implemented integration test, not a completed gate.
+
+
+## 7. 12 November cross-register implementation checkpoint
+
+A synthetic A2.4.7 integration fixture now composes the actual seven-cell SCCE physical engine with the B8.1 cohort-to-service adapter, B3 physical-flow endpoint register, typed product valuation, labour/time/consent controls, and the GOLD-2A P2 financial projection. A shared scenario provenance ID is carried through each register's own event/reference and the financial group's causation ID. The fixture checks native physical units separately from financial currency and replays the financial positions from sealed openings.
+
+This is not a single production runtime or a cross-register atomic transaction. The financial P2 transaction is atomic within its own SQLite database; physical, cohort, product, labour and rights registers do not yet participate in that same transaction coordinator. Therefore Gate 2 remains OPEN. The fixture is COMMITTED / EXECUTION PENDING until exact-head CI logs are inspected. Gate 3 comparative and Gate 4 empirical work remain NOT STARTED.
