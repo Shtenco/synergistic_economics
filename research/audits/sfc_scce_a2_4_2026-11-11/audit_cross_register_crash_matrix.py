@@ -80,6 +80,10 @@ def _negative_controls():
 
         coordinator.execute("coordinator-negative-001")
         assert coordinator.is_visible("coordinator-negative-001")
+        # A lost client response followed by execute retry must return the
+        # existing terminal result without adding transitions or native events.
+        assert coordinator.execute("coordinator-negative-001") == "COMMITTED"
+        assert participants["physical"].event_count("coordinator-negative-001") == 1
         physical = participants["physical"]
         token = physical.status("coordinator-negative-001")["prepare_token"]
         receipt = physical.commit("coordinator-negative-001", token)
@@ -111,8 +115,34 @@ def _negative_controls():
         assert coordinator.state("coordinator-negative-002") == "ABORTED"
         for participant in participants.values():
             assert participant.event_count("coordinator-negative-002") == 0
+        assert coordinator.execute("coordinator-negative-002") == "ABORTED"
 
-    print("PASS: changed-content replay rejected; identical submit and commit are idempotent")
+    # A receipt must not make a transaction visible if the native event row
+    # has disappeared or been altered outside the participant API.
+    with tempfile.TemporaryDirectory(prefix="synergy-coord-native-tamper-") as directory:
+        root = Path(directory)
+        coordinator, participants = _paths(root)
+        coordinator.submit(
+            "coordinator-native-tamper-001", "scenario-native-tamper",
+            "native-tamper-control", _operations(),
+        )
+        assert coordinator.execute("coordinator-native-tamper-001") == "COMMITTED"
+        assert coordinator.is_visible("coordinator-native-tamper-001")
+        with sqlite3.connect(root / "physical.sqlite3") as con:
+            con.execute("DROP TRIGGER participant_events_no_delete")
+            con.execute(
+                "DELETE FROM participant_events WHERE transaction_id=?",
+                ("coordinator-native-tamper-001",),
+            )
+        assert not coordinator.is_visible("coordinator-native-tamper-001")
+        try:
+            coordinator.execute("coordinator-native-tamper-001")
+        except CoordinatorError:
+            pass
+        else:
+            raise AssertionError("committed retry accepted a missing native event")
+
+    print("PASS: changed-content replay rejected; identical submit and execute are idempotent")
     print("PASS: immutable coordinator transition history records the decision barrier")
     print("PASS: stale participant revision aborts the pre-decision transaction")
 
@@ -176,6 +206,7 @@ def _run_parent():
                     f"{point}: complete transaction failed commit barrier verification"
                 )
             assert recovered.recover("coordinator-crash-matrix-001") == state
+            assert recovered.execute("coordinator-crash-matrix-001") == state
             for participant in participants.values():
                 assert participant.event_count("coordinator-crash-matrix-001") == expected_events
 
