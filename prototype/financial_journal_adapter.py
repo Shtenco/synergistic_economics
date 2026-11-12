@@ -1,19 +1,15 @@
-"""Typed adapter from validated entity-journal events to the durable store.
-
-The adapter deliberately delegates all accounting validation to
-EntityJournal.post(). It does not accept arbitrary dictionaries as validated
-journal events.
-"""
+"""Lossless adapter from the canonical production EntityJournal to SQLite."""
 from __future__ import annotations
 
 from decimal import Decimal
 from typing import Sequence
 
+from entity_journal import EntityJournal, JournalEvent, JournalLine
 from financial_event_store import FinancialEventStore
 
 
 class JournalStoreAdapterError(ValueError):
-    """Raised when the validated-journal-to-store boundary is violated."""
+    """Raised when the canonical journal-to-store boundary is violated."""
 
 
 def _decimal_text(value: Decimal) -> str:
@@ -22,103 +18,90 @@ def _decimal_text(value: Decimal) -> str:
     return format(value, "f")
 
 
-def _posting_payload(line) -> dict:
-    """Preserve all entity, counterparty, issuer and instrument dimensions."""
+def _posting_payload(line: JournalLine) -> dict:
+    """Serialize every declared dimension; absence stays absent, never fabricated."""
+    if not isinstance(line, JournalLine):
+        raise JournalStoreAdapterError("posting must be a canonical JournalLine")
     required = ("account", "side", "entity_id", "institutional_sector")
     optional = (
-        "counterparty_entity_id", "counterparty_sector",
-        "issuer_entity_id", "issuer_sector", "instrument_id",
-        "instrument_class", "currency", "maturity", "denomination",
-        "valuation_basis",
+        "counterparty_entity_id", "counterparty_sector", "issuer_entity_id",
+        "issuer_sector", "instrument_id", "instrument_class", "currency",
+        "maturity", "denomination", "valuation_basis",
     )
     payload = {}
     for field in required:
-        value = getattr(line, field, None)
-        if not isinstance(value, str) or not value.strip():
-            raise JournalStoreAdapterError(
-                f"validated journal line has invalid {field}")
+        value = getattr(line, field)
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise JournalStoreAdapterError(f"journal line has invalid {field}")
         payload[field] = value
-    # Optional dimensions are emitted only when explicitly present. This
-    # preserves the distinction between an absent dimension and a declared
-    # value such as currency="LCU". Claim identity completeness is enforced
-    # by EntityJournal before this serializer is reached.
     for field in optional:
-        value = getattr(line, field, None)
-        if value is None or value == "":
+        value = getattr(line, field)
+        if value is None:
             continue
-        if not isinstance(value, str) or not value.strip():
-            raise JournalStoreAdapterError(
-                f"validated journal line has invalid optional {field}")
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise JournalStoreAdapterError(f"journal line has invalid optional {field}")
         payload[field] = value
-    payload["amount"] = _decimal_text(getattr(line, "amount", None))
+    payload["amount"] = _decimal_text(line.amount)
     return payload
 
 
-def _event_payload(event) -> dict:
-    event_id = getattr(event, "event_id", None)
-    event_type = getattr(event, "event_type", None)
-    period = getattr(event, "effective_period", None)
-    lines = getattr(event, "lines", None)
-    if not isinstance(event_id, str) or not event_id.strip():
-        raise JournalStoreAdapterError("event_id is required")
-    if not isinstance(event_type, str) or not event_type.strip():
-        raise JournalStoreAdapterError("event_type is required")
-    if not isinstance(period, int) or isinstance(period, bool) or period < 0:
-        raise JournalStoreAdapterError("effective_period must be a non-negative integer")
-    if not isinstance(lines, tuple) or not lines:
+def _event_payload(event: JournalEvent) -> dict:
+    if not isinstance(event, JournalEvent):
+        raise JournalStoreAdapterError("event must be a canonical JournalEvent")
+    if not isinstance(event.lines, tuple) or not event.lines:
         raise JournalStoreAdapterError("event lines must be a non-empty immutable tuple")
-    return {
-        "event_id": event_id,
-        "event_type": event_type,
-        "effective_period": period,
-        "postings": [_posting_payload(line) for line in lines],
+    payload = {
+        "event_id": event.event_id,
+        "event_type": event.event_type,
+        "effective_period": event.effective_period,
+        "component": event.component,
+        "legal_effect": event.legal_effect,
+        "postings": [_posting_payload(line) for line in event.lines],
     }
+    if event.writeoff_claim_delta is not None:
+        payload["writeoff_claim_delta"] = _decimal_text(event.writeoff_claim_delta)
+    if event.forgiven_principal is not None:
+        payload["forgiven_principal"] = _decimal_text(event.forgiven_principal)
+    if event.legal_evidence is not None:
+        evidence = event.legal_evidence
+        payload["legal_evidence"] = {
+            "evidence_ref": evidence.evidence_ref,
+            "authority": evidence.authority,
+            "effective_at": evidence.effective_at,
+            "scope": evidence.scope,
+            "parties": list(evidence.parties),
+        }
+    return payload
 
 
-def append_validated_group(journal, store: FinancialEventStore, group_id: str,
-                           events: Sequence, causation_id: str | None = None) -> bool:
-    """Validate a group through EntityJournal, then persist it atomically.
-
-    Returns True for a new durable group and False for an identical durable
-    replay. If validation or persistence fails, newly inserted in-memory
-    journal entries from this call are rolled back. Existing journal entries
-    are never removed or overwritten.
-    """
-    if not callable(getattr(journal, "post", None)):
-        raise JournalStoreAdapterError("an EntityJournal-compatible post() is required")
-    journal_events = getattr(journal, "events", None)
-    if not isinstance(journal_events, dict):
-        raise JournalStoreAdapterError("journal must expose its validated event registry")
+def append_validated_group(journal: EntityJournal, store: FinancialEventStore,
+                           group_id: str, events: Sequence[JournalEvent],
+                           causation_id: str | None = None) -> bool:
+    """Validate all GOLD-2A events, then persist the immutable group atomically."""
+    if not isinstance(journal, EntityJournal):
+        raise JournalStoreAdapterError("production EntityJournal instance is required")
     if not isinstance(store, FinancialEventStore):
-        raise JournalStoreAdapterError("a FinancialEventStore instance is required")
+        raise JournalStoreAdapterError("FinancialEventStore instance is required")
     if not isinstance(events, (tuple, list)) or not events:
         raise JournalStoreAdapterError("events must be a non-empty tuple or list")
+    if any(not isinstance(event, JournalEvent) for event in events):
+        raise JournalStoreAdapterError("all events must be canonical JournalEvent values")
 
-    initial_ids = set(journal_events)
+    initial_ids = set(journal.events)
     try:
-        # Validate every event with the canonical accounting validator before
-        # the store receives any serialized payload.
         for event in events:
-            event_id = getattr(event, "event_id", None)
-            if not isinstance(event_id, str) or not event_id.strip():
-                raise JournalStoreAdapterError("event_id is required")
-            if event_id in journal_events:
-                raise JournalStoreAdapterError(
-                    f"event already exists in this journal instance: {event_id}")
+            if event.event_id in journal.events:
+                raise JournalStoreAdapterError(f"event already exists in journal: {event.event_id}")
             result = journal.post(event)
-            if (journal_events.get(event_id) != event
+            if (journal.events.get(event.event_id) != event
                     or not isinstance(result, tuple) or len(result) != 2
                     or result[0] != result[1]):
                 raise JournalStoreAdapterError(
-                    f"EntityJournal did not validate and register event {event_id}")
+                    f"EntityJournal did not validate and register {event.event_id}")
         payloads = [_event_payload(event) for event in events]
         return store.append_group(group_id, payloads, causation_id)
     except Exception:
-        # EntityJournal.post() mutates its in-memory event dict only after all
-        # checks pass. Undo only entries newly inserted by this adapter call.
         for event in events:
-            event_id = getattr(event, "event_id", None)
-            if (isinstance(event_id, str) and event_id not in initial_ids
-                    and journal_events.get(event_id) == event):
-                journal_events.pop(event_id, None)
+            if event.event_id not in initial_ids and journal.events.get(event.event_id) == event:
+                journal.events.pop(event.event_id, None)
         raise
