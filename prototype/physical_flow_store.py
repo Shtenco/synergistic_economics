@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from contextlib import closing
 from decimal import Decimal
+from datetime import datetime
 import hashlib, json, sqlite3
 from pathlib import Path
 
@@ -37,6 +38,8 @@ class FlowPosting:
     measurement_method: str
     uncertainty: D
     evidence_status: str
+    correction_of: str | None = None
+    correction_reason: str = ""
 
 
 def _text(value, field):
@@ -54,6 +57,17 @@ def _decimal(value, field, positive=False):
     if not result.is_finite() or (positive and result <= 0):
         raise PhysicalFlowError(f"{field} must be finite" + (" and positive" if positive else ""))
     return result
+
+
+def _aware_timestamp(value):
+    _text(value, "event_time")
+    try:
+        parsed = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value)
+    except ValueError as exc:
+        raise PhysicalFlowError("event_time must be valid ISO 8601 with an explicit UTC offset") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise PhysicalFlowError("event_time must be timezone-aware")
+    return parsed
 
 
 def _canonical(value):
@@ -87,6 +101,7 @@ def validate_pair(outflow, inflow):
     for field in ("flow_id","origin_node","destination_node","origin_boundary","destination_boundary",
                   "product_id","grade_id","unit","event_time","period","flow_class","quality","measurement_method"):
         _text(getattr(outflow, field), field)
+    _aware_timestamp(outflow.event_time)
     _decimal(outflow.quantity, "quantity", True)
     if _decimal(outflow.uncertainty, "uncertainty") < 0:
         raise PhysicalFlowError("uncertainty must be non-negative")
@@ -145,7 +160,27 @@ class PhysicalFlowStore:
                     if not self.verify():
                         raise PhysicalFlowError("identical retry refused: replay verification failed")
                     return False
+                if outflow.correction_of is not None:
+                    _text(outflow.correction_of, "correction_of")
+                    _text(outflow.correction_reason, "correction_reason")
+                    if outflow.correction_of == outflow.flow_id:
+                        raise PhysicalFlowError("a correction cannot reference itself")
+                    original = con.execute("SELECT payload_json FROM physical_flows WHERE flow_id=?",
+                                           (outflow.correction_of,)).fetchone()
+                    if original is None:
+                        raise PhysicalFlowError("correction must reference an earlier recorded flow")
+                    original_out = json.loads(original["payload_json"])["outflow"]
+                    if (outflow.product_id, outflow.grade_id, outflow.unit) != (
+                            original_out["product_id"], original_out["grade_id"], original_out["unit"]):
+                        raise PhysicalFlowError("correction product, grade and unit must match original flow")
+                    if (outflow.origin_node, outflow.destination_node) != (
+                            original_out["destination_node"], original_out["origin_node"]):
+                        raise PhysicalFlowError("compensating flow must reverse original endpoints")
+                elif outflow.correction_reason:
+                    raise PhysicalFlowError("correction_reason requires correction_of")
                 meta = con.execute("SELECT event_count,tail_hash FROM physical_flow_meta WHERE singleton_id=1").fetchone()
+                if meta is None:
+                    raise PhysicalFlowError("physical flow metadata is missing")
                 seq = meta["event_count"] + 1
                 chain = self._chain_hash(seq,outflow.flow_id,digest,meta["tail_hash"])
                 con.execute("INSERT INTO physical_flows VALUES(?,?,?,?,?,?)",
