@@ -667,10 +667,15 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
             for item in coverage_rows:
                 event_payload = json.loads(item["payload_json"])
                 event_components[item["event_id"]] = event_payload.get("component")
+                checkpoint = event_checkpoint_map.get(item["event_id"])
                 if (item["commit_sequence"] != item["stored_sequence"]
                         or item["event_index"] != item["stored_event_index"]
                         or item["mapping_version"] != MAPPER_VERSION
-                        or event_payload.get("component") not in ("T","V","O")):
+                        or event_payload.get("component") not in ("T","V","O")
+                        or checkpoint is None
+                        or checkpoint["commit_sequence"] != item["commit_sequence"]
+                        or checkpoint["event_index"] != item["event_index"]
+                        or checkpoint["current_period"] != event_payload.get("effective_period")):
                     return False
             deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_instrument_deltas d
                 JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
