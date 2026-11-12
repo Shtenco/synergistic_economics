@@ -147,6 +147,10 @@ def _run_parent():
         # quarantine it, then restore into a separate clean location.
         with closing(source._connect()) as src:
             assert src.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0] == 0
+        for suffix in ("-wal", "-shm"):
+            sidecar = Path(str(source_path) + suffix)
+            if sidecar.exists():
+                sidecar.unlink()
         corrupt_bytes = b"not-a-sqlite-database"
         source_path.write_bytes(corrupt_bytes)
         try:
