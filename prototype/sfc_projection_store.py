@@ -15,7 +15,7 @@ import sqlite3
 from typing import Sequence
 
 import financial_event_store as fes
-from entity_journal import EntityJournal, JournalEvent
+from entity_journal import EntityJournal, JournalEvent, SECTORS
 from financial_event_store import FinancialEventStore, FinancialEventStoreError
 from sfc_projection_kernel import SFCIdentity, canonical_decimal
 from sfc_projection_registry import verify_sfc_projection_openings
@@ -65,6 +65,8 @@ def _control_rows(rows):
             item[field] = value
         if item["control_id"] not in CONTROL_IDS:
             raise SFCProjectionStoreError("unknown control position")
+        if item["sector"] not in SECTORS:
+            raise SFCProjectionStoreError("control opening has an unknown institutional sector")
         period = row.get("period")
         if not isinstance(period, int) or isinstance(period, bool) or period != 0:
             raise SFCProjectionStoreError("control openings must explicitly start at period 0")
@@ -119,6 +121,8 @@ def activate_control_openings(store: FinancialEventStore, openings: Sequence[dic
             if existing:
                 if (existing["snapshot_sha256"], existing["mapper_version"], existing["evidence_ref"], existing["opening_count"]) != (digest, mapper_version, evidence_ref, len(clean)):
                     raise SFCProjectionStoreError("control opening snapshot already sealed with different content")
+                if not _verify_control_openings(con):
+                    raise SFCProjectionStoreError("sealed control opening snapshot is corrupt")
                 con.execute("COMMIT")
                 return False
             for row in clean:
