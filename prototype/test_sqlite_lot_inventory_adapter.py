@@ -24,7 +24,7 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
     def meta(self, command, key, *, fail_at=None):
         return {
             "command_id": command, "idempotency_key": key,
-            "actor_id": "operator-1", "authority_ref": "inventory-mandate-1",
+            "authority_ref": "inventory-mandate-1",
             "correlation_id": "corr-inventory-1",
             "occurred_at": NOW, "recorded_at": NOW, "fail_at": fail_at,
         }
@@ -34,6 +34,7 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
             lot_id="lot-1", product_id="grain", owner_id="owner-1",
             custodian_id="warehouse-1", location_id="depot-a",
             quantity="100", unit="kg", authorized_actors=("operator-1",),
+            actor_id="operator-1",
             **self.meta("cmd-register", "request-register"),
         )
 
@@ -137,6 +138,7 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
             lot_id="lot-1", product_id="grain", owner_id="owner-1",
             custodian_id="warehouse-1", location_id="depot-a",
             quantity="100", unit="kg",
+            actor_id="operator-1",
             **self.meta("cmd-register", "request-register"),
         )
         with self.assertRaisesRegex(RealEconomyError, "not authorized"):
