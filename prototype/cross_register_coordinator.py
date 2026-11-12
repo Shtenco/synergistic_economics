@@ -502,11 +502,13 @@ class CrossRegisterCoordinator:
                 token = self.participants[name].prepare(txid, operation)
                 self._record_prepared(txid, name, token)
             self._set_state(txid, "PREPARED")
+            _fault("after_prepared_barrier")
         except Exception:
             self._abort_predecision(txid)
             raise
         # This durable decision is the point after which recovery MUST commit.
         self._set_state(txid, "COMMIT_DECIDED")
+        _fault("after_commit_decision")
         self._commit_after_decision(txid)
 
     def recover(self, txid):
