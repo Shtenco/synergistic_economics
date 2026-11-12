@@ -75,8 +75,8 @@ def audit_canonical_event_log(event_store):
 
     for event in events:
         _positive_int(event.sequence, "EventStore sequence")
-        if event.sequence <= previous_sequence:
-            raise EventReplayError("EventStore sequence must be strictly increasing")
+        if event.sequence != previous_sequence + 1:
+            raise EventReplayError("EventStore sequence must be contiguous; a gap indicates missing history")
         previous_sequence = event.sequence
 
         payload = event.payload

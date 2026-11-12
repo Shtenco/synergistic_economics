@@ -51,6 +51,13 @@ class CanonicalReplayAuditTests(unittest.TestCase):
         self.assertEqual(report.canonical_events, 0)
         self.assertEqual(report.legacy_events, 0)
 
+    def test_global_event_sequence_gap_is_rejected(self):
+        self.store.append("legacy-1", "old.event", {"x": 1}, "legacy-key-1")
+        self.store.append("legacy-2", "old.event", {"x": 2}, "legacy-key-2")
+        object.__setattr__(self.store.events[1], "sequence", 3)
+        with self.assertRaises(EventReplayError):
+            audit_canonical_event_log(self.store)
+
     def test_legacy_events_are_counted_but_not_decoded(self):
         self.store.append("legacy-1", "old.event", {"x": 1}, "legacy-key")
         report = audit_canonical_event_log(self.store)

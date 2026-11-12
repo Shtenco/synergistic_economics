@@ -208,6 +208,19 @@ These tests exercise only the in-process coordinator under its own lock. They do
 - This is an architecture/acceptance contract, not a persistence implementation. The current EventStore and P6.2 coordinator remain in-memory; no crash durability or state reconstruction is claimed.
 
 
+### P6.3b — SQLite durable single-aggregate transaction boundary
+
+- [sqlite_event_repository.py](sqlite_event_repository.py) — standard-library SQLite repository. A command commits its canonical P6.2 event envelopes, aggregate projection, immutable idempotency receipt and outbox rows in one `BEGIN IMMEDIATE` transaction. Uses WAL, FULL synchronous mode, foreign keys, busy timeout, uniqueness constraints, projection digests and a fail-closed repository audit.
+- [test_sqlite_event_repository.py](test_sqlite_event_repository.py) — crash injection after event/outbox insertion, after projection write, after receipt write, before commit, and after commit but before response; also checks same-key retry, stale versions, outbox acknowledgement, database reopen and tampering.
+- SQLite is deliberately scoped to a **single-host** transactional repository. It is not a distributed lock, network-filesystem database, authenticated event chain or broker. Outbox publication is at-least-once; consumers still need a transactional inbox/deduplication receipt.
+- This is the first durable P6.3b slice, not completion of P6.3. It supports the existing one-aggregate P6.2 envelope only. P6.3a multi-aggregate inventory command v2, deterministic inventory reducers, genesis/snapshot replay and native adapters for canonical registers remain separate gates. The mutating P6.1 `LotInventory` API is intentionally not wrapped post hoc.
+
+Run the focused durable repository tests:
+
+```bash
+python -m unittest discover -s prototype -p 'test_sqlite_event_repository.py' -v
+```
+
 ### P6.3a — Inventory lifecycle event and multi-aggregate command contract
 
 - [P6.3a contract](../research/PROTOTYPE_6_3A_INVENTORY_LIFECYCLE_EVENT_AND_COMMAND_CONTRACT_V0_1.md) defines typed lot/reservation aggregate identities, complete expected-version vectors, command-scoped idempotency, globally contiguous command event ordinals, immutable receipts, and exact event groups for register/reserve/commit/expiry/release/consume/quarantine.
