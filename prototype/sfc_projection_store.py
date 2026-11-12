@@ -661,10 +661,31 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 return False
             if runtime["state_sha256"] != _state_hash(con,current):
                 return False
-            for period_row in con.execute("SELECT DISTINCT period FROM sfc_sector_flows").fetchall():
-                flow_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?",
-                                        (period_row["period"],)).fetchall()
-                if sum((D(row["financial_net_lending"]) for row in flow_rows), D("0")) != 0:
+            expected_flows = {}
+            for row in deltas:
+                if row["component"] != "T":
+                    continue
+                amount = D(row["amount"])
+                period = row["effective_period"]
+                for sector, asset, liability in (
+                    (row["holder_sector"], amount, D("0")),
+                    (row["issuer_sector"], D("0"), amount),
+                ):
+                    key = (period, sector)
+                    old_a, old_l = expected_flows.get(key, (D("0"), D("0")))
+                    expected_flows[key] = (old_a + asset, old_l + liability)
+            actual_flows = {}
+            for row in con.execute("SELECT * FROM sfc_sector_flows").fetchall():
+                actual_flows[(row["period"], row["sector"])] = (
+                    D(row["transaction_asset_delta"]),
+                    D(row["transaction_liability_delta"]),
+                    D(row["financial_net_lending"]),
+                )
+            normalized_expected = {key: (a, l, a-l) for key, (a,l) in expected_flows.items()}
+            if actual_flows != normalized_expected:
+                return False
+            for period in {key[0] for key in actual_flows}:
+                if sum((values[2] for key, values in actual_flows.items() if key[0] == period), D("0")) != 0:
                     return False
             expected_instrument_count = len(instrument_expected)
             actual_instrument_count = con.execute("SELECT COUNT(*) FROM sfc_projection_positions").fetchone()[0]
