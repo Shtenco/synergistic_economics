@@ -53,16 +53,22 @@ class PeriodGovernance:
 
     checkpoint_verifier(ref, digest) must verify an externally signed checkpoint
     against a trust root and rollback-resistant external sequence store.
+    authorization_verifier(approver_id, role, request_context, evidence_ref)
+    must authenticate the identity, authorize the role for this exact request,
+    and verify an independently issued approval assertion.
     """
 
     def __init__(self, database_path, checkpoint_verifier: Callable[[str, str], dict],
-                 service_id: str):
+                 service_id: str, authorization_verifier: Callable[[str, str, dict, str], bool]):
         if not callable(checkpoint_verifier):
             raise PeriodGovernanceError("an external checkpoint verifier is mandatory")
+        if not callable(authorization_verifier):
+            raise PeriodGovernanceError("an independent approval authorization verifier is mandatory")
         self.service_id = _required(service_id, "service_id")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.checkpoint_verifier = checkpoint_verifier
+        self.authorization_verifier = authorization_verifier
         with closing(self._connect()) as con:
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS period_closures(
@@ -354,10 +360,35 @@ class PeriodGovernance:
             con.execute("BEGIN IMMEDIATE")
             try:
                 request = con.execute(
-                    "SELECT state FROM reopen_requests WHERE request_id=?", (request_id,)
+                    "SELECT * FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()
                 if request is None:
                     raise PeriodGovernanceError("unknown reopen request")
+                request_context = {
+                    "service_id": self.service_id,
+                    "request_id": request_id,
+                    "period": request["period"],
+                    "old_generation": request["old_generation"],
+                    "new_generation": request["new_generation"],
+                    "reason": request["reason"],
+                    "evidence_ref": request["evidence_ref"],
+                    "scope": json.loads(request["scope_json"]),
+                    "pre_reopen_checkpoint_ref": request["pre_reopen_checkpoint_ref"],
+                    "pre_reopen_checkpoint_digest": request["pre_reopen_checkpoint_digest"],
+                }
+                request_context["request_digest"] = hashlib.sha256(
+                    _canonical(request_context).encode("utf-8")
+                ).hexdigest()
+                try:
+                    authorized = self.authorization_verifier(
+                        approver, role, request_context, evidence
+                    )
+                except Exception as exc:
+                    raise PeriodGovernanceError("approval authorization verification failed") from exc
+                if authorized is not True:
+                    raise PeriodGovernanceError(
+                        "approver identity/role is not authorized for this exact reopen request"
+                    )
                 existing = con.execute(
                     "SELECT approver_id,evidence_ref FROM reopen_approvals "
                     "WHERE request_id=? AND approval_role=?", (request_id, role)
