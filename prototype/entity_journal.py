@@ -295,6 +295,22 @@ class EntityJournal:
             raise EntityJournalError("GOLD-2A event postings must carry one common event amount")
         amount = next(iter(amounts))
 
+        if event.event_type == "bank_loan_origination":
+            loan_asset = composition["loan_asset"][0]
+            loan_liability = composition["loan_liability"][0]
+            deposit_asset = composition["deposit_asset"][0]
+            deposit_liability = composition["deposit_liability"][0]
+            bank_id = loan_asset.entity_id
+            borrower_id = loan_asset.issuer_entity_id
+            if (loan_asset.institutional_sector != "CB"
+                    or loan_liability.entity_id != borrower_id
+                    or loan_liability.counterparty_entity_id != bank_id
+                    or deposit_asset.entity_id != borrower_id
+                    or deposit_asset.issuer_entity_id != bank_id
+                    or deposit_liability.entity_id != bank_id
+                    or deposit_liability.counterparty_entity_id != borrower_id):
+                raise EntityJournalError("bank loan origination participant roles do not reconcile")
+
         # Bilateral claim identity: asset holder/issuer equals liability holder/issuer.
         if event.event_type in {
             "bank_loan_origination", "interest_accrual", "interest_payment",
@@ -333,6 +349,8 @@ class EntityJournal:
             if event.forgiven_principal != amount:
                 raise EntityJournalError("forgiven_principal must equal the legally extinguished amount")
             _validate_legal_evidence(event.legal_evidence, event)
+            if event.legal_evidence.scope != f"principal:{amount}":
+                raise EntityJournalError("legal evidence scope must identify the exact forgiven principal amount")
         elif event.forgiven_principal is not None or event.legal_evidence is not None:
             raise EntityJournalError("forgiveness metadata is only valid for legal_debt_forgiveness")
 
