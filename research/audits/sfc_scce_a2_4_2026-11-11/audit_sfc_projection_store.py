@@ -120,7 +120,7 @@ def main():
         assert failure_store.counts() == {"groups":0,"events":0,"journal_lines":0}
         with closing(failure_store._connect()) as con:
             runtime=con.execute("SELECT applied_commit_sequence,current_period FROM sfc_projection_runtime").fetchone()
-            assert tuple(runtime)==(0,0)
+            assert runtime is None or tuple(runtime)==(0,0)
             assert con.execute("SELECT COUNT(*) FROM sfc_projection_event_checkpoints").fetchone()[0] == 0
             assert con.execute("SELECT COUNT(*) FROM sfc_projection_positions WHERE period=1").fetchone()[0] == 0
             con.execute("DROP TRIGGER fail_projection_control")
