@@ -64,7 +64,7 @@ def main():
         trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
         close_ref, close_digest = _checkpoint(signer, anchor, 1, 0)
         verify = lambda ref, digest: _verify_bool(ref, digest, trust, anchor)
-        governance = PeriodGovernance(root / "period-governance.sqlite3", verify)
+        governance = PeriodGovernance(root / "period-governance.sqlite3", verify, "synergy-period-governance")
 
         assert governance.close_period(7, 0, close_ref, close_digest, "controller-A")
         assert not governance.close_period(7, 0, close_ref, close_digest, "controller-A")
