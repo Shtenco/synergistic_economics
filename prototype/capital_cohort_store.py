@@ -123,6 +123,8 @@ class CapitalCohortStore:
                 raise
 
     def append_period(self, period, events=(), additions=()):
+        if not isinstance(period,int) or isinstance(period,bool) or period < 0:
+            raise CapitalCohortStoreError("period must be a non-negative integer")
         if not isinstance(events,tuple) or not isinstance(additions,tuple):
             raise CapitalCohortStoreError("events and additions must be immutable tuples")
         payload={"period":period,"events":[_event_dict(x) for x in events],
