@@ -138,3 +138,13 @@ The seven-cell model has a single representative household cash pool, one shared
 Passing software tests validates only the tested invariants. It does not validate the SYNERGY economic thesis.
 
 Scenario outputs include a deterministic `event_log_digest` over the ordered event payload digests; it is an integrity checksum, not a cryptographic chain with previous-event linkage.
+
+
+### A2.4 audit corrections and scope boundary (2026-11-12)
+
+- SFC instrument-journal mapper and control-opening mapper versions are separate contracts; the control snapshot verifier accepts both SQLite row factories and remains read-only.
+- SFC projection replay compares persisted control sectors as well as all five stock-flow fields. The independent GOLD-2A oracle treats impairment allowance as a control position, not as an instrument identity.
+- Tamper fixtures explicitly commit direct SQLite mutations before invoking verification. A fixture that closes a connection without committing does not prove corruption detection.
+- EntityJournal event-type checks use the journal's own registry instance; durable event-store fixtures compare the normalized JSON posting arrays returned by replay.
+- The unified cross-register audit is a synthetic provenance and per-register closure fixture only. It does **not** establish one atomic transaction across SCCE, physical flows, product balances, capital cohorts and financial claims. Gate-2 cross-register runtime closure remains open.
+
