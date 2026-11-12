@@ -79,6 +79,8 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_cross_register_crash_matrix.py
       - name: A2.4.7 dual-approved closed-period governance
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_period_governance.py
+      - name: A2.4.7 signed approval assertion identity and replay controls
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_signed_approval_assertions.py
       - name: A2.4.7 Ed25519 external checkpoint and backup verification
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_external_checkpoints.py
       - name: A2.4.7 six-store signed-checkpoint disaster recovery drill
