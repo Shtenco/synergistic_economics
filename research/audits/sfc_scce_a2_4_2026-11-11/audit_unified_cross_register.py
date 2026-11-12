@@ -70,8 +70,9 @@ def main():
     result = model.step(1)
     assert model.validate() is True
     assert result.period == 1 and model.periods[-1].period == 1
+    scce_event_key = f"{scenario_id}::SCCE::001"
     model._record("cross_register_scenario_link",
-                  {"scenario_id":scenario_id,"period":1},scenario_id)
+                  {"scenario_id":scenario_id,"period":1},scce_event_key)
     assert cohort_result.opening_physical_units == cohort_result.closing_physical_units
 
     # 2) Physical flow endpoint register and native-unit product valuation.
@@ -154,9 +155,9 @@ def main():
         "labour_event_id":labour_event["event_id"],
         "valuation_source_id":valuation.source_id,
         "financial_causation_id":group["causation_id"],
-        "scce_event_key":model.events[-1]["key"],
+        "scce_event_key":scce_event_key,
         "register_envelopes": (
-            {"register":"scce","scenario_id":scenario_id,"record_id":model.events[-1]["key"]},
+            {"register":"scce","scenario_id":scenario_id,"record_id":scce_event_key},
             {"register":"physical","scenario_id":scenario_id,"record_id":outflow.flow_id},
             {"register":"capital","scenario_id":scenario_id,"record_id":cohort_event.event_id},
             {"register":"labour","scenario_id":scenario_id,"record_id":labour_event["event_id"]},
@@ -188,7 +189,7 @@ def main():
     print("A2.4.7 unified synthetic cross-register fixture: PASS")
     print("SCCE production, cohort service, physical flow, product valuation and labour/consent controls closed")
     print("GOLD-2A financial event store, T/V/O, control positions, coverage and replay closed")
-    print("one scenario root links six distinct register event IDs; native units and currency remain distinct")
+    print("one scenario root links six distinct register record IDs; native units and currency remain distinct")
     print("LIMIT: no single production transaction spans all registers; Gate 2 runtime closure remains OPEN")
 
 
