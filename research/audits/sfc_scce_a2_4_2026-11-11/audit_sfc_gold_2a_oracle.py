@@ -24,6 +24,11 @@ NORMAL = {
     "loan_liability": "C", "interest_payable": "C", "deposit_liability": "C",
     "impairment_allowance": "C",
 }
+# The allowance is a control position, not a tradable instrument stock.
+INSTRUMENT_ACCOUNTS = {
+    "loan_asset", "loan_liability", "interest_receivable",
+    "interest_payable", "deposit_asset", "deposit_liability",
+}
 EXPECTED = {
     "bank_loan_origination": ("T", {"loan_asset": ("D","100"), "loan_liability": ("C","100"), "deposit_asset": ("D","100"), "deposit_liability": ("C","100")}),
     "interest_accrual": ("T", {"interest_receivable": ("D","10"), "interest_income": ("C","10"), "interest_expense": ("D","10"), "interest_payable": ("C","10")}),
@@ -97,7 +102,7 @@ def expected_postings(event):
             debit += amount
         else:
             credit += amount
-        if account in NORMAL:
+        if account in INSTRUMENT_ACCOUNTS:
             identity_key(row, account)
     if debit != credit:
         raise OracleError(f"event {event.get('event_id')} unbalanced: {debit} != {credit}")

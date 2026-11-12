@@ -230,19 +230,29 @@ def activate_sfc_projection(
 
 
 def verify_sfc_projection_openings(connection: sqlite3.Connection) -> bool:
-    """Verify the persisted opening rows against the frozen snapshot hash."""
+    """Verify persisted openings against the frozen snapshot hash.
+
+    Accept both sqlite3.Row and the default tuple row factory. The verifier
+    must not require callers to mutate their connection configuration.
+    """
     try:
-        meta = connection.execute(
+        meta_cursor = connection.execute(
             "SELECT projection_schema_version, state, snapshot_sha256, opening_count "
             "FROM sfc_projection_meta WHERE singleton_id = 1"
-        ).fetchone()
-        if meta is None or meta["projection_schema_version"] != 1 or meta["state"] != "prepared":
+        )
+        meta_values = meta_cursor.fetchone()
+        if meta_values is None:
             return False
-        rows = connection.execute(
+        meta = dict(zip((column[0] for column in meta_cursor.description), meta_values))
+        if meta["projection_schema_version"] != 1 or meta["state"] != "prepared":
+            return False
+        rows_cursor = connection.execute(
             "SELECT instrument_id, instrument_class, holder_entity_id, holder_sector, "
             "issuer_entity_id, issuer_sector, currency, maturity, denomination, "
             "valuation_basis, period, amount, evidence_ref FROM sfc_openings"
-        ).fetchall()
+        )
+        columns = tuple(column[0] for column in rows_cursor.description)
+        rows = [dict(zip(columns, row)) for row in rows_cursor.fetchall()]
         if len(rows) != meta["opening_count"]:
             return False
         normalized = []
@@ -251,7 +261,6 @@ def verify_sfc_projection_openings(connection: sqlite3.Connection) -> bool:
             if amount != row["amount"]:
                 return False
             identity = {field: row[field] for field in SFCIdentity.__dataclass_fields__}
-            # Revalidate the full identity, including whitespace and empties.
             SFCIdentity(**identity)
             normalized.append({
                 "identity": identity,

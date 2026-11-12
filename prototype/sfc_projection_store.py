@@ -22,6 +22,7 @@ from sfc_projection_registry import verify_sfc_projection_openings
 
 D = Decimal
 MAPPER_VERSION = "gold2a-entity-journal-mapper@1"
+CONTROL_MAPPER_VERSION = "gold2a-controls@1"
 INSTRUMENT_ACCOUNTS = {"loan_asset", "deposit_asset", "interest_receivable"}
 CONTROL_IDS = {"impairment_allowance", "writeoff_memorandum"}
 
@@ -106,7 +107,7 @@ def activate_control_openings(store: FinancialEventStore, openings: Sequence[dic
     for value, field in ((mapper_version, "mapper_version"), (evidence_ref, "evidence_ref")):
         if not isinstance(value, str) or not value or value != value.strip():
             raise SFCProjectionStoreError(f"{field} must be trimmed non-empty text")
-    if mapper_version != MAPPER_VERSION:
+    if mapper_version != CONTROL_MAPPER_VERSION:
         raise SFCProjectionStoreError("unsupported control opening mapper version")
     clean = _control_rows(openings)
     if any(row["evidence_ref"] != evidence_ref for row in clean):
@@ -170,7 +171,7 @@ def _verify_control_openings(con):
             period,amount,evidence_ref FROM sfc_control_openings""").fetchall()
         clean = [dict(row) for row in rows]
         clean.sort(key=lambda x: (x["control_id"],x["entity_id"],x["currency"],x["valuation_basis"],x["period"]))
-        if (meta["schema_version"] != 1 or meta["mapper_version"] != MAPPER_VERSION
+        if (meta["schema_version"] != 1 or meta["mapper_version"] != CONTROL_MAPPER_VERSION
                 or not isinstance(meta["evidence_ref"],str) or not meta["evidence_ref"].strip()
                 or len(clean) != meta["opening_count"]):
             return False
