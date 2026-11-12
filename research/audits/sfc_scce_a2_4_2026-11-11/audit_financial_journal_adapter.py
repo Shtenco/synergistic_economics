@@ -13,6 +13,7 @@ sys.path.insert(0, str(AUDIT_DIR))
 from financial_event_store import FinancialEventStore
 from financial_journal_adapter import (
     JournalStoreAdapterError,
+    _posting_payload,
     append_validated_group,
 )
 from audit_entity_sector_journal import (
@@ -32,6 +33,16 @@ def _fixture():
         SectorMembership("company-2", "NFC", 0),
     ))
     period = 1
+    # Non-instrument lines retain absent dimensions as absent. Explicit
+    # dimensions, including an explicitly selected local currency, survive.
+    expense = make_line(registry, period, "ordinary_expense", "D", 1, "household-1")
+    expense_payload = _posting_payload(expense)
+    assert "currency" not in expense_payload
+    assert "instrument_id" not in expense_payload
+    explicit_currency = make_line(
+        registry, period, "ordinary_expense", "D", 1, "household-1",
+        currency="LCU")
+    assert _posting_payload(explicit_currency)["currency"] == "LCU"
     loan = JournalEvent("loan-1", "nonbank_loan_origination", period, (
         make_line(registry, period, "loan_asset", "D", 19, "household-1",
                   issuer="company-2", instrument_id="loan-hc",

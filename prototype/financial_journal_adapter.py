@@ -24,8 +24,8 @@ def _decimal_text(value: Decimal) -> str:
 
 def _posting_payload(line) -> dict:
     """Preserve all entity, counterparty, issuer and instrument dimensions."""
-    required = (
-        "account", "side", "entity_id", "institutional_sector",
+    required = ("account", "side", "entity_id", "institutional_sector")
+    optional = (
         "counterparty_entity_id", "counterparty_sector",
         "issuer_entity_id", "issuer_sector", "instrument_id",
         "instrument_class", "currency", "maturity", "denomination",
@@ -34,9 +34,21 @@ def _posting_payload(line) -> dict:
     payload = {}
     for field in required:
         value = getattr(line, field, None)
-        if not isinstance(value, str):
+        if not isinstance(value, str) or not value.strip():
             raise JournalStoreAdapterError(
                 f"validated journal line has invalid {field}")
+        payload[field] = value
+    # Optional dimensions are emitted only when explicitly present. This
+    # preserves the distinction between an absent dimension and a declared
+    # value such as currency="LCU". Claim identity completeness is enforced
+    # by EntityJournal before this serializer is reached.
+    for field in optional:
+        value = getattr(line, field, None)
+        if value is None or value == "":
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise JournalStoreAdapterError(
+                f"validated journal line has invalid optional {field}")
         payload[field] = value
     payload["amount"] = _decimal_text(getattr(line, "amount", None))
     return payload

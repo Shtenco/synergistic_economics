@@ -91,16 +91,16 @@ class JournalLine:
     amount: D
     entity_id: str
     institutional_sector: str
-    counterparty_entity_id: str = ""
-    counterparty_sector: str = ""
-    issuer_entity_id: str = ""
-    issuer_sector: str = ""
-    instrument_id: str = ""
-    instrument_class: str = ""
-    currency: str = ""
-    maturity: str = ""
-    denomination: str = ""
-    valuation_basis: str = ""
+    counterparty_entity_id: str | None = None
+    counterparty_sector: str | None = None
+    issuer_entity_id: str | None = None
+    issuer_sector: str | None = None
+    instrument_id: str | None = None
+    instrument_class: str | None = None
+    currency: str | None = None
+    maturity: str | None = None
+    denomination: str | None = None
+    valuation_basis: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,9 +112,9 @@ class JournalEvent:
 
 
 def make_line(registry, period, account, side, amount, entity_id,
-              *, counterparty="", issuer="", instrument_id="",
-              instrument_class="", currency="LCU", maturity="unspecified",
-              denomination="nominal", valuation_basis="nominal"):
+              *, counterparty=None, issuer=None, instrument_id=None,
+              instrument_class=None, currency=None, maturity=None,
+              denomination=None, valuation_basis=None):
     sector = registry.sector_of(entity_id, period)
     counterparty_sector = registry.sector_of(counterparty, period) if counterparty else ""
     issuer_sector = registry.sector_of(issuer, period) if issuer else ""
