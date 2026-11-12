@@ -227,6 +227,7 @@ python -m unittest discover -s prototype -p 'test_sqlite_event_repository.py' -v
 - The adapter uses one `inventory-book` aggregate root. A consume command that changes the source lot, creates a moved lot and changes a reservation therefore commits all three state changes, the canonical event, command receipt and outbox row atomically.
 - This is a deliberate single-root serialization boundary, not P6.3a multi-aggregate v2. It is single-host SQLite; cross-host consensus and independent broker exactly-once delivery are not claimed.
 - The adapter persists canonical lot/reservation projections and rehydrates the P6.1 domain object on every command. A durable retry retrieves the original expected aggregate version, so a retry after later commands returns its original receipt rather than being misclassified as stale.
+- Each command's final canonical event carries a complete, typed projection delta. Recovery independently replays those deltas from an empty inventory root, revalidates the stock/reservation invariants after every command and compares the rebuilt state with the persisted projection inside one verified SQLite read snapshot. A changed projection is rejected even if an attacker also rewrites its unkeyed projection digest.
 - [test_sqlite_lot_inventory_adapter.py](test_sqlite_lot_inventory_adapter.py) exercises register → reserve → commit → consume → release → quarantine, restart recovery, delayed idempotent retry, unauthorized custodian rejection and rollback/retry after projection-write failure.
 
 Run the focused native adapter tests:

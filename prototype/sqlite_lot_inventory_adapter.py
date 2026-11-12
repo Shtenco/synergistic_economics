@@ -114,6 +114,79 @@ def _state_from_inventory(inventory):
     return {"schema": STATE_SCHEMA, "lots": lots, "reservations": reservations}
 
 
+def _projection_delta(before, after):
+    """Canonical full-record upserts needed to rebuild the inventory projection."""
+    old_lots = {row["lot_id"]: row for row in before["lots"]}
+    new_lots = {row["lot_id"]: row for row in after["lots"]}
+    old_reservations = {row["reservation_id"]: row for row in before["reservations"]}
+    new_reservations = {row["reservation_id"]: row for row in after["reservations"]}
+    return {
+        "lots_upsert": [new_lots[key] for key in sorted(new_lots)
+                        if old_lots.get(key) != new_lots[key]],
+        "lots_remove": sorted(set(old_lots) - set(new_lots)),
+        "reservations_upsert": [
+            new_reservations[key] for key in sorted(new_reservations)
+            if old_reservations.get(key) != new_reservations[key]
+        ],
+        "reservations_remove": sorted(set(old_reservations) - set(new_reservations)),
+    }
+
+
+def _replay_inventory_projection(events):
+    """Rebuild the inventory root from command-scoped event projection deltas."""
+    state = _initial_state()
+    commands = {}
+    for envelope in events:
+        if envelope.get("aggregate_type") != AGGREGATE_TYPE or envelope.get("aggregate_id") != AGGREGATE_ID:
+            raise SQLiteLotInventoryError("inventory replay encountered a foreign aggregate event")
+        commands.setdefault(envelope.get("command_id"), []).append(envelope)
+    for command_id, group in commands.items():
+        deltas = [
+            (index, envelope["payload"]["inventory_projection_delta"])
+            for index, envelope in enumerate(group)
+            if isinstance(envelope.get("payload"), dict)
+            and "inventory_projection_delta" in envelope["payload"]
+        ]
+        if len(deltas) != 1 or deltas[0][0] != len(group) - 1:
+            raise SQLiteLotInventoryError(
+                f"command {command_id} must carry exactly one final inventory projection delta"
+            )
+        delta = deltas[0][1]
+        required = {
+            "lots_upsert", "lots_remove",
+            "reservations_upsert", "reservations_remove",
+        }
+        if not isinstance(delta, dict) or set(delta) != required:
+            raise SQLiteLotInventoryError("malformed inventory projection delta")
+        lots = {row["lot_id"]: row for row in state["lots"]}
+        reservations = {row["reservation_id"]: row for row in state["reservations"]}
+        for lot_id in delta["lots_remove"]:
+            if lot_id not in lots:
+                raise SQLiteLotInventoryError("replay removes an unknown lot")
+            del lots[lot_id]
+        for row in delta["lots_upsert"]:
+            if not isinstance(row, dict) or not isinstance(row.get("lot_id"), str):
+                raise SQLiteLotInventoryError("malformed lot projection upsert")
+            lots[row["lot_id"]] = row
+        for reservation_id in delta["reservations_remove"]:
+            if reservation_id not in reservations:
+                raise SQLiteLotInventoryError("replay removes an unknown reservation")
+            del reservations[reservation_id]
+        for row in delta["reservations_upsert"]:
+            if not isinstance(row, dict) or not isinstance(row.get("reservation_id"), str):
+                raise SQLiteLotInventoryError("malformed reservation projection upsert")
+            reservations[row["reservation_id"]] = row
+        state = {
+            "schema": STATE_SCHEMA,
+            "lots": [lots[key] for key in sorted(lots)],
+            "reservations": [reservations[key] for key in sorted(reservations)],
+        }
+        # Validate the economic invariants after every committed command, not
+        # merely at the final head.
+        _inventory_from_state(state)
+    return state
+
+
 def _request_value(value):
     if isinstance(value, datetime):
         return value.isoformat()
@@ -169,6 +242,7 @@ class SQLiteLotInventory:
             if not isinstance(receipt, CommandReceipt):
                 raise SQLiteLotInventoryError("domain command did not return CommandReceipt")
             inventory.assert_invariants()
+            new_state = _state_from_inventory(inventory)
             raw_events = []
             for raw in receipt.events:
                 event = dict(raw)
@@ -178,7 +252,13 @@ class SQLiteLotInventory:
                 raw_events.append(event)
             if not raw_events:
                 raise SQLiteLotInventoryError("inventory command must emit canonical domain events")
-            return _state_from_inventory(inventory), _json_value(receipt.result), raw_events
+            # The last event carries the complete command-level projection
+            # delta. The event log can now independently rebuild all records.
+            raw_events[-1]["payload"] = dict(raw_events[-1]["payload"])
+            raw_events[-1]["payload"]["inventory_projection_delta"] = _projection_delta(
+                old_state, new_state
+            )
+            return new_state, _json_value(receipt.result), raw_events
 
         arguments = dict(
             command_id=command_id, idempotency_key=idempotency_key,
@@ -361,18 +441,31 @@ class SQLiteLotInventory:
         }
 
     def audit(self):
-        report = self.repository.audit()
-        snapshot = self.snapshot()
-        return {**report, "lots": len(snapshot["lots"]),
-                "reservations": len(snapshot["reservations"])}
+        snapshot = self.repository.verified_snapshot(AGGREGATE_TYPE, AGGREGATE_ID)
+        replayed = _replay_inventory_projection(snapshot["events"])
+        if replayed != snapshot["aggregate"]["state"]:
+            raise SQLiteLotInventoryError(
+                "persisted inventory projection differs from independent canonical event replay"
+            )
+        inventory = _inventory_from_state(replayed)
+        return {
+            **snapshot["report"], "lots": len(inventory._lots),
+            "reservations": len(inventory._reservations),
+        }
 
     def recover(self):
-        recovered = self.repository.recover()
-        state = recovered[(AGGREGATE_TYPE, AGGREGATE_ID)]["state"]
-        inventory = _inventory_from_state(state)
+        snapshot = self.repository.verified_snapshot(AGGREGATE_TYPE, AGGREGATE_ID)
+        replayed = _replay_inventory_projection(snapshot["events"])
+        if replayed != snapshot["aggregate"]["state"]:
+            raise SQLiteLotInventoryError(
+                "recovery projection differs from independent canonical event replay"
+            )
+        inventory = _inventory_from_state(replayed)
         inventory.assert_invariants()
-        return {"version": recovered[(AGGREGATE_TYPE, AGGREGATE_ID)]["version"],
-                "lots": tuple(inventory._lots[key] for key in sorted(inventory._lots)),
-                "reservations": tuple(
-                    inventory._reservations[key] for key in sorted(inventory._reservations)
-                )}
+        return {
+            "version": snapshot["aggregate"]["version"],
+            "lots": tuple(inventory._lots[key] for key in sorted(inventory._lots)),
+            "reservations": tuple(
+                inventory._reservations[key] for key in sorted(inventory._reservations)
+            ),
+        }

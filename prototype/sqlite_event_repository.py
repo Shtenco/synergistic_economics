@@ -487,6 +487,38 @@ class SQLiteEventRepository:
                 con.rollback()
                 raise
 
+    def verified_snapshot(self, aggregate_type, aggregate_id):
+        """Return one audited event/projection snapshot from a single read transaction."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            try:
+                report = self._audit_connection(con)
+                row = con.execute(
+                    "SELECT version,state_json,state_digest FROM aggregates "
+                    "WHERE aggregate_type=? AND aggregate_id=?",
+                    (aggregate_type, aggregate_id),
+                ).fetchone()
+                if row is None:
+                    raise SQLiteRepositoryError("aggregate not found")
+                if sha256(row["state_json"].encode("utf-8")).hexdigest() != row["state_digest"]:
+                    raise SQLiteRepositoryError("aggregate projection digest mismatch")
+                events = con.execute(
+                    "SELECT sequence,envelope_json FROM events ORDER BY sequence"
+                ).fetchall()
+                snapshot = {
+                    "report": report,
+                    "aggregate": {
+                        "version": row["version"],
+                        "state": json.loads(row["state_json"]),
+                    },
+                    "events": tuple(json.loads(item["envelope_json"]) for item in events),
+                }
+                con.commit()
+                return snapshot
+            except Exception:
+                con.rollback()
+                raise
+
     def recover(self):
         """Audit and read aggregate heads from the same consistent snapshot."""
         with closing(self._connect()) as con:

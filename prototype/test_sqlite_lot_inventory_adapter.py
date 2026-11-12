@@ -1,3 +1,5 @@
+import hashlib
+import json
 import os
 import tempfile
 import unittest
@@ -5,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from real_economy_protocol import RealEconomyError
-from sqlite_lot_inventory_adapter import SQLiteLotInventory
+from sqlite_lot_inventory_adapter import SQLiteLotInventory, SQLiteLotInventoryError
 
 
 NOW = datetime(2026, 11, 12, 16, 0, tzinfo=timezone.utc)
@@ -132,6 +134,32 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
         self.assertEqual(receipt.result["remaining_quantity"], "30")
         self.assertEqual(self.inventory.get_lot("lot-1").reserved_quantity, Decimal("30"))
         self.assertEqual(self.inventory.audit()["events"], 2)
+
+    def test_replay_rejects_projection_tampering_even_when_projection_digest_is_rewritten(self):
+        self.register()
+        self.inventory.reserve(
+            lot_id="lot-1", reservation_id="reservation-1", quantity="10",
+            actor_id="operator-1", counterparty_id="buyer-1", purpose="delivery",
+            expires_at=LATER, expected_lot_version=1, now=NOW,
+            **self.meta("cmd-reserve", "request-reserve"),
+        )
+        forged = json.dumps(
+            {"schema": "synergy.inventory-book.v1", "lots": [], "reservations": []},
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+        )
+        digest = hashlib.sha256(forged.encode("utf-8")).hexdigest()
+        import sqlite3
+        con = sqlite3.connect(self.db)
+        con.execute(
+            "UPDATE aggregates SET state_json=?,state_digest=?",
+            (forged, digest),
+        )
+        con.commit()
+        con.close()
+        with self.assertRaises(SQLiteLotInventoryError):
+            self.inventory.audit()
+        with self.assertRaises(SQLiteLotInventoryError):
+            self.inventory.recover()
 
     def test_unauthorized_custodian_cannot_reserve_owned_stock(self):
         self.inventory.register_lot(
