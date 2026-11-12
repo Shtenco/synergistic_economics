@@ -154,7 +154,7 @@ class SQLiteEventRepository:
             con.close()
 
     def load_aggregate(self, aggregate_type, aggregate_id):
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             row = con.execute(
                 "SELECT version,state_json,state_digest FROM aggregates "
                 "WHERE aggregate_type=? AND aggregate_id=?",
@@ -295,7 +295,7 @@ class SQLiteEventRepository:
             con.close()
 
     def lookup_receipt(self, idempotency_key):
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             row = con.execute("SELECT * FROM commands WHERE idempotency_key=?",
                               (idempotency_key,)).fetchone()
         if row is None:
@@ -308,7 +308,7 @@ class SQLiteEventRepository:
     def pending_outbox(self, limit=100):
         if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
             raise ValueError("limit must be positive")
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             rows = con.execute(
                 "SELECT e.sequence,e.event_id,e.envelope_json FROM outbox o "
                 "JOIN events e ON e.event_id=o.event_id "
@@ -321,7 +321,7 @@ class SQLiteEventRepository:
         _text(event_id, "event_id")
         if not isinstance(published_at, datetime) or published_at.tzinfo is None or published_at.utcoffset() is None:
             raise ValueError("published_at must be timezone-aware")
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             cur = con.execute(
                 "UPDATE outbox SET published_at=?,attempts=attempts+1 "
                 "WHERE event_id=? AND published_at IS NULL",
@@ -336,7 +336,7 @@ class SQLiteEventRepository:
 
     def audit(self):
         """Fail-closed integrity audit of event rows, sequence, receipt groups and outbox."""
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             events = con.execute("SELECT * FROM events ORDER BY sequence").fetchall()
             commands = con.execute("SELECT * FROM commands").fetchall()
             outbox = con.execute("SELECT * FROM outbox").fetchall()
@@ -354,8 +354,15 @@ class SQLiteEventRepository:
                 raise SQLiteRepositoryError("event envelope is not canonical")
             if sha256(row["envelope_json"].encode()).hexdigest() != row["envelope_digest"]:
                 raise SQLiteRepositoryError("event envelope digest mismatch")
-            if envelope.get("event_id") != row["event_id"] or envelope.get("event_type") != row["event_type"]:
-                raise SQLiteRepositoryError("event identity mismatch")
+            if (envelope.get("event_id") != row["event_id"]
+                    or envelope.get("event_type") != row["event_type"]
+                    or envelope.get("aggregate_type") != row["aggregate_type"]
+                    or envelope.get("aggregate_id") != row["aggregate_id"]
+                    or envelope.get("aggregate_version") != row["aggregate_version"]
+                    or envelope.get("event_ordinal") != row["event_ordinal"]
+                    or envelope.get("idempotency_key") != row["idempotency_key"]
+                    or envelope.get("command_id") != row["command_id"]):
+                raise SQLiteRepositoryError("event identity or aggregate metadata mismatch")
             if envelope.get("payload_digest") != row["payload_digest"]:
                 raise SQLiteRepositoryError("payload digest metadata mismatch")
             if sha256(canonical_json(envelope["payload"]).encode()).hexdigest() != row["payload_digest"]:
@@ -374,15 +381,19 @@ class SQLiteEventRepository:
                 raise SQLiteRepositoryError("command event ordinals are not contiguous")
             if any(r["aggregate_version"] != receipt["aggregate_version"] for r in rows):
                 raise SQLiteRepositoryError("command aggregate version mismatch")
+        event_by_id = {e["event_id"]: e for e in events}
         for row in outbox:
-            if not any(e["event_id"] == row["event_id"] for e in events):
+            linked = event_by_id.get(row["event_id"])
+            if linked is None:
                 raise SQLiteRepositoryError("orphan outbox row")
+            if row["sequence"] != linked["sequence"]:
+                raise SQLiteRepositoryError("outbox sequence differs from event sequence")
         return {"events":len(events),"commands":len(commands),"outbox":len(outbox)}
 
     def recover(self):
         """Audit then return persisted aggregate heads; never guesses missing state."""
         self.audit()
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             rows = con.execute("SELECT aggregate_type,aggregate_id,version,state_json,state_digest "
                                "FROM aggregates ORDER BY aggregate_type,aggregate_id").fetchall()
         recovered = {}
