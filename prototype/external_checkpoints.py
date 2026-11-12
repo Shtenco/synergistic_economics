@@ -70,6 +70,8 @@ def validate_manifest(manifest):
         raise CheckpointError("period_closed must be boolean")
     if manifest["applied_through_cursor"] != manifest["commit_sequence"]:
         raise CheckpointError("applied-through cursor must match the checkpoint commit sequence")
+    if manifest["coverage_count"] != manifest["event_count"]:
+        raise CheckpointError("every committed event must have an explicit projection coverage row")
     timestamp = manifest["created_at_utc"]
     if not isinstance(timestamp, str):
         raise CheckpointError("created_at_utc must be an ISO-8601 UTC timestamp")
@@ -220,8 +222,13 @@ class LocalImmutableAnchor:
                     (service_id,)
                 ).fetchone()
                 current = old["checkpoint_sequence"] if old else -1
-                if sequence <= current:
-                    raise CheckpointError("checkpoint sequence must advance monotonically")
+                if sequence == current:
+                    if (old["object_key"], old["object_digest"]) != (object_key, object_digest):
+                        raise CheckpointError("checkpoint sequence already anchored to different content")
+                    con.execute("COMMIT")
+                    return False
+                if sequence < current:
+                    raise CheckpointError("checkpoint sequence rollback is forbidden")
                 if old:
                     con.execute("""UPDATE checkpoint_latest SET checkpoint_sequence=?,
                         object_key=?,object_digest=? WHERE service_id=?""",
@@ -230,6 +237,7 @@ class LocalImmutableAnchor:
                     con.execute("INSERT INTO checkpoint_latest VALUES(?,?,?,?)",
                                 (service_id, sequence, object_key, object_digest))
                 con.execute("COMMIT")
+                return True
             except Exception:
                 if con.in_transaction:
                     con.execute("ROLLBACK")
@@ -273,6 +281,8 @@ def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegis
         envelope = json.loads(object_bytes)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise CheckpointError("checkpoint envelope is not valid JSON") from exc
+    if not isinstance(envelope, dict):
+        raise CheckpointError("checkpoint envelope must be a JSON object")
     if canonical_json(envelope).encode("utf-8") != object_bytes:
         raise CheckpointError("checkpoint envelope is not canonically encoded")
     if set(envelope) != {"algorithm", "manifest", "signature_hex"} or envelope["algorithm"] != "Ed25519":
@@ -285,9 +295,13 @@ def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegis
         manifest["checkpoint_sequence"], object_key, expected
     ):
         raise CheckpointError("checkpoint is not the latest externally anchored sequence; rollback rejected")
+    signature_hex = envelope["signature_hex"]
+    if (not isinstance(signature_hex, str) or len(signature_hex) != 128
+            or any(c not in "0123456789abcdef" for c in signature_hex)):
+        raise CheckpointError("checkpoint signature is malformed")
     try:
-        signature = bytes.fromhex(envelope["signature_hex"])
-    except (TypeError, ValueError) as exc:
+        signature = bytes.fromhex(signature_hex)
+    except ValueError as exc:
         raise CheckpointError("checkpoint signature is malformed") from exc
     try:
         trust.public_key(manifest["signer_key_id"]).verify(
