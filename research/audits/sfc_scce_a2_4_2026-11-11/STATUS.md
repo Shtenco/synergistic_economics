@@ -2093,3 +2093,12 @@ Period governance now requires the verified manifest from an external checkpoint
 **Correction/rebuild boundary:** the period-governance module records correction metadata and six rebuild attestations; it does not itself append corrections into the six authoritative domain ledgers or execute their rebuild functions. That remains the responsibility of the production participant adapters.
 
 **Security/deployment boundary:** the pluggable `CheckpointAnchor` contract exists, but only the local SQLite conformance anchor is implemented. Remote WORM/object-lock storage, externally administered trust roots and revocation, KMS/HSM key custody/rotation, and actual authoritative-domain disaster recovery remain OPEN. New audits are wired to both A2.4 and Prototype CI; exact-head execution is pending and no PASS is claimed.
+
+
+### 12 November final hardening — manifest identity and retry safety
+
+The Ed25519 manifest now carries an explicit `manifest_schema_version`. `CheckpointAnchor` is a typed pluggable contract for production immutable-object storage, monotonic latest-sequence advancement and historical anchor lookup. The local conformance anchor retains immutable checkpoint history: historical verification is allowed only for an exact previously anchored object, while disaster recovery defaults to the exact latest sequence to prevent rollback.
+
+Period governance requires a verified manifest for the configured service identity, and checks period/generation/closed-state identity for close, reopen and publication. Identical approval, rebuild-receipt and generation-publication retries return idempotently; changed content is rejected. The external-checkpoint audit covers same-sequence idempotent publish, historical signature verification, rollback rejection, immutable history, key revocation and backup digest mismatch.
+
+**Current status:** implementation and CI wiring only. No local test execution is claimed. The three exact-head GitHub Actions runs must finish and their logs must be inspected. The six participant SQLite databases are still protocol conformance stores; real domain adapters, remote WORM, KMS/HSM and authoritative-domain disaster recovery remain OPEN.
