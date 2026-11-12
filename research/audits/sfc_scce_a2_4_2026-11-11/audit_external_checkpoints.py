@@ -75,6 +75,7 @@ def main():
         assert verify_checkpoint(ref2, digest2, trust, anchor) == manifest2
         _rejects(lambda: verify_checkpoint(ref1, digest1, trust, anchor),
                  "older checkpoint was accepted after a newer external anchor")
+        assert verify_checkpoint(ref1, digest1, trust, anchor, require_latest=False) == manifest1
 
         revoked = TrustedKeyRegistry({signer.key_id: signer.public_bytes()}, revoked={signer.key_id})
         _rejects(lambda: verify_checkpoint(ref2, digest2, revoked, anchor),
