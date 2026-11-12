@@ -780,8 +780,8 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                         or checkpoint["state_sha256"] != last_checkpoint["state_sha256"]):
                     return False
             coverage_rows = con.execute("""SELECT c.event_id,c.commit_sequence,c.event_index,c.mapping_version,
-                c.disposition,c.delta_count,e.group_id,e.event_index AS stored_event_index,
-                g.commit_sequence AS stored_sequence,e.payload_json
+                c.disposition,c.delta_count,e.group_id AS stored_group_id,
+                e.event_index AS stored_event_index,g.commit_sequence AS stored_sequence,e.payload_json
                 FROM sfc_event_coverage c JOIN events e ON e.event_id=c.event_id
                 JOIN event_groups g ON g.group_id=e.group_id""").fetchall()
             event_components = {}
@@ -789,7 +789,8 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 event_payload = json.loads(item["payload_json"])
                 event_components[item["event_id"]] = event_payload.get("component")
                 checkpoint = event_checkpoint_map.get(item["event_id"])
-                if (item["commit_sequence"] != item["stored_sequence"]
+                if (item["group_id"] != item["stored_group_id"]
+                        or item["commit_sequence"] != item["stored_sequence"]
                         or item["event_index"] != item["stored_event_index"]
                         or item["mapping_version"] != MAPPER_VERSION
                         or event_payload.get("component") not in ("T","V","O")
