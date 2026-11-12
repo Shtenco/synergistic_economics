@@ -139,3 +139,18 @@ Added `audit_cross_register_crash_matrix.py`. It launches a fresh subprocess for
 **Strict implementation boundary:** these six SQLite participants are independent durable protocol conformance stores, not yet adapters to the authoritative domain stores. They prove the coordinator protocol mechanics only. The production gate still requires replacing each conformance participant with a domain adapter that durably prepares and commits its actual physical, capital, labour, product, legal/rights or financial records in that register's authoritative storage. In particular, this module does not make the current synthetic cross-register fixture distributed-atomic.
 
 The new subprocess matrix is committed but has not yet been executed successfully in this session. Exact-HEAD CI completion and log inspection are required before marking it PASS. Host/power-loss testing, external signatures/WORM storage, period-generation reopening and full multi-register disaster recovery remain open.
+
+
+## 11. Closed-period governance and signed checkpoint implementation — 12 November 2026
+
+Added `prototype/period_governance.py`:
+- closed-period correction records are append-only and must be posted in an open period; corrections at or before the latest closed period are rejected;
+- reopening binds to the currently active generation's checkpoint, not the original close checkpoint;
+- a reopen request requires all six registers in scope, a reason, evidence and the verified pre-reopen checkpoint;
+- two distinct approvers are required in the separate `period_owner` and `independent_controller` roles;
+- each of the six registers must submit a rebuild receipt with old/new generation, common immutable event-log root, event count, opening/closing state hashes and reconciliation hash;
+- publication is refused until all six receipts agree on the same source root; the active generation pointer is switched in one governance-database transaction while prior generation history remains immutable.
+
+Added `prototype/external_checkpoints.py` with Ed25519 signing/verification, a canonical manifest schema, an external trusted-key registry interface, key-revocation checks, monotonic checkpoint-sequence enforcement, immutable object-key semantics and backup-byte digest verification. The period-governance API requires an injected external checkpoint verifier for closure, reopening and generation publication.
+
+**Strict deployment boundary:** `LocalImmutableAnchor` is only a SQLite conformance/test anchor. It is not independently administered WORM storage and its local latest pointer is not protected against an administrator rewriting the database. Production still needs a real external object-lock/WORM backend, KMS/HSM-backed key custody, independently administered trust-root/revocation state, key rotation/revocation operations and external monotonic-sequence protection. The period-governance ledger records rebuild attestations but does not itself execute six domain rebuilds; those must come from the real participant adapters. These audits are committed but awaiting exact-HEAD CI execution.
