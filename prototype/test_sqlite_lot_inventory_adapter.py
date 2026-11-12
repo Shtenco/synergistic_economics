@@ -35,7 +35,7 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
         return self.inventory.register_lot(
             lot_id="lot-1", product_id="grain", owner_id="owner-1",
             custodian_id="warehouse-1", location_id="depot-a",
-            quantity="100", unit="kg", authorized_actors=("operator-1",),
+            quantity="100", unit="kg", authorized_actors=(actor for actor in ("operator-1",)),
             actor_id="operator-1",
             **self.meta("cmd-register", "request-register"),
         )

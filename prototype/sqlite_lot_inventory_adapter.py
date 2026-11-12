@@ -286,11 +286,17 @@ class SQLiteLotInventory:
                      command_id, idempotency_key, actor_id, authority_ref,
                      correlation_id, occurred_at, recorded_at, evidence_refs=(),
                      causation_id=None, fail_at=None):
+        # Materialize one-shot iterables once; the domain constructor and
+        # idempotency fingerprint must see the same authorized actor set.
+        actors = tuple(authorized_actors)
+        normalized_actors = tuple(sorted(set(actors))) if all(
+            isinstance(item, str) for item in actors
+        ) else actors
         request = {
             "lot_id": lot_id, "product_id": product_id, "owner_id": owner_id,
             "custodian_id": custodian_id, "location_id": location_id,
             "quantity": quantity, "unit": unit,
-            "authorized_actors": tuple(authorized_actors),
+            "authorized_actors": normalized_actors,
         }
         return self._execute(
             operation="register_lot", command_id=command_id,
@@ -301,7 +307,7 @@ class SQLiteLotInventory:
             causation_id=causation_id, fail_at=fail_at,
             handler=lambda inv: inv.register_lot(
                 lot_id, product_id, owner_id, custodian_id, location_id,
-                quantity, unit, authorized_actors,
+                quantity, unit, actors,
             ),
         )
 
@@ -420,24 +426,24 @@ class SQLiteLotInventory:
         )
 
     def get_lot(self, lot_id):
-        _, state = self.repository.load_aggregate(AGGREGATE_TYPE, AGGREGATE_ID)
-        inventory = _inventory_from_state(state)
-        return inventory.get_lot(lot_id)
+        recovered = self.recover()
+        for lot in recovered["lots"]:
+            if lot.lot_id == lot_id:
+                return lot
+        raise RealEconomyError("unknown lot")
 
     def get_reservation(self, reservation_id):
-        _, state = self.repository.load_aggregate(AGGREGATE_TYPE, AGGREGATE_ID)
-        inventory = _inventory_from_state(state)
-        return inventory.get_reservation(reservation_id)
+        recovered = self.recover()
+        for reservation in recovered["reservations"]:
+            if reservation.reservation_id == reservation_id:
+                return reservation
+        raise RealEconomyError("unknown reservation")
 
     def snapshot(self):
-        _, state = self.repository.load_aggregate(AGGREGATE_TYPE, AGGREGATE_ID)
-        inventory = _inventory_from_state(state)
-        inventory.assert_invariants()
+        recovered = self.recover()
         return {
-            "lots": tuple(inventory._lots[key] for key in sorted(inventory._lots)),
-            "reservations": tuple(
-                inventory._reservations[key] for key in sorted(inventory._reservations)
-            ),
+            "lots": recovered["lots"],
+            "reservations": recovered["reservations"],
         }
 
     def audit(self):
