@@ -2058,3 +2058,14 @@ Added `audit_cross_register_crash_matrix.py` and wired it into the A2.4 workflow
 **Evidence status:** source and CI wiring committed; the crash matrix has not yet completed on CI and was not locally executed in this session. No PASS is claimed.
 
 **Production boundary:** the six SQLite participant stores are protocol conformance participants, not adapters to the authoritative domain stores. Physical, capital, labour, product, legal/rights and financial production adapters remain required. No distributed production atomicity claim is made. External asymmetric signed checkpoints/WORM publication, dual-approved closed-period reopening with generation rebuild, host-level disaster recovery and end-to-end multi-register restore remain OPEN.
+
+
+### Closed-period governance and Ed25519 checkpoint controls — 12 November 2026
+
+Added `prototype/period_governance.py` and `audit_period_governance.py`. The governance ledger requires a verified pre-reopen checkpoint, a reason/evidence/scope, two distinct approvers in separate period-owner and independent-controller roles, and six register rebuild receipts sharing one immutable event-log root. It switches the active generation only after all six receipts and a verified new checkpoint are present. Prior generation history and closed-period records are immutable. Late corrections are represented as new append-only correction events in an open period; backdated corrections at or before the latest closed period are rejected.
+
+Added `prototype/external_checkpoints.py` and `audit_external_checkpoints.py`. The module uses Ed25519, canonical manifests, trusted public keys, key-revocation checks, monotonic checkpoint sequence verification, immutable object keys and backup artifact SHA-256 verification. The A2.4 workflow installs the cryptography dependency and executes the new audit; the Prototype wrapper also discovers it.
+
+**Evidence status:** source and CI wiring committed; neither new audit has completed exact-HEAD CI in this session. No PASS is claimed.
+
+**Production boundary:** the local SQLite anchor is a conformance fixture, not independently administered WORM/object-lock storage. Actual KMS/HSM key custody, external trust-root and revocation management, remote monotonic sequence anchoring, and real six-register rebuild execution remain open. The governance ledger records receipts and switches a generation pointer; it does not itself rebuild the authoritative domain stores.
