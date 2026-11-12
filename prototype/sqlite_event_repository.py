@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha256
 import json
+import os
 import sqlite3
 from contextlib import closing
 from types import SimpleNamespace
@@ -182,7 +183,7 @@ class SQLiteEventRepository:
                 aggregate_type, aggregate_id, expected_version, actor_id,
                 authority_ref, correlation_id, occurred_at, recorded_at,
                 transition: Callable, evidence_refs=(), causation_id=None,
-                fail_at=None):
+                fail_at=None, crash_hook=None):
         """Commit one aggregate command; fail_at is a deterministic crash hook.
 
         Hooks: after_event_insert, after_projection_write, after_receipt_write,
@@ -200,6 +201,11 @@ class SQLiteEventRepository:
                    "after_receipt_write", "before_commit", "after_commit_before_response"}
         if fail_at not in allowed:
             raise EventBridgeError("unknown crash injection point")
+        if crash_hook is not None and not callable(crash_hook):
+            raise EventBridgeError("crash_hook must be callable")
+        def checkpoint(stage):
+            if crash_hook is not None:
+                crash_hook(stage)
         fingerprint_data = {
             "command_id": command_id, "request": request,
             "aggregate_type": aggregate_type, "aggregate_id": aggregate_id,
@@ -269,6 +275,7 @@ class SQLiteEventRepository:
                 sequence = cur.lastrowid
                 con.execute("INSERT INTO outbox(event_id,sequence) VALUES(?,?)",
                             (event.event_id, sequence))
+                checkpoint("after_event_insert")
                 if fail_at == "after_event_insert":
                     raise RuntimeError("injected crash after event/outbox insert")
             state_digest = sha256(candidate_json.encode("utf-8")).hexdigest()
@@ -279,6 +286,7 @@ class SQLiteEventRepository:
             )
             if con.execute("SELECT changes()").fetchone()[0] != 1:
                 raise EventBridgeConflict("aggregate compare-and-swap failed")
+            checkpoint("after_projection_write")
             if fail_at == "after_projection_write":
                 raise RuntimeError("injected crash after projection write")
             last_sequence = con.execute("SELECT MAX(sequence) FROM events").fetchone()[0]
@@ -288,12 +296,15 @@ class SQLiteEventRepository:
                  next_version,result_json,canonical_json(event_ids),last_sequence,
                  recorded_at.isoformat()),
             )
+            checkpoint("after_receipt_write")
             if fail_at == "after_receipt_write":
                 raise RuntimeError("injected crash after receipt write")
+            checkpoint("before_commit")
             if fail_at == "before_commit":
                 raise RuntimeError("injected crash before commit")
             con.commit()
             committed = True
+            checkpoint("after_commit_before_response")
             receipt = DurableReceipt(command_id, fingerprint, json.loads(result_json),
                                      tuple(event_ids), last_sequence)
             if fail_at == "after_commit_before_response":
@@ -322,12 +333,28 @@ class SQLiteEventRepository:
             raise ValueError("limit must be positive")
         with closing(self._connect()) as con:
             rows = con.execute(
-                "SELECT e.sequence,e.event_id,e.envelope_json FROM outbox o "
+                "SELECT e.sequence,e.event_id,e.envelope_json,o.attempts FROM outbox o "
                 "JOIN events e ON e.event_id=o.event_id "
                 "WHERE o.published_at IS NULL ORDER BY e.sequence LIMIT ?", (limit,)
             ).fetchall()
         return tuple({"sequence":r["sequence"],"event_id":r["event_id"],
-                      "envelope":json.loads(r["envelope_json"])} for r in rows)
+                      "envelope":json.loads(r["envelope_json"]),
+                      "attempts":r["attempts"]} for r in rows)
+
+    def record_publish_attempt(self, event_id):
+        """Durably count an at-least-once delivery attempt before external publish."""
+        _text(event_id, "event_id")
+        with closing(self._connect()) as con:
+            cur = con.execute(
+                "UPDATE outbox SET attempts=attempts+1 WHERE event_id=? AND published_at IS NULL",
+                (event_id,),
+            )
+            if cur.rowcount != 1:
+                exists = con.execute("SELECT 1 FROM outbox WHERE event_id=?", (event_id,)).fetchone()
+                if exists is None:
+                    raise SQLiteRepositoryError("outbox event not found")
+                return False
+            return True
 
     def mark_published(self, event_id, published_at):
         _text(event_id, "event_id")
@@ -335,7 +362,7 @@ class SQLiteEventRepository:
             raise ValueError("published_at must be timezone-aware")
         with closing(self._connect()) as con:
             cur = con.execute(
-                "UPDATE outbox SET published_at=?,attempts=attempts+1 "
+                "UPDATE outbox SET published_at=? "
                 "WHERE event_id=? AND published_at IS NULL",
                 (published_at.isoformat(),event_id),
             )
