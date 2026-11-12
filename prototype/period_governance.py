@@ -406,8 +406,8 @@ class PeriodGovernance:
                     "SELECT state,old_generation,new_generation FROM reopen_requests WHERE request_id=?",
                     (request_id,)
                 ).fetchone()
-                if request is None or request["state"] not in {"APPROVED","REBUILDING"}:
-                    raise PeriodGovernanceError("rebuild requires a dual-approved reopen request")
+                if request is None:
+                    raise PeriodGovernanceError("unknown reopen request")
                 old = con.execute(
                     "SELECT * FROM rebuild_receipts WHERE request_id=? AND register_name=?",
                     (request_id, register_name)
@@ -422,6 +422,8 @@ class PeriodGovernance:
                         raise PeriodGovernanceError("register rebuild receipt changed after persistence")
                     con.execute("COMMIT")
                     return False
+                if request["state"] not in {"APPROVED","REBUILDING"}:
+                    raise PeriodGovernanceError("rebuild requires a dual-approved reopen request")
                 first = con.execute(
                     "SELECT state FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()["state"]
