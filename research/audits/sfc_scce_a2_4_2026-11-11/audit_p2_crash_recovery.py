@@ -149,8 +149,9 @@ def _run_parent():
             assert src.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0] == 0
         for suffix in ("-wal", "-shm"):
             sidecar = Path(str(source_path) + suffix)
-            if sidecar.exists():
-                sidecar.unlink()
+            assert not sidecar.exists() or sidecar.stat().st_size == 0, (
+                f"unexpected live SQLite sidecar before corruption: {sidecar}"
+            )
         corrupt_bytes = b"not-a-sqlite-database"
         source_path.write_bytes(corrupt_bytes)
         try:
