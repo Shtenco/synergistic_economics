@@ -490,6 +490,36 @@ class PeriodGovernance:
                        or r["new_generation"] != request["new_generation"]
                        for r in receipts):
                     raise PeriodGovernanceError("register generation receipts disagree")
+
+                # Bind publication to the exact six durable rebuild attestations.
+                # A caller-supplied hash is not accepted unless it is the digest
+                # of this canonical, ordered receipt inventory.
+                receipt_commitment = [{
+                    "register_name": r["register_name"],
+                    "old_generation": r["old_generation"],
+                    "new_generation": r["new_generation"],
+                    "source_event_root": r["source_event_root"],
+                    "event_count": r["event_count"],
+                    "opening_state_hash": r["opening_state_hash"],
+                    "closing_state_hash": r["closing_state_hash"],
+                    "reconciliation_hash": r["reconciliation_hash"],
+                } for r in receipts]
+                calculated_reconciliation = hashlib.sha256(
+                    _canonical(receipt_commitment).encode("utf-8")
+                ).hexdigest()
+                root = next(iter(roots))
+                if global_reconcile != calculated_reconciliation:
+                    raise PeriodGovernanceError(
+                        "global reconciliation hash does not commit to all six rebuild receipts"
+                    )
+                if manifest.get("event_log_root") != root:
+                    raise PeriodGovernanceError(
+                        "publication checkpoint event root differs from the six register rebuild root"
+                    )
+                if manifest.get("projection_state_hash") != calculated_reconciliation:
+                    raise PeriodGovernanceError(
+                        "publication checkpoint does not commit to the global rebuild reconciliation"
+                    )
                 if not con.execute(
                     "SELECT 1 FROM reopen_approvals WHERE request_id=? AND approval_role='period_owner'",
                     (request_id,)
@@ -503,7 +533,6 @@ class PeriodGovernance:
                 ).fetchone()
                 if active is None or active["generation"] != request["old_generation"]:
                     raise PeriodGovernanceError("active generation changed during rebuild")
-                root = next(iter(roots))
                 con.execute("INSERT INTO generation_publications VALUES(?,?,?,?,?,?,?,?)",
                             (request_id, request["period"], request["old_generation"],
                              request["new_generation"], root, global_reconcile, ref, digest))
