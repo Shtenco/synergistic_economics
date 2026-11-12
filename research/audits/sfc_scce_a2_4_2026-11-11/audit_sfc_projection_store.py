@@ -3,6 +3,7 @@ from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 import sqlite3
+import shutil
 import sys
 import tempfile
 
@@ -18,6 +19,18 @@ from sfc_projection_store import (
     SFCProjectionStoreError, activate_control_openings,
     append_projected_group, verify_projection_replay,
 )
+
+
+def _assert_tamper_rejected(source, directory, name, trigger, statement):
+    target = Path(directory) / f"tamper-{name}.sqlite3"
+    with closing(sqlite3.connect(source)) as source_db, closing(sqlite3.connect(target)) as target_db:
+        source_db.backup(target_db)
+    store = FinancialEventStore(target)
+    with closing(store._connect()) as con:
+        if trigger:
+            con.execute(f"DROP TRIGGER {trigger}")
+        con.execute(statement)
+    assert verify_projection_replay(store) is False, f"recovery accepted tampered {name}"
 
 
 def _activate(store):
@@ -84,6 +97,30 @@ def main():
             causation_id="gold2a-atomic-control") is False
         assert reopened.counts()["events"] == 7
         assert verify_projection_replay(reopened)
+
+        # Independent recovery must reject corruption in every durable
+        # projection layer, not merely a changed closing balance.
+        _assert_tamper_rejected(database,directory,"coverage",
+            "sfc_event_coverage_no_update",
+            "UPDATE sfc_event_coverage SET group_id='wrong-group' WHERE event_id='G2A-E01'")
+        _assert_tamper_rejected(database,directory,"instrument-delta",
+            "sfc_instrument_deltas_no_update",
+            "UPDATE sfc_instrument_deltas SET amount='101' WHERE event_id='G2A-E01' AND delta_index=0")
+        _assert_tamper_rejected(database,directory,"control-delta",
+            "sfc_control_deltas_no_update",
+            "UPDATE sfc_control_deltas SET amount='21' WHERE event_id='G2A-E04' AND delta_index=0")
+        _assert_tamper_rejected(database,directory,"event-checkpoint",
+            "sfc_projection_event_checkpoints_no_update",
+            "UPDATE sfc_projection_event_checkpoints SET state_sha256='bad' WHERE event_id='G2A-E01'")
+        _assert_tamper_rejected(database,directory,"group-checkpoint",
+            "sfc_projection_group_checkpoints_no_update",
+            "UPDATE sfc_projection_group_checkpoints SET state_sha256='bad' WHERE commit_sequence=1")
+        _assert_tamper_rejected(database,directory,"cursor",None,
+            "UPDATE sfc_projection_runtime SET applied_commit_sequence=0 WHERE singleton_id=1")
+        _assert_tamper_rejected(database,directory,"sector-flow",None,
+            "UPDATE sfc_sector_flows SET financial_net_lending='1' WHERE period=1 AND sector='CB'")
+        _assert_tamper_rejected(database,directory,"control-position",None,
+            "UPDATE sfc_control_positions SET closing_balance='6' WHERE control_id='impairment_allowance' AND period=4")
 
         # A late-arriving backdated event must be rejected, not inserted into
         # an already-applied historical prefix.
