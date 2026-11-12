@@ -1,17 +1,20 @@
 """Adversarial tests for externally signed Ed25519 approval assertions."""
 from pathlib import Path
+import base64
 import hashlib
 import json
 import sqlite3
 import sys
 import tempfile
 
-from cryptography.hazmat.primitives import serialization\nfrom cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
 
-from period_governance import REGISTERS, PeriodGovernance, PeriodGovernanceError\nfrom signed_approval_assertions import (
+from period_governance import REGISTERS, PeriodGovernance, PeriodGovernanceError
+from signed_approval_assertions import (
     ApprovalAssertionError, SignedApprovalVerifier, encode_assertion_payload,
 )
 
@@ -21,14 +24,12 @@ KID = "approval-ed25519-2026-01"
 NOW = 1_800_000_000
 
 
-
 def _canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def _sign(payload, private_key):
-    import base64
     kid = payload.pop("kid")
     header = {"alg": "EdDSA", "kid": kid, "typ": "JWT"}
     header_segment = base64.urlsafe_b64encode(_canonical(header)).decode("ascii").rstrip("=")
@@ -44,7 +45,6 @@ def _payload(context, *, sub="controller-A", role="period_owner",
              iss=ISSUER, aud=AUDIENCE, service_id=None,
              request_digest=None, kid=KID):
     return {
-        "alg": "EdDSA",
         "iss": iss,
         "sub": sub,
         "aud": aud,
@@ -60,10 +60,10 @@ def _payload(context, *, sub="controller-A", role="period_owner",
     }
 
 
-def _rejects(call, reason):
+def _rejects(call, reason, exception=ApprovalAssertionError):
     try:
         call()
-    except ApprovalAssertionError:
+    except exception:
         return
     raise AssertionError(reason)
 
@@ -71,7 +71,10 @@ def _rejects(call, reason):
 def main():
     with tempfile.TemporaryDirectory(prefix="synergy-signed-approval-") as directory:
         private = Ed25519PrivateKey.generate()
-        public = private.public_key().public_bytes(\n            encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw\n        )
+        public = private.public_key().public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
         revoked_keys = set()
         revoked_jtis = set()
         resolver_calls = []
@@ -105,8 +108,6 @@ def main():
 
         valid = _sign(_payload(context), private)
         assert verifier("controller-A", "period_owner", context, valid) is True
-        # An exact retry is safe/idempotent; a jti collision with changed signed
-        # content is rejected even if the altered assertion has a valid signature.
         assert verifier("controller-A", "period_owner", context, valid) is True
         changed = _payload(context, jti="jti-valid-001", sub="attacker")
         changed_token = _sign(changed, private)
@@ -159,7 +160,13 @@ def main():
         _rejects(lambda: verifier("controller-A", "period_owner", context, unknown_key),
                  "unknown signing key was accepted")
 
-        bad_signature = valid[:-1] + ("A" if valid[-1] != "A" else "B")
+        header_segment, payload_segment, signature_segment = valid.split(".")
+        signature = bytearray(base64.urlsafe_b64decode(
+            signature_segment + "=" * (-len(signature_segment) % 4)
+        ))
+        signature[0] ^= 1
+        tampered_signature = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
+        bad_signature = header_segment + "." + payload_segment + "." + tampered_signature
         _rejects(lambda: verifier("controller-A", "period_owner", context, bad_signature),
                  "tampered signature was accepted")
 
@@ -235,7 +242,8 @@ def main():
         _rejects(lambda: governance.approve_reopen(
             "reopen-signed-001", "signed-owner-A", "independent_controller",
             same_person_assertion,
-        ), "same signed identity satisfied both governance approval roles")
+        ), "same signed identity satisfied both governance approval roles",
+           exception=PeriodGovernanceError)
         controller_assertion = _sign(_payload(
             gov_context, sub="signed-controller-B", role="independent_controller",
             jti="jti-governance-controller",
@@ -252,12 +260,13 @@ def main():
         assert state == "APPROVED"
 
         assert resolver_calls and revocation_calls
-        print("PASS: Ed25519 assertion signature, issuer and audience verified")
+        print("PASS: compact JWT/JWS Ed25519 signature, issuer and audience verified")
         print("PASS: service, subject, role and canonical request digest bound")
         print("PASS: expiry, not-before and maximum lifetime enforced")
         print("PASS: revoked jti, revoked signing key, unknown key, changed signature and role escalation rejected")
         print("PASS: revocation-provider outage fails closed")
-        print("PASS: assertion jti is durable; exact retry idempotent and changed-content reuse rejected")\n        print("PASS: signed assertions authorize the real period-governance dual-approval transition")
+        print("PASS: assertion jti is durable; exact retry idempotent and changed-content reuse rejected")
+        print("PASS: signed assertions authorize the real period-governance dual-approval transition")
 
 
 if __name__ == "__main__":
