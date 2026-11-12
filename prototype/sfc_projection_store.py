@@ -679,6 +679,9 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                             or checkpoints != len(events)):
                         raise SFCProjectionStoreError("existing group has incomplete projection/cursor coverage")
                     con.execute("ROLLBACK")
+                    if not verify_projection_replay(store):
+                        raise SFCProjectionStoreError(
+                            "idempotent replay refused because the persisted projection fails independent recovery")
                     return False
                 for event_id,*_ in event_rows:
                     if con.execute("SELECT 1 FROM events WHERE event_id=?",(event_id,)).fetchone():
