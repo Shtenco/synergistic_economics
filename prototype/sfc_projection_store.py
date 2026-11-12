@@ -448,8 +448,12 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                     if existing["payload_sha256"] != payload_hash:
                         raise SFCProjectionStoreError("group ID reused with changed immutable content")
                     coverage = con.execute("SELECT COUNT(*) FROM sfc_event_coverage WHERE group_id=?",(group_id,)).fetchone()[0]
-                    if coverage != len(events):
-                        raise SFCProjectionStoreError("existing group has incomplete projection coverage")
+                    runtime = con.execute("SELECT applied_commit_sequence FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+                    checkpoints = con.execute("SELECT COUNT(*) FROM sfc_projection_event_checkpoints WHERE commit_sequence=?",(existing["commit_sequence"],)).fetchone()[0]
+                    if (coverage != len(events) or runtime is None
+                            or runtime["applied_commit_sequence"] < existing["commit_sequence"]
+                            or checkpoints != len(events)):
+                        raise SFCProjectionStoreError("existing group has incomplete projection/cursor coverage")
                     con.execute("ROLLBACK")
                     return False
                 for event_id,*_ in event_rows:
