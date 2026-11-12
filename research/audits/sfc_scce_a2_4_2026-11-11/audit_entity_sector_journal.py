@@ -118,6 +118,21 @@ def make_line(registry, period, account, side, amount, entity_id,
     sector = registry.sector_of(entity_id, period)
     counterparty_sector = registry.sector_of(counterparty, period) if counterparty else None
     issuer_sector = registry.sector_of(issuer, period) if issuer else None
+    # Synthetic audit fixtures must still satisfy the complete instrument
+    # identity contract; use explicit, deterministic fixture dimensions rather
+    # than leaving claim fields absent.
+    if account in CLAIM_ACCOUNTS:
+        currency = currency or "LCU"
+        denomination = denomination or "LCU"
+        valuation_basis = valuation_basis or "NOMINAL"
+        maturity = maturity or ("ON_DEMAND" if "deposit" in account else "2029-12-31")
+        instrument_class = instrument_class or (
+            "deposit" if "deposit" in account else
+            "trade_credit" if "trade" in account else
+            "interest" if "interest" in account else "loan"
+        )
+        if instrument_id is None:
+            instrument_id = f"{account}:{entity_id}:{issuer or counterparty or 'external'}"
     return JournalLine(
         account, side, D(str(amount)), entity_id, sector,
         counterparty, counterparty_sector, issuer, issuer_sector,

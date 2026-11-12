@@ -282,9 +282,14 @@ def _run_parent():
 
             # Recreate all participant/coordinator objects after process death.
             recovered, participants = _paths(root)
-            assert not recovered.is_visible("coordinator-crash-matrix-001"), (
-                f"{point}: partially committed transaction crossed read barrier"
-            )
+            if point == "after_commit_barrier":
+                assert recovered.is_visible("coordinator-crash-matrix-001"), (
+                    "the durable COMMITTED barrier must expose all six verified participant effects"
+                )
+            else:
+                assert not recovered.is_visible("coordinator-crash-matrix-001"), (
+                    f"{point}: incomplete transaction crossed read barrier"
+                )
             state = recovered.recover("coordinator-crash-matrix-001")
             predecision = point.startswith(("after_prepare:", "after_prepare_receipt:")) or point == "after_prepared_barrier"
             if predecision:
