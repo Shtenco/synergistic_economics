@@ -653,13 +653,34 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
             control_deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_control_deltas d
                 JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
                 ORDER BY g.commit_sequence,e.event_index,d.delta_index""").fetchall()
-            # Every covered event's disposition, component and delta count reconcile.
-            for row in con.execute("SELECT event_id,disposition,delta_count FROM sfc_event_coverage").fetchall():
-                n = con.execute("SELECT (SELECT COUNT(*) FROM sfc_instrument_deltas WHERE event_id=?)+(SELECT COUNT(*) FROM sfc_control_deltas WHERE event_id=?)",(row["event_id"],row["event_id"])).fetchone()[0]
-                if n != row["delta_count"] or (row["disposition"]=="mapped" and n==0) or (row["disposition"]=="no_stock_effect" and n!=0):
+            # Re-derive every mapper output from the immutable source event,
+            # then compare the persisted delta rows byte-for-byte at typed precision.
+            for item in coverage_rows:
+                event_payload = json.loads(item["payload_json"])
+                expected_i, expected_c = _map_payload_event(event_payload)
+                event_id = item["event_id"]
+                stored_i = [row for row in deltas if row["event_id"]==event_id]
+                stored_c = [row for row in control_deltas if row["event_id"]==event_id]
+                exp_i = sorted((_position_key(identity),component,amount,event_payload["effective_period"])
+                               for identity,component,amount in expected_i)
+                got_i = sorted((tuple(row[f] for f in SFCIdentity.__dataclass_fields__),
+                                row["component"],D(row["amount"]),row["effective_period"])
+                               for row in stored_i)
+                exp_c = sorted((cid,entity,sector,currency,basis,component,amount,event_payload["effective_period"])
+                               for cid,entity,sector,currency,basis,component,amount in expected_c)
+                got_c = sorted((row["control_id"],row["entity_id"],row["sector"],row["currency"],
+                                row["valuation_basis"],row["component"],D(row["amount"]),row["effective_period"])
+                               for row in stored_c)
+                if exp_i != got_i or exp_c != got_c:
                     return False
-            for row in con.execute("SELECT event_id,component FROM sfc_instrument_deltas UNION ALL SELECT event_id,component FROM sfc_control_deltas").fetchall():
-                if event_components.get(row["event_id"]) != row["component"]:
+                if [row["delta_index"] for row in stored_i] != list(range(len(stored_i))):
+                    return False
+                if [row["delta_index"] for row in stored_c] != list(range(len(stored_c))):
+                    return False
+                n = len(stored_i)+len(stored_c)
+                if (n != item["delta_count"]
+                        or (item["disposition"]=="mapped" and n==0)
+                        or (item["disposition"]=="no_stock_effect" and n!=0)):
                     return False
             # Rebuild positions using the same explicit openings, never zero defaults.
             instrument_expected = {}
