@@ -41,6 +41,13 @@ def _period(value):
     return value
 
 
+def _sha256(value, field):
+    value = _required(value, field)
+    if len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+        raise PeriodGovernanceError(f"{field} must be lowercase SHA-256 hex")
+    return value
+
+
 class PeriodGovernance:
     """Append-only governance ledger with an atomic active-generation switch.
 
@@ -285,8 +292,8 @@ class PeriodGovernance:
         if not isinstance(scope, (list, tuple)) or not scope:
             raise PeriodGovernanceError("reopen scope must name at least one affected register")
         scope_clean = sorted(set(_required(x, "scope register") for x in scope))
-        if any(x not in REGISTERS for x in scope_clean):
-            raise PeriodGovernanceError("reopen scope contains an unknown register")
+        if set(scope_clean) != set(REGISTERS):
+            raise PeriodGovernanceError("generation rebuild scope must include all six registers")
         scope_json = _canonical(scope_clean)
         ref, digest = self._verify_checkpoint(pre_reopen_checkpoint_ref, pre_reopen_checkpoint_digest)
         with closing(self._connect()) as con:
@@ -377,10 +384,10 @@ class PeriodGovernance:
         request_id = _required(request_id, "request_id")
         if register_name not in REGISTERS:
             raise PeriodGovernanceError("unknown register rebuild receipt")
-        source_root = _required(source_event_root, "source_event_root")
-        opening = _required(opening_state_hash, "opening_state_hash")
-        closing_hash = _required(closing_state_hash, "closing_state_hash")
-        reconcile = _required(reconciliation_hash, "reconciliation_hash")
+        source_root = _sha256(source_event_root, "source_event_root")
+        opening = _sha256(opening_state_hash, "opening_state_hash")
+        closing_hash = _sha256(closing_state_hash, "closing_state_hash")
+        reconcile = _sha256(reconciliation_hash, "reconciliation_hash")
         if not isinstance(event_count, int) or isinstance(event_count, bool) or event_count < 0:
             raise PeriodGovernanceError("event_count must be a non-negative integer")
         with closing(self._connect()) as con:
@@ -428,7 +435,7 @@ class PeriodGovernance:
     def publish_generation(self, request_id, global_reconciliation_hash,
                            checkpoint_ref, checkpoint_digest):
         request_id = _required(request_id, "request_id")
-        global_reconcile = _required(global_reconciliation_hash, "global_reconciliation_hash")
+        global_reconcile = _sha256(global_reconciliation_hash, "global_reconciliation_hash")
         ref, digest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
