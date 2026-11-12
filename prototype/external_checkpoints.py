@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+from typing import Protocol
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -19,7 +20,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 
 MANIFEST_FIELDS = (
-    "service_id", "database_schema_version", "mapper_version",
+    "service_id", "manifest_schema_version", "database_schema_version", "mapper_version",
     "projection_generation", "commit_sequence", "event_count", "event_log_root",
     "instrument_opening_hash", "control_opening_hash", "projection_state_hash",
     "coverage_count", "applied_through_cursor", "period", "period_closed",
@@ -60,7 +61,7 @@ def validate_manifest(manifest):
     for field in ("event_log_root", "instrument_opening_hash", "control_opening_hash",
                   "projection_state_hash", "backup_sha256"):
         _hash(manifest[field], field)
-    for field in ("database_schema_version", "projection_generation", "commit_sequence",
+    for field in ("manifest_schema_version", "database_schema_version", "projection_generation", "commit_sequence",
                   "event_count", "coverage_count", "applied_through_cursor",
                   "period", "checkpoint_sequence"):
         value = manifest[field]
@@ -68,6 +69,8 @@ def validate_manifest(manifest):
             raise CheckpointError(f"{field} must be a non-negative integer")
     if not isinstance(manifest["period_closed"], bool):
         raise CheckpointError("period_closed must be boolean")
+    if manifest["manifest_schema_version"] != 1:
+        raise CheckpointError("unsupported checkpoint manifest schema version")
     if manifest["applied_through_cursor"] != manifest["commit_sequence"]:
         raise CheckpointError("applied-through cursor must match the checkpoint commit sequence")
     if manifest["coverage_count"] != manifest["event_count"]:
@@ -139,6 +142,16 @@ class TrustedKeyRegistry:
             return Ed25519PublicKey.from_public_bytes(raw)
         except (TypeError, ValueError) as exc:
             raise CheckpointError("trusted key registry contains an invalid public key") from exc
+
+
+class CheckpointAnchor(Protocol):
+    """External immutable-object and monotonic-sequence storage contract."""
+
+    def put_immutable(self, object_key: str, object_bytes: bytes): ...
+    def get(self, object_key: str) -> bytes: ...
+    def advance_latest(self, service_id: str, sequence: int, object_key: str, object_digest: str): ...
+    def latest(self, service_id: str): ...
+    def is_anchored(self, service_id: str, sequence: int, object_key: str, object_digest: str) -> bool: ...
 
 
 class LocalImmutableAnchor:
@@ -276,7 +289,7 @@ class LocalImmutableAnchor:
             return bool(row and (row["object_key"], row["object_digest"]) == (object_key, object_digest))
 
 
-def publish_checkpoint(manifest, signer: Ed25519Signer, anchor: LocalImmutableAnchor):
+def publish_checkpoint(manifest, signer: Ed25519Signer, anchor: CheckpointAnchor):
     manifest = validate_manifest(dict(manifest))
     if manifest["signer_key_id"] != signer.key_id:
         raise CheckpointError("manifest signer key ID does not match signing key")
@@ -296,7 +309,7 @@ def publish_checkpoint(manifest, signer: Ed25519Signer, anchor: LocalImmutableAn
 
 
 def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegistry,
-                      anchor: LocalImmutableAnchor, *, require_latest=True):
+                      anchor: CheckpointAnchor, *, require_latest=True):
     expected = _hash(expected_object_digest, "expected_object_digest")
     object_bytes = anchor.get(object_key)
     if sha256_bytes(object_bytes) != expected:
