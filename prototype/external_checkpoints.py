@@ -296,3 +296,14 @@ def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegis
     except InvalidSignature as exc:
         raise CheckpointError("checkpoint Ed25519 signature is invalid") from exc
     return manifest
+
+
+def verify_backup_bytes(manifest, backup_bytes):
+    """Verify backup bytes against the signed manifest digest."""
+    manifest = validate_manifest(dict(manifest))
+    if not isinstance(backup_bytes, (bytes, bytearray, memoryview)):
+        raise CheckpointError("backup artifact must be bytes")
+    actual = sha256_bytes(bytes(backup_bytes))
+    if actual != manifest["backup_sha256"]:
+        raise CheckpointError("backup artifact digest does not match signed checkpoint")
+    return True
