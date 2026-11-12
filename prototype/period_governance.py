@@ -356,39 +356,79 @@ class PeriodGovernance:
         evidence = _required(evidence_ref, "approval evidence_ref")
         if role not in APPROVAL_ROLES:
             raise PeriodGovernanceError("approval role must be period_owner or independent_controller")
+
+        # Read and canonicalize the request before calling the external identity
+        # provider. Never hold the governance write lock during network I/O.
+        with closing(self._connect()) as con:
+            request = con.execute(
+                "SELECT * FROM reopen_requests WHERE request_id=?", (request_id,)
+            ).fetchone()
+            if request is None:
+                raise PeriodGovernanceError("unknown reopen request")
+            existing = con.execute(
+                "SELECT approver_id,evidence_ref FROM reopen_approvals "
+                "WHERE request_id=? AND approval_role=?", (request_id, role)
+            ).fetchone()
+            if existing:
+                if (existing["approver_id"], existing["evidence_ref"]) != (approver, evidence):
+                    raise PeriodGovernanceError("approval role already recorded by another approver")
+                return False
+            if request["state"] != "REQUESTED":
+                raise PeriodGovernanceError("reopen request is not awaiting approvals")
+            request_context = {
+                "service_id": self.service_id,
+                "request_id": request_id,
+                "period": request["period"],
+                "old_generation": request["old_generation"],
+                "new_generation": request["new_generation"],
+                "reason": request["reason"],
+                "evidence_ref": request["evidence_ref"],
+                "scope": json.loads(request["scope_json"]),
+                "pre_reopen_checkpoint_ref": request["pre_reopen_checkpoint_ref"],
+                "pre_reopen_checkpoint_digest": request["pre_reopen_checkpoint_digest"],
+            }
+            request_context["request_digest"] = hashlib.sha256(
+                _canonical(request_context).encode("utf-8")
+            ).hexdigest()
+
+        try:
+            authorized = self.authorization_verifier(
+                approver, role, request_context, evidence
+            )
+        except Exception as exc:
+            raise PeriodGovernanceError("approval authorization verification failed") from exc
+        if authorized is not True:
+            raise PeriodGovernanceError(
+                "approver identity/role is not authorized for this exact reopen request"
+            )
+
+        # Re-read and compare the full request under the write lock. This closes
+        # the TOCTOU window between remote authorization and durable approval.
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
-                request = con.execute(
+                current = con.execute(
                     "SELECT * FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()
-                if request is None:
-                    raise PeriodGovernanceError("unknown reopen request")
-                request_context = {
+                if current is None:
+                    raise PeriodGovernanceError("reopen request disappeared during authorization")
+                current_context = {
                     "service_id": self.service_id,
                     "request_id": request_id,
-                    "period": request["period"],
-                    "old_generation": request["old_generation"],
-                    "new_generation": request["new_generation"],
-                    "reason": request["reason"],
-                    "evidence_ref": request["evidence_ref"],
-                    "scope": json.loads(request["scope_json"]),
-                    "pre_reopen_checkpoint_ref": request["pre_reopen_checkpoint_ref"],
-                    "pre_reopen_checkpoint_digest": request["pre_reopen_checkpoint_digest"],
+                    "period": current["period"],
+                    "old_generation": current["old_generation"],
+                    "new_generation": current["new_generation"],
+                    "reason": current["reason"],
+                    "evidence_ref": current["evidence_ref"],
+                    "scope": json.loads(current["scope_json"]),
+                    "pre_reopen_checkpoint_ref": current["pre_reopen_checkpoint_ref"],
+                    "pre_reopen_checkpoint_digest": current["pre_reopen_checkpoint_digest"],
                 }
-                request_context["request_digest"] = hashlib.sha256(
-                    _canonical(request_context).encode("utf-8")
+                current_context["request_digest"] = hashlib.sha256(
+                    _canonical(current_context).encode("utf-8")
                 ).hexdigest()
-                try:
-                    authorized = self.authorization_verifier(
-                        approver, role, request_context, evidence
-                    )
-                except Exception as exc:
-                    raise PeriodGovernanceError("approval authorization verification failed") from exc
-                if authorized is not True:
-                    raise PeriodGovernanceError(
-                        "approver identity/role is not authorized for this exact reopen request"
-                    )
+                if current_context != request_context:
+                    raise PeriodGovernanceError("reopen request changed during authorization")
                 existing = con.execute(
                     "SELECT approver_id,evidence_ref FROM reopen_approvals "
                     "WHERE request_id=? AND approval_role=?", (request_id, role)
@@ -398,7 +438,7 @@ class PeriodGovernance:
                         raise PeriodGovernanceError("approval role already recorded by another approver")
                     con.execute("COMMIT")
                     return False
-                if request["state"] != "REQUESTED":
+                if current["state"] != "REQUESTED":
                     raise PeriodGovernanceError("reopen request is not awaiting approvals")
                 other = con.execute(
                     "SELECT approver_id FROM reopen_approvals WHERE request_id=?",
