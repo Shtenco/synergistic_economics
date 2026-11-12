@@ -2035,3 +2035,6 @@ PR #4 remains Draft/Open/unmerged; main is unchanged. No production readiness or
 ### Exact-head crash harness and CI fan-out — 12 November 2026
 
 The crash/restart harness, recovery-query correction, backup/restore drill, and production coordinator/period-governance contract are now present on this branch. Prototype validation and SCCE Stage-C2 path filters were widened to include the A2.4 audit tree so the three independent validation directions can be scheduled against integrated changes rather than silently skipping unrelated audit commits. This status entry intentionally triggers the three path-filtered gates on the final source revision. The next accepted evidence is each workflow's run SHA, completed job steps, and logs; queued/cancelled attempts on older SHAs do not count.
+
+
+The subprocess crash matrix was expanded to cover not only journal/projection deltas and checkpoints, but also initial and carried-forward instrument/control position inserts, runtime initialization/current-period advancement, materialized position updates, sector-flow writes, and the final COMMIT. Repeated insert statements use occurrence-specific fault points so the test can terminate during the first carried-forward period rather than repeatedly killing only the opening-snapshot initialization. Backup validation now includes both SQLite integrity and foreign-key checks.
