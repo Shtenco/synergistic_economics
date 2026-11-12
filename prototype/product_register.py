@@ -252,7 +252,7 @@ class ProductRegister:
                 candidate={"event_id":event_id,"event_type":event_type,"payload_json":payload_json,
                            "payload_sha256":digest}
                 # Validate the candidate against the full state before appending.
-                candidate_row={"event_type":event_type,"payload_json":payload_json}
+                candidate_row={"event_id":event_id,"event_type":event_type,"payload_json":payload_json}
                 self._replay(list(rows)+[candidate_row])
                 meta=con.execute("SELECT event_count,tail_hash FROM product_register_meta WHERE singleton_id=1").fetchone()
                 seq=meta["event_count"]+1

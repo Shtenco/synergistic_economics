@@ -1,5 +1,6 @@
 """Unit coverage for the durable physical, capital and product domain stores."""
 import tempfile
+from contextlib import closing
 import unittest
 from decimal import Decimal as D
 from pathlib import Path

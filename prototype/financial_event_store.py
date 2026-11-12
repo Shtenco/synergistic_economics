@@ -225,7 +225,7 @@ class FinancialEventStore:
     def _initialize(self) -> None:
         with closing(self._connect()) as connection:
             journal_mode = connection.execute("PRAGMA journal_mode = WAL").fetchone()[0]
-            synchronous = connection.execute("PRAGMA synchronous = FULL").fetchone()[0]
+            synchronous = connection.execute("PRAGMA synchronous").fetchone()[0]
             if str(journal_mode).lower() != "wal" or synchronous != 2:
                 raise FinancialEventStoreError(
                     "SQLite WAL mode and FULL synchronous durability are required")
