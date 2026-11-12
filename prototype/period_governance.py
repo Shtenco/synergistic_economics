@@ -300,13 +300,13 @@ class PeriodGovernance:
             con.execute("BEGIN IMMEDIATE")
             try:
                 closure = con.execute(
-                    "SELECT generation,checkpoint_ref,checkpoint_digest FROM period_closures WHERE period=?",
+                    "SELECT a.generation,h.checkpoint_ref,h.checkpoint_digest FROM active_generations a JOIN generation_history h ON h.period=a.period AND h.generation=a.generation WHERE a.period=?",
                     (period,)
                 ).fetchone()
                 if closure is None:
                     raise PeriodGovernanceError("only a closed period can be reopened")
                 if (closure["checkpoint_ref"], closure["checkpoint_digest"]) != (ref, digest):
-                    raise PeriodGovernanceError("pre-reopen checkpoint must match the closed generation")
+                    raise PeriodGovernanceError("pre-reopen checkpoint must match the currently active generation")
                 old = con.execute(
                     "SELECT period,reason,evidence_ref,scope_json,pre_reopen_checkpoint_digest "
                     "FROM reopen_requests WHERE request_id=?", (request_id,)
