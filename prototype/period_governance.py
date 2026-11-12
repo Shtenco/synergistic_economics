@@ -55,9 +55,11 @@ class PeriodGovernance:
     against a trust root and rollback-resistant external sequence store.
     """
 
-    def __init__(self, database_path, checkpoint_verifier: Callable[[str, str], bool]):
+    def __init__(self, database_path, checkpoint_verifier: Callable[[str, str], dict],
+                 service_id: str):
         if not callable(checkpoint_verifier):
             raise PeriodGovernanceError("an external checkpoint verifier is mandatory")
+        self.service_id = _required(service_id, "service_id")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.checkpoint_verifier = checkpoint_verifier
@@ -207,6 +209,8 @@ class PeriodGovernance:
         manifest = self.checkpoint_verifier(ref, digest)
         if not isinstance(manifest, dict):
             raise PeriodGovernanceError("external checkpoint verifier must return the verified manifest")
+        if manifest.get("service_id") != self.service_id:
+            raise PeriodGovernanceError("checkpoint belongs to a different service identity")
         return ref, digest, manifest
 
     def close_period(self, period, generation, checkpoint_ref, checkpoint_digest, closed_by):
