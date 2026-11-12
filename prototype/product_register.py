@@ -283,29 +283,41 @@ class ProductRegister:
         if not isinstance(value,ValuationRecord): raise ProductRegisterError("ValuationRecord required")
         return self._append(value.valuation_id,"valuation",_decimal_payload(value))
 
+    def _verify_connection(self,con):
+        meta=con.execute("SELECT * FROM product_register_meta WHERE singleton_id=1").fetchone()
+        if meta is None or meta["schema_version"]!=self.SCHEMA_VERSION: return False, None
+        rows=con.execute("SELECT * FROM product_events ORDER BY commit_sequence").fetchall()
+        previous=GENESIS
+        for seq,row in enumerate(rows,1):
+            if row["commit_sequence"]!=seq or row["previous_hash"]!=previous: return False, None
+            digest=hashlib.sha256(row["payload_json"].encode()).hexdigest()
+            if digest!=row["payload_sha256"]: return False, None
+            chain=self._chain(seq,row["event_id"],row["event_type"],digest,previous)
+            if chain!=row["chain_hash"]: return False, None
+            previous=chain
+        self._replay(rows)
+        ok=meta["event_count"]==len(rows) and meta["tail_hash"]==previous
+        return ok, rows
+
     def verify(self):
         try:
             with closing(self._connect()) as con:
-                meta=con.execute("SELECT * FROM product_register_meta WHERE singleton_id=1").fetchone()
-                if meta is None or meta["schema_version"]!=self.SCHEMA_VERSION: return False
-                rows=con.execute("SELECT * FROM product_events ORDER BY commit_sequence").fetchall()
-                previous=GENESIS
-                for seq,row in enumerate(rows,1):
-                    if row["commit_sequence"]!=seq or row["previous_hash"]!=previous: return False
-                    digest=hashlib.sha256(row["payload_json"].encode()).hexdigest()
-                    if digest!=row["payload_sha256"]: return False
-                    chain=self._chain(seq,row["event_id"],row["event_type"],digest,previous)
-                    if chain!=row["chain_hash"]: return False
-                    previous=chain
-                self._replay(rows)
-                return meta["event_count"]==len(rows) and meta["tail_hash"]==previous
+                con.execute("BEGIN")
+                valid, _ = self._verify_connection(con)
+                return valid
         except (sqlite3.DatabaseError,ValueError,TypeError,KeyError,AttributeError):
             return False
 
     def valuation(self,valuation_id):
-        if not self.verify():
-            raise ProductRegisterError("product register integrity verification failed; valuation read refused")
-        with closing(self._connect()) as con:
-            rows=con.execute("SELECT * FROM product_events ORDER BY commit_sequence").fetchall()
-        _,_,_,values=self._replay(rows)
-        return values.get(valuation_id)
+        _text(valuation_id,"valuation_id")
+        try:
+            with closing(self._connect()) as con:
+                con.execute("BEGIN")
+                valid, rows=self._verify_connection(con)
+                if not valid:
+                    raise ProductRegisterError("product register integrity verification failed; valuation read refused")
+                _,_,_,values=self._replay(rows)
+                return values.get(valuation_id)
+        except (sqlite3.DatabaseError,ValueError,TypeError,KeyError,AttributeError) as exc:
+            if isinstance(exc, ProductRegisterError): raise
+            raise ProductRegisterError("product register snapshot verification failed; valuation read refused") from exc

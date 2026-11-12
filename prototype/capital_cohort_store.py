@@ -172,44 +172,55 @@ class CapitalCohortStore:
                 if con.in_transaction: con.execute("ROLLBACK")
                 raise
 
+    @staticmethod
+    def _verify_connection(con):
+        meta=con.execute("SELECT * FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
+        if meta is None or meta["schema_version"] != CapitalCohortStore.SCHEMA_VERSION: return False, None
+        opening=json.loads(meta["opening_state_json"])
+        if _canonical(opening) != meta["opening_state_json"]: return False, None
+        if hashlib.sha256(meta["opening_state_json"].encode()).hexdigest() != meta["opening_state_sha256"]: return False, None
+        state=_state_from(opening)
+        rows=con.execute("SELECT * FROM capital_cohort_periods ORDER BY commit_sequence").fetchall()
+        previous,seen_period=GENESIS,None
+        for seq,row in enumerate(rows,1):
+            payload=json.loads(row["payload_json"])
+            if _canonical(payload) != row["payload_json"]: return False, None
+            if row["commit_sequence"] != seq or row["previous_hash"] != previous: return False, None
+            if payload["period"] != row["period"]: return False, None
+            if seen_period is not None and row["period"] != seen_period+1: return False, None
+            payload_hash=hashlib.sha256(row["payload_json"].encode()).hexdigest()
+            if payload_hash != row["payload_sha256"]: return False, None
+            events=tuple(_event_from(x) for x in payload["events"])
+            additions=tuple(CapitalCohort(**x) for x in payload["additions"])
+            result=advance_cohort_period(state,events,additions,row["period"])
+            state_json=_canonical(_state_dict(result.state))
+            state_hash=hashlib.sha256(state_json.encode()).hexdigest()
+            if state_json != row["closing_state_json"] or state_hash != row["state_sha256"]: return False, None
+            chain=_hash(seq,row["period"],payload_hash,state_hash,previous)
+            if chain != row["chain_hash"]: return False, None
+            state=result.state
+            previous,seen_period=chain,row["period"]
+        ok=meta["period_count"] == len(rows) and meta["tail_hash"] == previous
+        return ok, (meta, rows, state)
+
     def current_state(self):
-        if not self.verify():
-            raise CapitalCohortStoreError("capital cohort integrity verification failed; state read refused")
-        with closing(self._connect()) as con:
-            meta=con.execute("SELECT * FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
-            if meta is None: raise CapitalCohortStoreError("capital cohort store is not initialized")
-            row=con.execute("SELECT closing_state_json FROM capital_cohort_periods ORDER BY commit_sequence DESC LIMIT 1").fetchone()
-            return _state_from(json.loads(row["closing_state_json"] if row else meta["opening_state_json"]))
+        try:
+            with closing(self._connect()) as con:
+                con.execute("BEGIN")
+                valid, snapshot=self._verify_connection(con)
+                if not valid:
+                    raise CapitalCohortStoreError("capital cohort integrity verification failed; state read refused")
+                meta, rows, state=snapshot
+                return state
+        except (sqlite3.DatabaseError,ValueError,TypeError,KeyError,AttributeError,CapitalBridgeError) as exc:
+            if isinstance(exc, CapitalCohortStoreError): raise
+            raise CapitalCohortStoreError("capital cohort snapshot verification failed; state read refused") from exc
 
     def verify(self):
         try:
             with closing(self._connect()) as con:
-                meta=con.execute("SELECT * FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
-                if meta is None or meta["schema_version"] != self.SCHEMA_VERSION: return False
-                opening=json.loads(meta["opening_state_json"])
-                if _canonical(opening) != meta["opening_state_json"]: return False
-                if hashlib.sha256(meta["opening_state_json"].encode()).hexdigest() != meta["opening_state_sha256"]: return False
-                state=_state_from(opening)
-                rows=con.execute("SELECT * FROM capital_cohort_periods ORDER BY commit_sequence").fetchall()
-                previous,seen_period=GENESIS,None
-                for seq,row in enumerate(rows,1):
-                    payload=json.loads(row["payload_json"])
-                    if _canonical(payload) != row["payload_json"]: return False
-                    if row["commit_sequence"] != seq or row["previous_hash"] != previous: return False
-                    if payload["period"] != row["period"]: return False
-                    if seen_period is not None and row["period"] != seen_period+1: return False
-                    payload_hash=hashlib.sha256(row["payload_json"].encode()).hexdigest()
-                    if payload_hash != row["payload_sha256"]: return False
-                    events=tuple(_event_from(x) for x in payload["events"])
-                    additions=tuple(CapitalCohort(**x) for x in payload["additions"])
-                    result=advance_cohort_period(state,events,additions,row["period"])
-                    state_json=_canonical(_state_dict(result.state))
-                    state_hash=hashlib.sha256(state_json.encode()).hexdigest()
-                    if state_json != row["closing_state_json"] or state_hash != row["state_sha256"]: return False
-                    chain=_hash(seq,row["period"],payload_hash,state_hash,previous)
-                    if chain != row["chain_hash"]: return False
-                    state=result.state
-                    previous,seen_period=chain,row["period"]
-                return meta["period_count"] == len(rows) and meta["tail_hash"] == previous
+                con.execute("BEGIN")
+                valid, _ = self._verify_connection(con)
+                return valid
         except (sqlite3.DatabaseError,ValueError,TypeError,KeyError,AttributeError,CapitalBridgeError):
             return False

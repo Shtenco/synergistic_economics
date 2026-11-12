@@ -102,6 +102,14 @@ def validate_pair(outflow, inflow):
                   "product_id","grade_id","unit","event_time","period","flow_class","quality","measurement_method"):
         _text(getattr(outflow, field), field)
     _aware_timestamp(outflow.event_time)
+    if outflow.correction_of is None:
+        if outflow.correction_reason:
+            raise PhysicalFlowError("correction_reason requires correction_of")
+    else:
+        _text(outflow.correction_of, "correction_of")
+        _text(outflow.correction_reason, "correction_reason")
+        if outflow.correction_of == outflow.flow_id:
+            raise PhysicalFlowError("a correction cannot reference itself")
     _decimal(outflow.quantity, "quantity", True)
     if _decimal(outflow.uncertainty, "uncertainty") < 0:
         raise PhysicalFlowError("uncertainty must be non-negative")
@@ -194,74 +202,101 @@ class PhysicalFlowStore:
                     con.execute("ROLLBACK")
                 raise
 
-    def _rows(self):
-        with closing(self._connect()) as con:
-            return con.execute("SELECT * FROM physical_flows ORDER BY commit_sequence").fetchall()
+    @staticmethod
+    def _verify_connection(con):
+        rows = con.execute("SELECT * FROM physical_flows ORDER BY commit_sequence").fetchall()
+        previous, seen, originals = GENESIS, set(), {}
+        for seq, row in enumerate(rows, 1):
+            if row["commit_sequence"] != seq or row["previous_hash"] != previous:
+                return False, rows
+            payload = json.loads(row["payload_json"])
+            if set(payload) != {"outflow", "inflow"} or _canonical(payload) != row["payload_json"]:
+                return False, rows
+            digest = hashlib.sha256(row["payload_json"].encode()).hexdigest()
+            if digest != row["payload_sha256"] or row["flow_id"] in seen:
+                return False, rows
+            out, inc = payload["outflow"], payload["inflow"]
+            if out["flow_id"] != row["flow_id"] or inc["flow_id"] != row["flow_id"]:
+                return False, rows
+            def decode(x):
+                return FlowPosting(**(x | {"quantity":D(x["quantity"]),"uncertainty":D(x["uncertainty"])}))
+            out_post, in_post = decode(out), decode(inc)
+            validate_pair(out_post, in_post)
+            if out_post.correction_of is not None:
+                original = originals.get(out_post.correction_of)
+                if original is None:
+                    return False, rows
+                if (out_post.product_id, out_post.grade_id, out_post.unit) != (
+                        original["product_id"], original["grade_id"], original["unit"]):
+                    return False, rows
+                if (out_post.origin_node, out_post.destination_node) != (
+                        original["destination_node"], original["origin_node"]):
+                    return False, rows
+            chain = PhysicalFlowStore._chain_hash(seq, row["flow_id"], digest, previous)
+            if chain != row["chain_hash"]:
+                return False, rows
+            originals[row["flow_id"]] = out
+            seen.add(row["flow_id"])
+            previous = chain
+        meta = con.execute("SELECT * FROM physical_flow_meta WHERE singleton_id=1").fetchone()
+        valid = bool(meta and meta["schema_version"] == PhysicalFlowStore.SCHEMA_VERSION
+            and meta["event_count"] == len(rows) and meta["tail_hash"] == previous)
+        return valid, rows
 
     def flow_count(self):
-        if not self.verify():
-            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         with closing(self._connect()) as con:
-            return con.execute("SELECT COUNT(*) FROM physical_flows").fetchone()[0]
+            con.execute("BEGIN")
+            valid, rows = self._verify_connection(con)
+            if not valid:
+                raise PhysicalFlowError("physical flow integrity verification failed; read refused")
+            return len(rows)
 
     def node_net(self, node_id, product_id, grade_id, period, unit):
-        if not self.verify():
-            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         for value, field in ((node_id,"node_id"),(product_id,"product_id"),(grade_id,"grade_id"),(period,"period"),(unit,"unit")):
             _text(value,field)
-        total = D("0")
-        for row in self._rows():
-            payload = json.loads(row["payload_json"])
-            out, inc = payload["outflow"], payload["inflow"]
-            if (out["product_id"],out["grade_id"],out["period"]) != (product_id,grade_id,period):
-                continue
-            if unit is not None and out["unit"] != unit:
-                continue
-            if out["node_id"] == node_id: total -= D(out["quantity"])
-            if inc["node_id"] == node_id: total += D(inc["quantity"])
-        return total
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            valid, rows = self._verify_connection(con)
+            if not valid:
+                raise PhysicalFlowError("physical flow integrity verification failed; read refused")
+            total = D("0")
+            for row in rows:
+                payload = json.loads(row["payload_json"])
+                out, inc = payload["outflow"], payload["inflow"]
+                if (out["product_id"],out["grade_id"],out["period"]) != (product_id,grade_id,period):
+                    continue
+                if unit is not None and out["unit"] != unit:
+                    continue
+                if out["node_id"] == node_id: total -= D(out["quantity"])
+                if inc["node_id"] == node_id: total += D(inc["quantity"])
+            return total
 
     def consolidated_net(self, node_ids, product_id, grade_id, period, unit):
-        if not self.verify():
-            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         nodes=set(node_ids)
         if not nodes: raise PhysicalFlowError("consolidation requires at least one node")
         for node in nodes: _text(node,"node_id")
-        rows = self._rows()
-        total = D("0")
-        for row in rows:
-            payload = json.loads(row["payload_json"])
-            out, inc = payload["outflow"], payload["inflow"]
-            if (out["product_id"],out["grade_id"],out["period"],out["unit"]) != (product_id,grade_id,period,unit):
-                continue
-            if out["node_id"] in nodes: total -= D(out["quantity"])
-            if inc["node_id"] in nodes: total += D(inc["quantity"])
-        return total
+        for value,field in ((product_id,"product_id"),(grade_id,"grade_id"),(period,"period"),(unit,"unit")):
+            _text(value,field)
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            valid, rows = self._verify_connection(con)
+            if not valid:
+                raise PhysicalFlowError("physical flow integrity verification failed; read refused")
+            total = D("0")
+            for row in rows:
+                payload = json.loads(row["payload_json"])
+                out, inc = payload["outflow"], payload["inflow"]
+                if (out["product_id"],out["grade_id"],out["period"],out["unit"]) != (product_id,grade_id,period,unit):
+                    continue
+                if out["node_id"] in nodes: total -= D(out["quantity"])
+                if inc["node_id"] in nodes: total += D(inc["quantity"])
+            return total
 
     def verify(self):
         try:
-            rows, previous, seen = self._rows(), GENESIS, set()
-            for seq, row in enumerate(rows, 1):
-                if row["commit_sequence"] != seq or row["previous_hash"] != previous:
-                    return False
-                payload = json.loads(row["payload_json"])
-                if set(payload) != {"outflow","inflow"} or _canonical(payload) != row["payload_json"]:
-                    return False
-                digest = hashlib.sha256(row["payload_json"].encode()).hexdigest()
-                if digest != row["payload_sha256"] or row["flow_id"] in seen:
-                    return False
-                out, inc = payload["outflow"], payload["inflow"]
-                if out["flow_id"] != row["flow_id"] or inc["flow_id"] != row["flow_id"]:
-                    return False
-                def decode(x):
-                    return FlowPosting(**(x | {"quantity":D(x["quantity"]),"uncertainty":D(x["uncertainty"])}))
-                validate_pair(decode(out),decode(inc))
-                chain = self._chain_hash(seq,row["flow_id"],digest,previous)
-                if chain != row["chain_hash"]: return False
-                previous, seen = chain, seen | {row["flow_id"]}
             with closing(self._connect()) as con:
-                meta = con.execute("SELECT * FROM physical_flow_meta WHERE singleton_id=1").fetchone()
-                return bool(meta and meta["schema_version"] == self.SCHEMA_VERSION
-                    and meta["event_count"] == len(rows) and meta["tail_hash"] == previous)
+                con.execute("BEGIN")
+                valid, _ = self._verify_connection(con)
+                return valid
         except (sqlite3.DatabaseError,ValueError,TypeError,KeyError,AttributeError):
             return False
