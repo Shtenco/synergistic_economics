@@ -69,3 +69,5 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_store.py
       - name: A2.4.5 labour, time and consent fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
+      - name: A2.4.7 unified synthetic cross-register integration
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_unified_cross_register.py
