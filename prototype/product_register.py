@@ -303,6 +303,8 @@ class ProductRegister:
             return False
 
     def valuation(self,valuation_id):
+        if not self.verify():
+            raise ProductRegisterError("product register integrity verification failed; valuation read refused")
         with closing(self._connect()) as con:
             rows=con.execute("SELECT * FROM product_events ORDER BY commit_sequence").fetchall()
         _,_,_,values=self._replay(rows)

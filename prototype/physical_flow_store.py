@@ -164,10 +164,14 @@ class PhysicalFlowStore:
             return con.execute("SELECT * FROM physical_flows ORDER BY commit_sequence").fetchall()
 
     def flow_count(self):
+        if not self.verify():
+            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         with closing(self._connect()) as con:
             return con.execute("SELECT COUNT(*) FROM physical_flows").fetchone()[0]
 
     def node_net(self, node_id, product_id, grade_id, period, unit):
+        if not self.verify():
+            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         for value, field in ((node_id,"node_id"),(product_id,"product_id"),(grade_id,"grade_id"),(period,"period"),(unit,"unit")):
             _text(value,field)
         total = D("0")
@@ -183,6 +187,8 @@ class PhysicalFlowStore:
         return total
 
     def consolidated_net(self, node_ids, product_id, grade_id, period, unit):
+        if not self.verify():
+            raise PhysicalFlowError("physical flow integrity verification failed; read refused")
         nodes=set(node_ids)
         if not nodes: raise PhysicalFlowError("consolidation requires at least one node")
         for node in nodes: _text(node,"node_id")

@@ -173,6 +173,8 @@ class CapitalCohortStore:
                 raise
 
     def current_state(self):
+        if not self.verify():
+            raise CapitalCohortStoreError("capital cohort integrity verification failed; state read refused")
         with closing(self._connect()) as con:
             meta=con.execute("SELECT * FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
             if meta is None: raise CapitalCohortStoreError("capital cohort store is not initialized")
