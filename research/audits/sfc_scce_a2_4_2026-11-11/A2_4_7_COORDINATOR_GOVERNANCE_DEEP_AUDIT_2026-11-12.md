@@ -26,14 +26,16 @@ No successful execution is inferred from source inspection. The six SQLite parti
 
 **Remaining validation:** execute the complete crash matrix on the exact resulting HEAD. Concurrent worker fencing remains a separate open finding (F-CR-02).
 
-### F-CR-02 — concurrent coordinator workers are not fenced
+### F-CR-02 — cross-process coordinator execution lock (IMPLEMENTED; CI PENDING)
 
 The coordinator uses SQLite transactions for individual state changes, but the protocol has no durable worker lease, fencing token, or single-flight claim for a transaction. Two workers can both observe a nonterminal state and enter `execute()`/recovery concurrently. Per-participant idempotency limits duplicate event insertion, but it does not establish a single ordered coordinator owner or make all state transitions safe under competing workers.
 
-**Required remediation**
-- Add an atomic transaction claim with monotonically increasing fencing epoch and lease expiry, or explicitly enforce a single coordinator process with an OS/database lock whose crash semantics are tested.
-- Require every state transition and participant call sequence to carry the current fencing epoch.
-- Add two-process race tests for execute-vs-execute, execute-vs-recover, and recover-vs-recover at prepare and commit boundaries.
+**Remediation committed**
+- Independent coordinator instances sharing the same coordinator database path now acquire a crash-released SQLite `BEGIN EXCLUSIVE` lock in a separate lock database before executing or recovering. The separate lock database avoids blocking participant/coordinator state writes while the execution lock is held.
+- The lock is acquired by the OS-backed SQLite file-lock mechanism and is automatically released on process termination; no stale lease holder can continue after a replacement acquires the lock on the same reliable filesystem.
+- The crash matrix now starts two independent processes for execute-vs-execute and recover-vs-recover, then verifies one native effect per participant and a valid final visibility barrier.
+
+**Explicit limitation:** this is a conservative single-writer conformance mechanism for a local/shared filesystem with reliable SQLite locking. It serializes all transactions and is not a multi-host distributed lease/fencing protocol. Production deployments on independent hosts require a transactional lock/lease service and participant-enforced fencing epochs. Execute-vs-recover race coverage remains a required extension.
 
 ### F-CR-03 — native-event visibility verification (IMPLEMENTED; CI PENDING)
 
@@ -46,15 +48,17 @@ The coordinator uses SQLite transactions for individual state changes, but the p
 
 **Remaining validation:** execute the tamper control and full crash matrix on the exact resulting HEAD. Production adapters still need their own authoritative-store verifier.
 
-### F-GOV-01 — approval roles are caller-asserted, not authenticated
+### F-GOV-01 — approval authorization verifier (IMPLEMENTED AS CONTRACT; CI PENDING)
 
 `approve_reopen()` accepts `approver_id` and `role` from the caller and checks only that the two identifiers differ. It does not authenticate the caller or verify that the identity is authorized for the requested role, period and service. Distinct strings do not prove independent authorized approval.
 
-**Required remediation**
-- Require an authorization verifier or signed identity/role assertion from an independently administered identity provider.
-- Bind each approval to request digest, period, old/new generation, complete six-register scope, reason, evidence reference, role, approver identity and expiry.
-- Verify role authorization and separation-of-duties policy before inserting the immutable approval.
-- Add tests for unauthorized identities, role spoofing, revoked identities, expired assertions, changed request scope and replay across requests/services.
+**Remediation committed**
+- `PeriodGovernance` now requires an injected `authorization_verifier`; construction fails if it is absent.
+- Before recording approval, governance builds a canonical request context containing service ID, request ID, period, old/new generation, reason, evidence, complete six-register scope and active pre-reopen checkpoint, then computes a request digest.
+- The verifier must authenticate the approver, authorize the requested role for that exact context, and validate the supplied independent assertion reference. Any exception or result other than literal `True` fails closed.
+- The governance audit supplies a deterministic test verifier and rejects a forged proof reference and an unauthorized identity before accepting the two distinct role approvals.
+
+**Explicit limitation:** the audit verifier is a test fixture, not an identity provider. Production still requires an independently administered signed assertion/identity service with revocation, expiry, audience/service binding, replay protection and auditable key rotation. The governance API now enforces that boundary rather than trusting caller-supplied role strings.
 
 ### F-GOV-02 — signed checkpoint/rebuild binding (IMPLEMENTED; CI PENDING)
 
@@ -108,7 +112,7 @@ The DR fixture computes `event_log_root` from the coordinator transaction envelo
 - `afa6907b56a7ad7eed5f8000a58277d443248724`: signed period-generation publication bound to the six-receipt reconciliation digest and event root.
 - `49770b1b2a74591b67336a59b7e7926b39e8629d`: governance negative controls for wrong event root and unrelated global reconciliation.
 
-These are source/test commits, not execution evidence. The full CI run must complete on the resulting exact HEAD before any remediation is marked PASS.
+These are source/test commits, not execution evidence. The full CI run must complete on the resulting exact HEAD before any remediation is marked PASS. Because the workflows use `cancel-in-progress: true`, rapid successive commits can cancel older runs; wait for the final branch push to settle and inspect its exact SHA.
 
 ## Crash matrix review
 
@@ -136,8 +140,8 @@ At the subsequent live poll, the three previously identified jobs had been cance
 
 ## Gate disposition
 
-- Coordinator protocol core: implemented; additional idempotency, concurrency fencing and native-event verification required.
-- Closed-period governance: implemented as a governance ledger; authenticated approvals and cryptographically bound rebuild publication required.
+- Coordinator protocol core: idempotent terminal retries and native-event verification implemented; a shared-filesystem single-writer lock and two-process race controls are committed. Multi-host fencing and execute-vs-recover race coverage remain open.
+- Closed-period governance: mandatory request-bound authorization-verifier contract and negative controls are committed; production identity-provider integration and authenticated rebuild execution remain open.
 - External checkpoint: Ed25519 manifest verification implemented; local anchor remains conformance-only and its direct mutation contract needs hardening.
 - Disaster recovery: protocol-store backup/restore fixture implemented; authoritative domain-store recovery and canonical participant event-root verification remain open.
 - Production: NOT READY. Keep PR #4 Draft/Open and do not merge. Canonical `main` remains unchanged.
