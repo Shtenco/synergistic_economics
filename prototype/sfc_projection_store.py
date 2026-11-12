@@ -1,0 +1,632 @@
+"""Atomic SFC projection-aware append and deterministic projection recovery.
+
+The module couples the schema-v4 event log, instrument positions, separate
+control positions, per-event coverage and the applied-through cursor in one
+SQLite transaction. It is a single-host SQLite protocol, not distributed
+consensus or a production security certification.
+"""
+from __future__ import annotations
+
+from contextlib import closing
+from decimal import Decimal
+import hashlib
+import json
+import sqlite3
+from typing import Sequence
+
+import financial_event_store as fes
+from entity_journal import EntityJournal, JournalEvent
+from financial_event_store import FinancialEventStore, FinancialEventStoreError
+from sfc_projection_kernel import SFCIdentity, canonical_decimal
+from sfc_projection_registry import verify_sfc_projection_openings
+
+D = Decimal
+MAPPER_VERSION = "gold2a-entity-journal-mapper@1"
+INSTRUMENT_ACCOUNTS = {"loan_asset", "deposit_asset", "interest_receivable"}
+CONTROL_IDS = {"impairment_allowance", "writeoff_memorandum"}
+
+
+class SFCProjectionStoreError(ValueError):
+    """Raised when an atomic SFC projection append or recovery check fails."""
+
+
+def _json(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+
+
+def _dec(value, field):
+    try:
+        result = D(value)
+    except Exception as exc:
+        raise SFCProjectionStoreError(f"{field} must be a decimal value") from exc
+    if not result.is_finite():
+        raise SFCProjectionStoreError(f"{field} must be finite")
+    return result
+
+
+def _control_rows(rows):
+    if not isinstance(rows, (tuple, list)) or not rows:
+        raise SFCProjectionStoreError("explicit control opening positions are required")
+    clean, seen = [], set()
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            raise SFCProjectionStoreError(f"control opening {index} must be a mapping")
+        item = {}
+        for field in ("control_id", "entity_id", "sector", "currency", "valuation_basis", "evidence_ref"):
+            value = row.get(field)
+            if not isinstance(value, str) or not value or value != value.strip():
+                raise SFCProjectionStoreError(f"control opening {field} must be trimmed non-empty text")
+            item[field] = value
+        if item["control_id"] not in CONTROL_IDS:
+            raise SFCProjectionStoreError("unknown control position")
+        period = row.get("period")
+        if not isinstance(period, int) or isinstance(period, bool) or period != 0:
+            raise SFCProjectionStoreError("control openings must explicitly start at period 0")
+        amount = canonical_decimal(row.get("amount"))
+        key = tuple(item[field] for field in ("control_id", "entity_id", "currency", "valuation_basis")) + (period,)
+        if key in seen:
+            raise SFCProjectionStoreError("duplicate control opening identity")
+        seen.add(key)
+        item.update(period=period, amount=amount)
+        clean.append(item)
+    clean.sort(key=lambda x: (x["control_id"], x["entity_id"], x["currency"], x["valuation_basis"], x["period"]))
+    return clean
+
+
+def activate_control_openings(store: FinancialEventStore, openings: Sequence[dict], *,
+                              mapper_version: str, evidence_ref: str) -> bool:
+    """Seal separate allowance/memorandum openings without inventing instruments."""
+    if not isinstance(store, FinancialEventStore):
+        raise SFCProjectionStoreError("FinancialEventStore is required")
+    for value, field in ((mapper_version, "mapper_version"), (evidence_ref, "evidence_ref")):
+        if not isinstance(value, str) or not value or value != value.strip():
+            raise SFCProjectionStoreError(f"{field} must be trimmed non-empty text")
+    clean = _control_rows(openings)
+    digest = hashlib.sha256(_json(clean).encode("utf-8")).hexdigest()
+    with closing(store._connect()) as con:
+        con.execute("BEGIN IMMEDIATE")
+        try:
+            if not verify_sfc_projection_openings(con):
+                raise SFCProjectionStoreError("instrument opening snapshot must be activated first")
+            if con.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0]:
+                raise SFCProjectionStoreError("control openings must be sealed before the first event")
+            con.execute("""CREATE TABLE IF NOT EXISTS sfc_control_opening_meta(
+                singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),
+                schema_version INTEGER NOT NULL CHECK(schema_version=1),
+                snapshot_sha256 TEXT NOT NULL, mapper_version TEXT NOT NULL,
+                evidence_ref TEXT NOT NULL, opening_count INTEGER NOT NULL CHECK(opening_count>0))""")
+            con.execute("""CREATE TABLE IF NOT EXISTS sfc_control_openings(
+                control_id TEXT NOT NULL, entity_id TEXT NOT NULL, sector TEXT NOT NULL,
+                currency TEXT NOT NULL, valuation_basis TEXT NOT NULL,
+                period INTEGER NOT NULL CHECK(period=0), amount TEXT NOT NULL,
+                evidence_ref TEXT NOT NULL,
+                PRIMARY KEY(control_id,entity_id,currency,valuation_basis,period))""")
+            con.execute("""CREATE TRIGGER IF NOT EXISTS sfc_control_openings_no_insert
+                BEFORE INSERT ON sfc_control_openings WHEN EXISTS(
+                SELECT 1 FROM sfc_control_opening_meta WHERE singleton_id=1)
+                BEGIN SELECT RAISE(ABORT,'control opening snapshot is sealed'); END""")
+            con.execute("""CREATE TRIGGER IF NOT EXISTS sfc_control_openings_no_update
+                BEFORE UPDATE ON sfc_control_openings BEGIN SELECT RAISE(ABORT,'control openings are immutable'); END""")
+            con.execute("""CREATE TRIGGER IF NOT EXISTS sfc_control_openings_no_delete
+                BEFORE DELETE ON sfc_control_openings BEGIN SELECT RAISE(ABORT,'control openings are immutable'); END""")
+            existing = con.execute("SELECT snapshot_sha256,mapper_version,evidence_ref,opening_count FROM sfc_control_opening_meta WHERE singleton_id=1").fetchone()
+            if existing:
+                if (existing["snapshot_sha256"], existing["mapper_version"], existing["evidence_ref"], existing["opening_count"]) != (digest, mapper_version, evidence_ref, len(clean)):
+                    raise SFCProjectionStoreError("control opening snapshot already sealed with different content")
+                con.execute("COMMIT")
+                return False
+            for row in clean:
+                con.execute("""INSERT INTO sfc_control_openings(
+                    control_id,entity_id,sector,currency,valuation_basis,period,amount,evidence_ref)
+                    VALUES(?,?,?,?,?,?,?,?)""",
+                    tuple(row[k] for k in ("control_id","entity_id","sector","currency","valuation_basis","period","amount","evidence_ref")))
+            con.execute("""INSERT INTO sfc_control_opening_meta VALUES(1,1,?,?,?,?)""",
+                        (digest, mapper_version, evidence_ref, len(clean)))
+            con.execute("COMMIT")
+            return True
+        except Exception:
+            if con.in_transaction:
+                con.execute("ROLLBACK")
+            raise
+
+
+def _verify_control_openings(con):
+    try:
+        meta = con.execute("SELECT * FROM sfc_control_opening_meta WHERE singleton_id=1").fetchone()
+        if meta is None:
+            return False
+        rows = con.execute("""SELECT control_id,entity_id,sector,currency,valuation_basis,
+            period,amount,evidence_ref FROM sfc_control_openings""").fetchall()
+        clean = [dict(row) for row in rows]
+        clean.sort(key=lambda x: (x["control_id"],x["entity_id"],x["currency"],x["valuation_basis"],x["period"]))
+        if len(clean) != meta["opening_count"]:
+            return False
+        for row in clean:
+            if canonical_decimal(row["amount"]) != row["amount"] or row["period"] != 0:
+                return False
+        return hashlib.sha256(_json(clean).encode("utf-8")).hexdigest() == meta["snapshot_sha256"]
+    except (sqlite3.DatabaseError, TypeError, ValueError, KeyError):
+        return False
+
+
+def _schema(con):
+    statements = (
+        """CREATE TABLE IF NOT EXISTS sfc_projection_runtime(
+            singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),
+            mapper_version TEXT NOT NULL, applied_commit_sequence INTEGER NOT NULL CHECK(applied_commit_sequence>=0),
+            current_period INTEGER NOT NULL CHECK(current_period>=0), state_sha256 TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS sfc_projection_positions(
+            instrument_id TEXT NOT NULL,instrument_class TEXT NOT NULL,holder_entity_id TEXT NOT NULL,
+            holder_sector TEXT NOT NULL,issuer_entity_id TEXT NOT NULL,issuer_sector TEXT NOT NULL,
+            currency TEXT NOT NULL,maturity TEXT NOT NULL,denomination TEXT NOT NULL,valuation_basis TEXT NOT NULL,
+            period INTEGER NOT NULL CHECK(period>=0),opening_balance TEXT NOT NULL,
+            transaction_delta TEXT NOT NULL,revaluation_delta TEXT NOT NULL,other_volume_delta TEXT NOT NULL,
+            closing_balance TEXT NOT NULL,
+            PRIMARY KEY(instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,
+                issuer_sector,currency,maturity,denomination,valuation_basis,period))""",
+        """CREATE TABLE IF NOT EXISTS sfc_control_positions(
+            control_id TEXT NOT NULL,entity_id TEXT NOT NULL,sector TEXT NOT NULL,currency TEXT NOT NULL,
+            valuation_basis TEXT NOT NULL,period INTEGER NOT NULL CHECK(period>=0),opening_balance TEXT NOT NULL,
+            transaction_delta TEXT NOT NULL,revaluation_delta TEXT NOT NULL,other_volume_delta TEXT NOT NULL,
+            closing_balance TEXT NOT NULL,
+            PRIMARY KEY(control_id,entity_id,currency,valuation_basis,period))""",
+        """CREATE TABLE IF NOT EXISTS sfc_event_coverage(
+            event_id TEXT PRIMARY KEY REFERENCES events(event_id),group_id TEXT NOT NULL,
+            commit_sequence INTEGER NOT NULL,event_index INTEGER NOT NULL,
+            disposition TEXT NOT NULL CHECK(disposition IN ('mapped','no_stock_effect')),
+            delta_count INTEGER NOT NULL CHECK(delta_count>=0),mapping_version TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS sfc_instrument_deltas(
+            event_id TEXT NOT NULL REFERENCES events(event_id),delta_index INTEGER NOT NULL CHECK(delta_index>=0),
+            instrument_id TEXT NOT NULL,instrument_class TEXT NOT NULL,holder_entity_id TEXT NOT NULL,
+            holder_sector TEXT NOT NULL,issuer_entity_id TEXT NOT NULL,issuer_sector TEXT NOT NULL,
+            currency TEXT NOT NULL,maturity TEXT NOT NULL,denomination TEXT NOT NULL,valuation_basis TEXT NOT NULL,
+            effective_period INTEGER NOT NULL,component TEXT NOT NULL CHECK(component IN ('T','V','O')),
+            amount TEXT NOT NULL,opening_balance TEXT NOT NULL,
+            PRIMARY KEY(event_id,delta_index))""",
+        """CREATE TABLE IF NOT EXISTS sfc_control_deltas(
+            event_id TEXT NOT NULL REFERENCES events(event_id),delta_index INTEGER NOT NULL CHECK(delta_index>=0),
+            control_id TEXT NOT NULL,entity_id TEXT NOT NULL,sector TEXT NOT NULL,currency TEXT NOT NULL,
+            valuation_basis TEXT NOT NULL,effective_period INTEGER NOT NULL,
+            component TEXT NOT NULL CHECK(component IN ('T','V','O')),amount TEXT NOT NULL,opening_balance TEXT NOT NULL,
+            PRIMARY KEY(event_id,delta_index))""",
+        """CREATE TABLE IF NOT EXISTS sfc_sector_flows(
+            period INTEGER NOT NULL,sector TEXT NOT NULL,transaction_asset_delta TEXT NOT NULL,
+            transaction_liability_delta TEXT NOT NULL,financial_net_lending TEXT NOT NULL,
+            PRIMARY KEY(period,sector))""",
+        """CREATE TABLE IF NOT EXISTS sfc_projection_event_checkpoints(
+            event_id TEXT PRIMARY KEY REFERENCES events(event_id),commit_sequence INTEGER NOT NULL,
+            event_index INTEGER NOT NULL,current_period INTEGER NOT NULL,state_sha256 TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS sfc_projection_group_checkpoints(
+            commit_sequence INTEGER PRIMARY KEY,group_id TEXT NOT NULL,current_period INTEGER NOT NULL,
+            state_sha256 TEXT NOT NULL)""",
+    )
+    for statement in statements:
+        con.execute(statement)
+    for table in ("sfc_event_coverage","sfc_instrument_deltas","sfc_control_deltas",
+                  "sfc_projection_event_checkpoints","sfc_projection_group_checkpoints"):
+        con.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_no_update BEFORE UPDATE ON {table}
+            BEGIN SELECT RAISE(ABORT,'projection audit rows are immutable'); END""")
+        con.execute(f"""CREATE TRIGGER IF NOT EXISTS {table}_no_delete BEFORE DELETE ON {table}
+            BEGIN SELECT RAISE(ABORT,'projection audit rows are immutable'); END""")
+
+
+def _identity_from_line(line):
+    if line.account not in INSTRUMENT_ACCOUNTS:
+        return None
+    return SFCIdentity(
+        instrument_id=line.instrument_id, instrument_class=line.instrument_class,
+        holder_entity_id=line.entity_id, holder_sector=line.institutional_sector,
+        issuer_entity_id=line.issuer_entity_id, issuer_sector=line.issuer_sector,
+        currency=line.currency, maturity=line.maturity, denomination=line.denomination,
+        valuation_basis=line.valuation_basis,
+    )
+
+
+def _map_event(event: JournalEvent):
+    instruments, controls = [], []
+    for line in event.lines:
+        identity = _identity_from_line(line)
+        if identity is not None:
+            delta = line.amount if line.side == "D" else -line.amount
+            instruments.append((identity, event.component, delta))
+    if event.event_type == "impairment_allowance_recognition":
+        line = next(x for x in event.lines if x.account == "impairment_allowance")
+        loan = next(x for x in event.lines if x.account == "impairment_expense")
+        controls.append(("impairment_allowance", line.entity_id, line.institutional_sector,
+                         "LCU", "NOMINAL", event.component, line.amount))
+    elif event.event_type == "creditor_write_off":
+        allowance = next(x for x in event.lines if x.account == "impairment_allowance")
+        loan = next(x for x in event.lines if x.account == "loan_asset")
+        controls.append(("impairment_allowance", allowance.entity_id, allowance.institutional_sector,
+                         loan.currency, loan.valuation_basis, event.component, -allowance.amount))
+        controls.append(("writeoff_memorandum", loan.entity_id, loan.institutional_sector,
+                         loan.currency, loan.valuation_basis, event.component, event.writeoff_claim_delta))
+    return instruments, controls
+
+
+def _position_key(identity):
+    return tuple(getattr(identity, f) for f in SFCIdentity.__dataclass_fields__)
+
+
+def _state_payload(con, period):
+    instrument = [dict(row) for row in con.execute(
+        "SELECT instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,currency,maturity,denomination,valuation_basis,opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance FROM sfc_projection_positions WHERE period=? ORDER BY instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,currency,maturity,denomination,valuation_basis",
+        (period,)).fetchall()]
+    control = [dict(row) for row in con.execute(
+        "SELECT control_id,entity_id,sector,currency,valuation_basis,opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance FROM sfc_control_positions WHERE period=? ORDER BY control_id,entity_id,currency,valuation_basis",
+        (period,)).fetchall()]
+    return {"period": period, "instruments": instrument, "controls": control}
+
+
+def _state_hash(con, period):
+    return hashlib.sha256(_json(_state_payload(con, period)).encode("utf-8")).hexdigest()
+
+
+def _initialize_runtime(con):
+    existing = con.execute("SELECT singleton_id FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+    if existing:
+        return
+    instrument_rows = con.execute("SELECT * FROM sfc_openings ORDER BY instrument_id,instrument_class,holder_entity_id,issuer_entity_id").fetchall()
+    control_rows = con.execute("SELECT * FROM sfc_control_openings ORDER BY control_id,entity_id").fetchall()
+    periods = {row["period"] for row in instrument_rows} | {row["period"] for row in control_rows}
+    if periods != {0}:
+        raise SFCProjectionStoreError("P2 requires explicit period-0 openings for every instrument and control position")
+    for row in instrument_rows:
+        identity = {field: row[field] for field in SFCIdentity.__dataclass_fields__}
+        amount = canonical_decimal(row["amount"])
+        con.execute("""INSERT INTO sfc_projection_positions(
+            instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,
+            currency,maturity,denomination,valuation_basis,period,opening_balance,transaction_delta,
+            revaluation_delta,other_volume_delta,closing_balance)
+            VALUES(?,?,?,?,?,?,?,?,?,?,0,?,'0','0','0',?)""",
+            tuple(identity[f] for f in SFCIdentity.__dataclass_fields__) + (amount, amount))
+    for row in control_rows:
+        amount = canonical_decimal(row["amount"])
+        con.execute("""INSERT INTO sfc_control_positions(
+            control_id,entity_id,sector,currency,valuation_basis,period,opening_balance,
+            transaction_delta,revaluation_delta,other_volume_delta,closing_balance)
+            VALUES(?,?,?,?,?,0,?,'0','0','0',?)""",
+            (row["control_id"],row["entity_id"],row["sector"],row["currency"],row["valuation_basis"],amount,amount))
+    digest = _state_hash(con, 0)
+    con.execute("INSERT INTO sfc_projection_runtime VALUES(1,?,0,0,?)", (MAPPER_VERSION, digest))
+
+
+def _advance_period(con, target):
+    runtime = con.execute("SELECT current_period FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+    current = runtime["current_period"]
+    if target < current:
+        raise SFCProjectionStoreError("backdated effective period requires explicit period reopen/rebuild")
+    for period in range(current + 1, target + 1):
+        for row in con.execute("SELECT * FROM sfc_projection_positions WHERE period=?", (period-1,)).fetchall():
+            opening = row["closing_balance"]
+            fields = tuple(row[f] for f in SFCIdentity.__dataclass_fields__)
+            con.execute("""INSERT INTO sfc_projection_positions(
+                instrument_id,instrument_class,holder_entity_id,holder_sector,issuer_entity_id,issuer_sector,
+                currency,maturity,denomination,valuation_basis,period,opening_balance,transaction_delta,
+                revaluation_delta,other_volume_delta,closing_balance)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,'0','0','0',?)""",
+                fields + (period, opening, opening))
+        for row in con.execute("SELECT * FROM sfc_control_positions WHERE period=?", (period-1,)).fetchall():
+            opening = row["closing_balance"]
+            con.execute("""INSERT INTO sfc_control_positions(
+                control_id,entity_id,sector,currency,valuation_basis,period,opening_balance,
+                transaction_delta,revaluation_delta,other_volume_delta,closing_balance)
+                VALUES(?,?,?,?,?,?,?,'0','0','0',?)""",
+                (row["control_id"],row["entity_id"],row["sector"],row["currency"],row["valuation_basis"],period,opening,opening))
+        con.execute("UPDATE sfc_projection_runtime SET current_period=? WHERE singleton_id=1", (period,))
+
+
+def _apply_instrument_delta(con, identity, period, component, amount):
+    key = _position_key(identity)
+    where = " AND ".join(f"{field}=?" for field in SFCIdentity.__dataclass_fields__)
+    row = con.execute(f"SELECT * FROM sfc_projection_positions WHERE {where} AND period=?",
+                      key + (period,)).fetchone()
+    if row is None:
+        raise SFCProjectionStoreError("instrument delta has no explicit opening identity")
+    opening = _dec(row["opening_balance"], "opening_balance")
+    current_component = {"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]
+    new_component = _dec(row[current_component], current_component) + amount
+    closing = opening + _dec(row["transaction_delta"],"T") + _dec(row["revaluation_delta"],"V") + _dec(row["other_volume_delta"],"O")
+    if component == "T":
+        closing = opening + new_component + _dec(row["revaluation_delta"],"V") + _dec(row["other_volume_delta"],"O")
+    elif component == "V":
+        closing = opening + _dec(row["transaction_delta"],"T") + new_component + _dec(row["other_volume_delta"],"O")
+    else:
+        closing = opening + _dec(row["transaction_delta"],"T") + _dec(row["revaluation_delta"],"V") + new_component
+    if closing < 0:
+        raise SFCProjectionStoreError("GOLD-2A recognized instrument position cannot become negative")
+    con.execute(f"UPDATE sfc_projection_positions SET {current_component}=?,closing_balance=? WHERE {where} AND period=?",
+                (canonical_decimal(new_component),canonical_decimal(closing)) + key + (period,))
+
+
+def _apply_control_delta(con, control_id, entity, sector, currency, basis, period, component, amount):
+    row = con.execute("""SELECT * FROM sfc_control_positions WHERE control_id=? AND entity_id=?
+        AND currency=? AND valuation_basis=? AND period=?""",
+        (control_id,entity,currency,basis,period)).fetchone()
+    if row is None or row["sector"] != sector:
+        raise SFCProjectionStoreError("control delta has no explicit matching opening position")
+    opening = _dec(row["opening_balance"],"control opening")
+    col = {"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]
+    updated = _dec(row[col],col) + amount
+    parts = {k:_dec(row[k],k) for k in ("transaction_delta","revaluation_delta","other_volume_delta")}
+    parts[{"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]] = updated
+    closing = opening + sum(parts.values(), D("0"))
+    if closing < 0:
+        raise SFCProjectionStoreError(f"{control_id} control position cannot become negative")
+    con.execute(f"""UPDATE sfc_control_positions SET {col}=?,closing_balance=?
+        WHERE control_id=? AND entity_id=? AND currency=? AND valuation_basis=? AND period=?""",
+        (canonical_decimal(updated),canonical_decimal(closing),control_id,entity,currency,basis,period))
+
+
+def _update_sector_flows(con, identity, component, amount, period):
+    if component != "T":
+        return
+    for sector, asset, liability in (
+        (identity.holder_sector, amount, D("0")),
+        (identity.issuer_sector, D("0"), amount),
+    ):
+        row = con.execute("SELECT transaction_asset_delta,transaction_liability_delta FROM sfc_sector_flows WHERE period=? AND sector=?",
+                          (period,sector)).fetchone()
+        old_a, old_l = (D(row[0]),D(row[1])) if row else (D("0"),D("0"))
+        new_a, new_l = old_a + asset, old_l + liability
+        nl = new_a - new_l
+        con.execute("""INSERT INTO sfc_sector_flows VALUES(?,?,?,?,?)
+            ON CONFLICT(period,sector) DO UPDATE SET transaction_asset_delta=excluded.transaction_asset_delta,
+            transaction_liability_delta=excluded.transaction_liability_delta,financial_net_lending=excluded.financial_net_lending""",
+            (period,sector,canonical_decimal(new_a),canonical_decimal(new_l),canonical_decimal(nl)))
+
+
+def _assert_control_invariants(con, period):
+    instruments = con.execute("SELECT instrument_id,closing_balance FROM sfc_projection_positions WHERE period=?", (period,)).fetchall()
+    balances = {row["instrument_id"]: D(row["closing_balance"]) for row in instruments}
+    controls = con.execute("SELECT control_id,closing_balance FROM sfc_control_positions WHERE period=?", (period,)).fetchall()
+    controls = {row["control_id"]: D(row["closing_balance"]) for row in controls}
+    loan = balances.get("LOAN-001", D("0"))
+    allowance = controls.get("impairment_allowance", D("0"))
+    memo = controls.get("writeoff_memorandum", D("0"))
+    if allowance < 0 or allowance > loan:
+        raise SFCProjectionStoreError("impairment allowance must remain between zero and recognized gross loan")
+    if memo < 0:
+        raise SFCProjectionStoreError("written-off legal claim memorandum cannot be negative")
+    if loan + memo < 0:
+        raise SFCProjectionStoreError("contractual principal cannot be negative")
+    sector_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?", (period,)).fetchall()
+    if sum((D(row[0]) for row in sector_rows), D("0")) != 0:
+        raise SFCProjectionStoreError("transaction-only sector financial net lending must sum to zero")
+
+
+def append_projected_group(journal: EntityJournal, store: FinancialEventStore, group_id: str,
+                           events: Sequence[JournalEvent], *, causation_id: str | None = None) -> bool:
+    """Atomically persist events, instrument/control projections, coverage and cursor."""
+    if not isinstance(journal, EntityJournal) or not isinstance(store, FinancialEventStore):
+        raise SFCProjectionStoreError("canonical EntityJournal and FinancialEventStore are required")
+    if not isinstance(events, (tuple,list)) or not events or any(not isinstance(e,JournalEvent) for e in events):
+        raise SFCProjectionStoreError("a non-empty sequence of canonical JournalEvent values is required")
+    initial_ids = set(journal.events)
+    try:
+        for event in events:
+            result = journal.post(event)
+            if result[0] != result[1]:
+                raise SFCProjectionStoreError("unbalanced validated journal event")
+        from financial_journal_adapter import _event_payload
+        payloads = [_event_payload(e) for e in events]
+        group_id, causation_id, normalized = fes._validate_group(group_id, causation_id, payloads)
+        envelope = {"group_id":group_id,"causation_id":causation_id,"events":normalized}
+        payload_json = fes._canonical_json(envelope)
+        payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        event_rows = []
+        for event in normalized:
+            event_json = fes._canonical_json(event)
+            event_rows.append((event["event_id"],event["event_type"],event["effective_period"],len(event_rows),
+                               hashlib.sha256(event_json.encode("utf-8")).hexdigest(),event_json,event["postings"]))
+        mapped = [_map_event(e) for e in events]
+        periods = [e.effective_period for e in events]
+        if periods != sorted(periods):
+            raise SFCProjectionStoreError("events inside a transaction group must be ordered by effective period")
+
+        with closing(store._connect()) as con:
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                if not verify_sfc_projection_openings(con) or not _verify_control_openings(con):
+                    raise SFCProjectionStoreError("both instrument and control opening snapshots must be sealed")
+                _schema(con)
+                if not fes._verify_group_chain(con) or not fes._verify_event_posting_mirrors(con):
+                    raise SFCProjectionStoreError("event-store chain or posting mirrors are corrupt")
+                _initialize_runtime(con)
+                existing = con.execute("SELECT payload_sha256,commit_sequence FROM event_groups WHERE group_id=?",(group_id,)).fetchone()
+                if existing:
+                    if existing["payload_sha256"] != payload_hash:
+                        raise SFCProjectionStoreError("group ID reused with changed immutable content")
+                    coverage = con.execute("SELECT COUNT(*) FROM sfc_event_coverage WHERE group_id=?",(group_id,)).fetchone()[0]
+                    if coverage != len(events):
+                        raise SFCProjectionStoreError("existing group has incomplete projection coverage")
+                    con.execute("ROLLBACK")
+                    return False
+                for event_id,*_ in event_rows:
+                    if con.execute("SELECT 1 FROM events WHERE event_id=?",(event_id,)).fetchone():
+                        raise SFCProjectionStoreError(f"event ID already exists: {event_id}")
+                next_sequence = con.execute("SELECT COALESCE(MAX(commit_sequence),0)+1 FROM event_groups").fetchone()[0]
+                tail = con.execute("SELECT group_chain_hash FROM event_groups ORDER BY commit_sequence DESC LIMIT 1").fetchone()
+                previous_hash = tail["group_chain_hash"] if tail else fes._CHAIN_GENESIS
+                chain_hash = fes._group_chain_hash(next_sequence,group_id,payload_hash,previous_hash)
+                con.execute("""INSERT INTO event_groups(group_id,causation_id,commit_sequence,previous_group_hash,
+                    group_chain_hash,payload_sha256,payload_json) VALUES(?,?,?,?,?,?,?)""",
+                    (group_id,causation_id,next_sequence,previous_hash,chain_hash,payload_hash,payload_json))
+                for event_id,event_type,period,event_index,event_hash,event_json,postings in event_rows:
+                    con.execute("""INSERT INTO events(event_id,group_id,event_type,effective_period,event_index,payload_sha256,payload_json)
+                        VALUES(?,?,?,?,?,?,?)""",(event_id,group_id,event_type,period,event_index,event_hash,event_json))
+                    for line_no,posting in enumerate(postings):
+                        con.execute("INSERT INTO journal_lines(event_id,line_no,posting_json) VALUES(?,?,?)",
+                                    (event_id,line_no,fes._canonical_json(posting)))
+
+                for index,(event,instrument_deltas,control_deltas) in enumerate(zip(events,*zip(*mapped))):
+                    _advance_period(con,event.effective_period)
+                    disposition = "mapped" if instrument_deltas or control_deltas else "no_stock_effect"
+                    total_deltas = len(instrument_deltas)+len(control_deltas)
+                    con.execute("""INSERT INTO sfc_event_coverage VALUES(?,?,?,?,?,?,?)""",
+                        (event.event_id,group_id,next_sequence,index,disposition,total_deltas,MAPPER_VERSION))
+                    delta_index = 0
+                    for identity,component,amount in instrument_deltas:
+                        row = con.execute("""SELECT opening_balance FROM sfc_projection_positions WHERE
+                            instrument_id=? AND instrument_class=? AND holder_entity_id=? AND holder_sector=?
+                            AND issuer_entity_id=? AND issuer_sector=? AND currency=? AND maturity=?
+                            AND denomination=? AND valuation_basis=? AND period=?""",
+                            _position_key(identity)+(event.effective_period,)).fetchone()
+                        if row is None:
+                            raise SFCProjectionStoreError("instrument delta missing explicit period opening")
+                        opening = D(row["opening_balance"])
+                        _apply_instrument_delta(con,identity,event.effective_period,component,amount)
+                        con.execute("""INSERT INTO sfc_instrument_deltas VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            (event.event_id,delta_index,*_position_key(identity),event.effective_period,component,
+                             canonical_decimal(amount),canonical_decimal(opening)))
+                        _update_sector_flows(con,identity,component,amount,event.effective_period)
+                        delta_index += 1
+                    control_index = 0
+                    for control_id,entity,sector,currency,basis,component,amount in control_deltas:
+                        row = con.execute("""SELECT opening_balance FROM sfc_control_positions WHERE control_id=?
+                            AND entity_id=? AND currency=? AND valuation_basis=? AND period=?""",
+                            (control_id,entity,currency,basis,event.effective_period)).fetchone()
+                        if row is None:
+                            raise SFCProjectionStoreError("control delta missing explicit period opening")
+                        opening = D(row["opening_balance"])
+                        _apply_control_delta(con,control_id,entity,sector,currency,basis,event.effective_period,component,amount)
+                        con.execute("""INSERT INTO sfc_control_deltas VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                            (event.event_id,control_index,control_id,entity,sector,currency,basis,
+                             event.effective_period,component,canonical_decimal(amount),canonical_decimal(opening)))
+                        control_index += 1
+                    _assert_control_invariants(con,event.effective_period)
+                    digest = _state_hash(con,event.effective_period)
+                    con.execute("INSERT INTO sfc_projection_event_checkpoints VALUES(?,?,?,?,?)",
+                        (event.event_id,next_sequence,index,event.effective_period,digest))
+                runtime = con.execute("SELECT current_period FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+                digest = _state_hash(con,runtime["current_period"])
+                con.execute("UPDATE sfc_projection_runtime SET applied_commit_sequence=?,state_sha256=? WHERE singleton_id=1",
+                            (next_sequence,digest))
+                con.execute("INSERT INTO sfc_projection_group_checkpoints VALUES(?,?,?,?)",
+                            (next_sequence,group_id,runtime["current_period"],digest))
+                con.execute("COMMIT")
+                return True
+            except Exception:
+                if con.in_transaction:
+                    con.execute("ROLLBACK")
+                raise
+    except Exception:
+        for event in events:
+            if event.event_id not in initial_ids and journal.events.get(event.event_id) == event:
+                journal.events.pop(event.event_id,None)
+        raise
+
+
+def verify_projection_replay(store: FinancialEventStore) -> bool:
+    """Read-only deterministic rebuild and comparison of positions, coverage and cursor."""
+    try:
+        with closing(store._connect()) as con:
+            con.execute("BEGIN")
+            if not verify_sfc_projection_openings(con) or not _verify_control_openings(con):
+                return False
+            if not fes._verify_group_chain(con) or not fes._verify_event_posting_mirrors(con):
+                return False
+            if not con.execute("SELECT 1 FROM sfc_projection_runtime WHERE singleton_id=1").fetchone():
+                return False
+            groups = con.execute("SELECT commit_sequence,payload_json FROM event_groups ORDER BY commit_sequence").fetchall()
+            coverage = con.execute("SELECT COUNT(*) FROM sfc_event_coverage").fetchone()[0]
+            event_count = con.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+            if coverage != event_count:
+                return False
+            deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_instrument_deltas d
+                JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
+                ORDER BY g.commit_sequence,e.event_index,d.delta_index""").fetchall()
+            control_deltas = con.execute("""SELECT d.*,e.group_id,e.event_index,g.commit_sequence FROM sfc_control_deltas d
+                JOIN events e ON e.event_id=d.event_id JOIN event_groups g ON g.group_id=e.group_id
+                ORDER BY g.commit_sequence,e.event_index,d.delta_index""").fetchall()
+            # Every covered event's disposition and delta count must reconcile.
+            for row in con.execute("SELECT event_id,disposition,delta_count FROM sfc_event_coverage").fetchall():
+                n = con.execute("SELECT (SELECT COUNT(*) FROM sfc_instrument_deltas WHERE event_id=?)+(SELECT COUNT(*) FROM sfc_control_deltas WHERE event_id=?)",(row["event_id"],row["event_id"])).fetchone()[0]
+                if n != row["delta_count"] or (row["disposition"]=="mapped" and n==0) or (row["disposition"]=="no_stock_effect" and n!=0):
+                    return False
+            # Rebuild positions using the same explicit openings, never zero defaults.
+            instrument_expected = {}
+            for row in con.execute("SELECT * FROM sfc_openings").fetchall():
+                identity = tuple(row[f] for f in SFCIdentity.__dataclass_fields__)
+                instrument_expected[(identity,0)] = [D(row["amount"]),D(0),D(0),D(0)]
+            control_expected = {}
+            for row in con.execute("SELECT * FROM sfc_control_openings").fetchall():
+                key = (row["control_id"],row["entity_id"],row["sector"],row["currency"],row["valuation_basis"],0)
+                control_expected[key] = [D(row["amount"]),D(0),D(0),D(0)]
+            checkpoints = {r["event_id"]:r["state_sha256"] for r in con.execute("SELECT * FROM sfc_projection_event_checkpoints").fetchall()}
+            event_order = con.execute("""SELECT e.event_id,e.effective_period,e.event_index,g.commit_sequence
+                FROM events e JOIN event_groups g ON g.group_id=e.group_id ORDER BY g.commit_sequence,e.event_index""").fetchall()
+            inst_by_event, ctrl_by_event = {}, {}
+            for row in deltas: inst_by_event.setdefault(row["event_id"],[]).append(row)
+            for row in control_deltas: ctrl_by_event.setdefault(row["event_id"],[]).append(row)
+            current = 0
+            for ev in event_order:
+                target = ev["effective_period"]
+                if target < current:
+                    return False
+                for p in range(current+1,target+1):
+                    for (ident,oldp),vals in list(instrument_expected.items()):
+                        if oldp==p-1: instrument_expected[(ident,p)] = [vals[0]+sum(vals[1:],D(0)),D(0),D(0),D(0)]
+                    for (cid,ent,sec,cur,basis,oldp),vals in list(control_expected.items()):
+                        if oldp==p-1: control_expected[(cid,ent,sec,cur,basis,p)] = [vals[0]+sum(vals[1:],D(0)),D(0),D(0),D(0)]
+                current = target
+                for row in inst_by_event.get(ev["event_id"],[]):
+                    ident = tuple(row[f] for f in SFCIdentity.__dataclass_fields__)
+                    key=(ident,target)
+                    if key not in instrument_expected or instrument_expected[key][0] != D(row["opening_balance"]):
+                        return False
+                    col={"T":1,"V":2,"O":3}[row["component"]]
+                    instrument_expected[key][col] += D(row["amount"])
+                for row in ctrl_by_event.get(ev["event_id"],[]):
+                    key=(row["control_id"],row["entity_id"],row["sector"],row["currency"],row["valuation_basis"],target)
+                    if key not in control_expected or control_expected[key][0] != D(row["opening_balance"]):
+                        return False
+                    col={"T":1,"V":2,"O":3}[row["component"]]
+                    control_expected[key][col] += D(row["amount"])
+                # Event checkpoint hash is recomputed from rebuilt state at this period.
+                inst_payload=[]
+                for (ident,p),vals in sorted(instrument_expected.items(),key=lambda x:(x[0][1],x[0][0])):
+                    if p==target:
+                        inst_payload.append(dict(zip(
+                            tuple(SFCIdentity.__dataclass_fields__),
+                            ident
+                        )) | {"opening_balance":canonical_decimal(vals[0]),"transaction_delta":canonical_decimal(vals[1]),
+                              "revaluation_delta":canonical_decimal(vals[2]),"other_volume_delta":canonical_decimal(vals[3]),
+                              "closing_balance":canonical_decimal(vals[0]+sum(vals[1:],D(0)))})
+                ctrl_payload=[]
+                for (cid,ent,sec,cur,basis,p),vals in sorted(control_expected.items()):
+                    if p==target:
+                        ctrl_payload.append({"control_id":cid,"entity_id":ent,"sector":sec,"currency":cur,
+                            "valuation_basis":basis,"opening_balance":canonical_decimal(vals[0]),
+                            "transaction_delta":canonical_decimal(vals[1]),"revaluation_delta":canonical_decimal(vals[2]),
+                            "other_volume_delta":canonical_decimal(vals[3]),"closing_balance":canonical_decimal(vals[0]+sum(vals[1:],D(0)))})
+                digest=hashlib.sha256(_json({"period":target,"instruments":inst_payload,"controls":ctrl_payload}).encode("utf-8")).hexdigest()
+                if checkpoints.get(ev["event_id"]) != digest:
+                    return False
+            # Compare all rebuilt rows with materialized rows.
+            for (ident,period),vals in instrument_expected.items():
+                row=con.execute("""SELECT opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance
+                    FROM sfc_projection_positions WHERE instrument_id=? AND instrument_class=? AND holder_entity_id=? AND holder_sector=?
+                    AND issuer_entity_id=? AND issuer_sector=? AND currency=? AND maturity=? AND denomination=? AND valuation_basis=? AND period=?""",
+                    ident+(period,)).fetchone()
+                if row is None or [D(row[k]) for k in ("opening_balance","transaction_delta","revaluation_delta","other_volume_delta","closing_balance")] != [vals[0],*vals[1:],vals[0]+sum(vals[1:],D(0))]:
+                    return False
+            for (cid,ent,sec,cur,basis,period),vals in control_expected.items():
+                row=con.execute("""SELECT opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance
+                    FROM sfc_control_positions WHERE control_id=? AND entity_id=? AND currency=? AND valuation_basis=? AND period=?""",
+                    (cid,ent,cur,basis,period)).fetchone()
+                if row is None or row["sector"] != sec or [D(row[k]) for k in ("opening_balance","transaction_delta","revaluation_delta","other_volume_delta","closing_balance")] != [vals[0],*vals[1:],vals[0]+sum(vals[1:],D(0))]:
+                    return False
+            runtime=con.execute("SELECT applied_commit_sequence,current_period,state_sha256 FROM sfc_projection_runtime WHERE singleton_id=1").fetchone()
+            max_seq=groups[-1]["commit_sequence"] if groups else 0
+            if runtime["applied_commit_sequence"] != max_seq or runtime["current_period"] != current:
+                return False
+            if runtime["state_sha256"] != _state_hash(con,current):
+                return False
+            for row in con.execute("SELECT period,financial_net_lending FROM sfc_sector_flows").fetchall():
+                total=con.execute("SELECT COALESCE(SUM(CAST(financial_net_lending AS NUMERIC)),0) FROM sfc_sector_flows WHERE period=?",(row["period"],)).fetchone()[0]
+                if D(str(total)) != 0:
+                    return False
+            return True
+    except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError, SFCProjectionStoreError):
+        return False
