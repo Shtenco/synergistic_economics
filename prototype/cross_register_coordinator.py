@@ -90,6 +90,19 @@ class SQLiteParticipant:
                     state TEXT NOT NULL CHECK(state IN ('PREPARED','COMMITTED','ABORTED')),
                     receipt_json TEXT
                 );
+                CREATE TABLE IF NOT EXISTS participant_transitions(
+                    transition_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    transaction_id TEXT NOT NULL REFERENCES participant_inbox(transaction_id),
+                    from_state TEXT,
+                    to_state TEXT NOT NULL,
+                    reason TEXT NOT NULL
+                );
+                CREATE TRIGGER IF NOT EXISTS participant_transitions_no_update
+                    BEFORE UPDATE ON participant_transitions
+                    BEGIN SELECT RAISE(ABORT,'participant transition history is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS participant_transitions_no_delete
+                    BEFORE DELETE ON participant_transitions
+                    BEGIN SELECT RAISE(ABORT,'participant transition history is immutable'); END;
                 CREATE TABLE IF NOT EXISTS participant_events(
                     native_event_id TEXT PRIMARY KEY,
                     transaction_id TEXT NOT NULL UNIQUE,
@@ -155,6 +168,9 @@ class SQLiteParticipant:
                     expected_revision,prepare_token,state)
                     VALUES(?,?,?,?,?,?,?,'PREPARED')""",
                     (txid, stream, native_id, digest, payload_json, revision, token))
+                con.execute("""INSERT INTO participant_transitions(
+                    transaction_id,from_state,to_state,reason) VALUES(?,NULL,'PREPARED','prepare')""",
+                    (txid,))
                 con.execute("COMMIT")
             except Exception:
                 if con.in_transaction:
@@ -202,6 +218,9 @@ class SQLiteParticipant:
                 }
                 con.execute("""UPDATE participant_inbox SET state='COMMITTED',receipt_json=?
                     WHERE transaction_id=?""", (_canonical(receipt), txid))
+                con.execute("""INSERT INTO participant_transitions(
+                    transaction_id,from_state,to_state,reason)
+                    VALUES(?,'PREPARED','COMMITTED','commit')""", (txid,))
                 con.execute("COMMIT")
             except Exception:
                 if con.in_transaction:
@@ -225,6 +244,9 @@ class SQLiteParticipant:
                             "UPDATE participant_inbox SET state='ABORTED' WHERE transaction_id=?",
                             (txid,)
                         )
+                        con.execute("""INSERT INTO participant_transitions(
+                            transaction_id,from_state,to_state,reason)
+                            VALUES(?,'PREPARED','ABORTED','abort-before-commit-decision')""", (txid,))
                 con.execute("COMMIT")
             except Exception:
                 if con.in_transaction:
@@ -387,6 +409,9 @@ class CrossRegisterCoordinator:
                 con.execute("""INSERT INTO coordinator_transactions(
                     transaction_id,envelope_json,envelope_digest,state) VALUES(?,?,?,'NEW')""",
                     (txid, envelope_json, envelope_digest))
+                con.execute("""INSERT INTO coordinator_transitions(
+                    transaction_id,from_state,to_state,reason) VALUES(?,NULL,'NEW','submit')""",
+                    (txid,))
                 for name, stream, native_id, payload_json, digest, revision in rows:
                     con.execute("""INSERT INTO coordinator_operations(
                         transaction_id,participant,stream_id,native_event_id,payload_json,
