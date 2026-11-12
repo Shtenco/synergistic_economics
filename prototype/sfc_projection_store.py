@@ -848,7 +848,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                         ctrl_payload.append({"control_id":cid,"entity_id":ent,"sector":sec,"currency":cur,
                             "valuation_basis":basis,"opening_balance":_canon(vals[0]),
                             "transaction_delta":_canon(vals[1]),"revaluation_delta":_canon(vals[2]),
-                            "other_volume_delta":_canon(vals[3]),"closing_balance":_canon(vals[0]+sum(vals[1:],D(0)))})
+                            "other_volume_delta":_canon(vals[3]),"closing_balance":_canon(_sum_exact((vals[0],*vals[1:])))})
                 digest=hashlib.sha256(_json({"period":target,"instruments":inst_payload,"controls":ctrl_payload}).encode("utf-8")).hexdigest()
                 if checkpoints.get(ev["event_id"]) != digest:
                     return False
