@@ -65,6 +65,23 @@ def _reconciliation_hash(source_root):
     return hashlib.sha256(canonical).hexdigest()
 
 
+def _authorization_verifier(approver_id, role, context, evidence_ref):
+    # Deterministic test identity provider. Production must replace this with
+    # a separately administered signed-assertion verifier.
+    expected = {
+        ("person-A", "period_owner", "approval://owner-A"),
+        ("person-B", "independent_controller", "approval://controller-B"),
+    }
+    return (
+        (approver_id, role, evidence_ref) in expected
+        and context["service_id"] == "synergy-period-governance"
+        and context["period"] == 7
+        and context["request_id"] in {"reopen-001", "reopen-002"}
+        and context["scope"] == sorted(REGISTERS)
+        and len(context["request_digest"]) == 64
+    )
+
+
 def _rejects(call, message):
     try:
         call()
@@ -81,8 +98,14 @@ def main():
         trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
         close_ref, close_digest = _checkpoint(signer, anchor, 1, 0)
         verify = lambda ref, digest: _verify_bool(ref, digest, trust, anchor)
-        governance = PeriodGovernance(root / "period-governance.sqlite3", verify, "synergy-period-governance")
-        wrong_service = PeriodGovernance(root / "wrong-service.sqlite3", verify, "another-ledger")
+        governance = PeriodGovernance(
+            root / "period-governance.sqlite3", verify, "synergy-period-governance",
+            _authorization_verifier,
+        )
+        wrong_service = PeriodGovernance(
+            root / "wrong-service.sqlite3", verify, "another-ledger",
+            _authorization_verifier,
+        )
         _rejects(lambda: wrong_service.close_period(
             7, 0, close_ref, close_digest, "controller-A"
         ), "checkpoint from another service identity was accepted")
@@ -118,6 +141,12 @@ def main():
             "reopen-001", 7, "correct material cohort classification",
             "authority://reopen-001", scope, close_ref, close_digest,
         )
+        _rejects(lambda: governance.approve_reopen(
+            "reopen-001", "person-A", "period_owner", "approval://forged-owner-proof"
+        ), "approval accepted without an independently verified role assertion")
+        _rejects(lambda: governance.approve_reopen(
+            "reopen-001", "unauthorized-person", "period_owner", "approval://owner-A"
+        ), "unauthorized identity was allowed to claim period_owner")
         assert governance.approve_reopen(
             "reopen-001", "person-A", "period_owner", "approval://owner-A"
         )
