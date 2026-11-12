@@ -2008,3 +2008,25 @@ The cross-register fixture now separates scenario correlation from each register
 The Prototype test wrapper now executes both the P2 atomic projection audit and the unified cross-register fixture. The dedicated A2.4 workflow compiles both prototype and audit source trees before running its controls. The three workflows have branch/workflow concurrency limits so stale revisions are canceled in favour of the newest pending run.
 
 Latest reviewed code commit before this status update: 031e05b96ebd3392a1d88349eeea56036f698b91; subsequent workflow compile update: 7f4c57d60f99be938420f971787dc01e07f09554. At the latter HEAD, A2.4 run 43192091654, Prototype run 43192102537 and SCCE Stage-C2 run 43192102507 are QUEUED; their jobs have not started. No PASS is claimed. PR #4 remains Draft/Open/unmerged; main remains unchanged.
+
+
+### P2 crash/restart, backup recovery and production coordinator gates — 12 November 2026
+
+A targeted source audit found and fixed a recovery-verifier defect: the coverage query compared `c.group_id` with the immutable event's group ID but had not selected `c.group_id`, causing a fail-closed missing-key path. The query now selects the stored coverage group identity explicitly.
+
+Added `audit_p2_crash_recovery.py`, a subprocess-based crash harness that terminates the process after each selected SQLite write boundary, including the final COMMIT. It checks rollback/no partial group before COMMIT, full recovery after COMMIT, idempotent retry, SQLite online backup integrity, independent projection replay, and restore from a verified backup after an invalid primary image. The A2.4 workflow invokes this audit. This is source/CI wiring only until the workflow actually executes; it is not a local PASS.
+
+Expanded SCCE Stage-C2 workflow path filters so integrated prototype and A2.4 audit changes also schedule the Stage-C2 validation direction. The intended exact-HEAD gate is now all three workflows: A2.4 audit controls, Prototype validation, and SCCE Stage-C2 validation.
+
+Added `A2_4_7_CROSS_REGISTER_COORDINATOR_AND_RECOVERY_PROTOCOL.md` specifying the durable participant prepare/commit contract, coordinator decision state machine, commit-barrier visibility, idempotent recovery, six register roles, closed-period correction/reopen governance, external asymmetric signed checkpoints, backup/restore drills and distributed crash matrix. This is a production acceptance contract, not an implementation claim. No real six-register participant adapters, durable distributed coordinator, signing service, or governed period-generation rebuild have been completed in this change.
+
+Outstanding gates remain explicit:
+- exact-HEAD execution and full logs for all three workflows;
+- real process-kill test execution and subsequent repair of any failures;
+- host/power-loss and storage durability tests beyond process termination;
+- six real participant adapters and durable cross-register coordinator;
+- external signature/key custody and independent checkpoint verification;
+- formal closed-period correction/reopen implementation and dual-approval rebuild;
+- operational disaster-recovery restore with approved RPO/RTO.
+
+PR #4 remains Draft/Open/unmerged; main is unchanged. No production readiness or distributed exactly-once claim is made.
