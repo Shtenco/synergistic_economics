@@ -2082,3 +2082,14 @@ Added `audit_cross_register_disaster_recovery.py`: seven independent protocol da
 **Evidence status:** implementation and CI wiring committed; exact-HEAD execution and log inspection are still pending. No PASS is claimed.
 
 **Production boundary:** all six SQLite participant stores remain protocol conformance stores rather than adapters to authoritative domain registers. The DR test uses a local anchor, not a remote WORM/object-lock trust domain; no production RPO/RTO is established. Real domain rebuild receipts, physical/financial reconciliation, external KMS/HSM custody and remote anti-rollback storage remain OPEN.
+
+
+### Final hardening of protocol, generation and checkpoint identity — 12 November 2026
+
+The coordinator now validates each durable participant commit receipt against the exact participant role, transaction ID, native event ID, payload digest, prepare token and expected next revision before persisting the acknowledgement. Coordinator envelopes, operation payload dimensions, participant inbox payloads, participant events and transition histories are immutable. The crash matrix includes 27 subprocess termination points and verifies the irreversible commit decision and read barrier.
+
+Period governance now requires the verified manifest from an external checkpoint verifier and binds it to an explicit service identity. The manifest's period, projection generation and closed-state must match the close, reopen or publication operation. The checkpoint anchor keeps immutable sequence history so a previously active period-generation checkpoint can be verified after later checkpoints are issued, while disaster recovery defaults to requiring the latest anchor. Approval, rebuild receipt, publication and checkpoint retries are idempotent for identical immutable content.
+
+**Correction/rebuild boundary:** the period-governance module records correction metadata and six rebuild attestations; it does not itself append corrections into the six authoritative domain ledgers or execute their rebuild functions. That remains the responsibility of the production participant adapters.
+
+**Security/deployment boundary:** the pluggable `CheckpointAnchor` contract exists, but only the local SQLite conformance anchor is implemented. Remote WORM/object-lock storage, externally administered trust roots and revocation, KMS/HSM key custody/rotation, and actual authoritative-domain disaster recovery remain OPEN. New audits are wired to both A2.4 and Prototype CI; exact-head execution is pending and no PASS is claimed.
