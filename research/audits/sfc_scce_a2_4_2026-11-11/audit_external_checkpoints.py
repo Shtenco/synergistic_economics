@@ -59,6 +59,7 @@ def main():
         ref1, digest1 = publish_checkpoint(manifest1, signer, anchor)
         assert verify_checkpoint(ref1, digest1, trust, anchor) == manifest1
         assert verify_backup_bytes(manifest1, backup1)
+        assert publish_checkpoint(manifest1, signer, anchor) == (ref1, digest1)
         _rejects(lambda: verify_backup_bytes(manifest1, b"tampered-backup"),
                  "backup bytes with wrong digest were accepted")
 
@@ -76,6 +77,13 @@ def main():
         assert verify_checkpoint(ref2, digest2, trust, anchor) == manifest2
         _rejects(lambda: verify_checkpoint(ref1, digest1, trust, anchor),
                  "older checkpoint was accepted after a newer external anchor")
+        _rejects(lambda: anchor.advance_latest(manifest1["service_id"], 12, ref1, digest1),
+                 "external latest sequence accepted a rollback")
+        with sqlite3.connect(root / "independent-anchor.sqlite3") as con:
+            _rejects(lambda: con.execute(
+                "UPDATE checkpoint_history SET object_digest=? WHERE service_id=? AND checkpoint_sequence=?",
+                ("0" * 64, manifest1["service_id"], 12),
+            ), "immutable checkpoint sequence history was mutable")
         assert verify_checkpoint(ref1, digest1, trust, anchor, require_latest=False) == manifest1
 
         revoked = TrustedKeyRegistry({signer.key_id: signer.public_bytes()}, revoked={signer.key_id})
