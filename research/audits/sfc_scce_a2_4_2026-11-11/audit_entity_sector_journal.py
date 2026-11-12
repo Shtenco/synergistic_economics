@@ -315,7 +315,7 @@ class EntityJournal:
                 raise IdentityError("bank loan origination must match loan and deposit amounts")
             bank_id = loan_asset.entity_id
             borrower_id = loan_asset.issuer_entity_id
-            if (registry.sector_of(bank_id, event.effective_period) != "CB"
+            if (self.registry.sector_of(bank_id, event.effective_period) != "CB"
                     or loan_liability.entity_id != borrower_id
                     or loan_liability.counterparty_entity_id != bank_id
                     or deposit_asset.entity_id != borrower_id
@@ -330,7 +330,7 @@ class EntityJournal:
             loan_liability = by_account["loan_liability"][0]
             if (loan_asset.side != "D" or loan_liability.side != "C"
                     or loan_asset.amount != loan_liability.amount
-                    or registry.sector_of(loan_asset.entity_id, event.effective_period) == "CB"
+                    or self.registry.sector_of(loan_asset.entity_id, event.effective_period) == "CB"
                     or loan_asset.issuer_entity_id != loan_liability.entity_id
                     or loan_liability.counterparty_entity_id != loan_asset.entity_id):
                 raise IdentityError("non-bank loan origination must create one mirrored loan and no deposit")

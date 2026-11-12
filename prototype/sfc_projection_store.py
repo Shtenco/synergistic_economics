@@ -949,7 +949,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 if row is None or [D(row[k]) for k in ("opening_balance","transaction_delta","revaluation_delta","other_volume_delta","closing_balance")] != [vals[0],*vals[1:],vals[0]+sum(vals[1:],D(0))]:
                     return False
             for (cid,ent,sec,cur,basis,period),vals in control_expected.items():
-                row=con.execute("""SELECT opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance
+                row=con.execute("""SELECT sector,opening_balance,transaction_delta,revaluation_delta,other_volume_delta,closing_balance
                     FROM sfc_control_positions WHERE control_id=? AND entity_id=? AND currency=? AND valuation_basis=? AND period=?""",
                     (cid,ent,cur,basis,period)).fetchone()
                 if row is None or row["sector"] != sec or [D(row[k]) for k in ("opening_balance","transaction_delta","revaluation_delta","other_volume_delta","closing_balance")] != [vals[0],*vals[1:],vals[0]+sum(vals[1:],D(0))]:

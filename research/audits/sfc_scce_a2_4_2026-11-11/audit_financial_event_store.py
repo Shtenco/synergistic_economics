@@ -30,7 +30,7 @@ def _event(event_id, event_type, postings):
         "event_id": event_id,
         "event_type": event_type,
         "effective_period": 2021,
-        "postings": postings,
+        "postings": list(postings),
     }
 
 
