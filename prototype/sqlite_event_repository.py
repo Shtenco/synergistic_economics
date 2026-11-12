@@ -317,6 +317,16 @@ class SQLiteEventRepository:
         finally:
             con.close()
 
+    def command_expected_version(self, idempotency_key):
+        """Return the original expected aggregate version for a durable retry."""
+        _text(idempotency_key, "idempotency_key")
+        with closing(self._connect()) as con:
+            row = con.execute(
+                "SELECT aggregate_version FROM commands WHERE idempotency_key=?",
+                (idempotency_key,),
+            ).fetchone()
+        return None if row is None else row["aggregate_version"] - 1
+
     def lookup_receipt(self, idempotency_key):
         with closing(self._connect()) as con:
             row = con.execute("SELECT * FROM commands WHERE idempotency_key=?",

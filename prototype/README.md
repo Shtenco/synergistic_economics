@@ -221,6 +221,20 @@ Run the focused durable repository tests:
 python -m unittest discover -s prototype -p 'test_sqlite_event_repository.py' -v
 ```
 
+### P6.3c — Durable native LotInventory adapter
+
+- [sqlite_lot_inventory_adapter.py](sqlite_lot_inventory_adapter.py) executes the actual P6.1 `LotInventory` domain transitions against the P6.3b SQLite repository. It does not duplicate or weaken owner/authorized-actor checks, lot/reservation version checks, expiry, consume, release, quarantine or stock-reservation invariants.
+- The adapter uses one `inventory-book` aggregate root. A consume command that changes the source lot, creates a moved lot and changes a reservation therefore commits all three state changes, the canonical event, command receipt and outbox row atomically.
+- This is a deliberate single-root serialization boundary, not P6.3a multi-aggregate v2. It is single-host SQLite; cross-host consensus and independent broker exactly-once delivery are not claimed.
+- The adapter persists canonical lot/reservation projections and rehydrates the P6.1 domain object on every command. A durable retry retrieves the original expected aggregate version, so a retry after later commands returns its original receipt rather than being misclassified as stale.
+- [test_sqlite_lot_inventory_adapter.py](test_sqlite_lot_inventory_adapter.py) exercises register → reserve → commit → consume → release → quarantine, restart recovery, delayed idempotent retry, unauthorized custodian rejection and rollback/retry after projection-write failure.
+
+Run the focused native adapter tests:
+
+```bash
+python -m unittest discover -s prototype -p 'test_sqlite_lot_inventory_adapter.py' -v
+```
+
 ### P6.3a — Inventory lifecycle event and multi-aggregate command contract
 
 - [P6.3a contract](../research/PROTOTYPE_6_3A_INVENTORY_LIFECYCLE_EVENT_AND_COMMAND_CONTRACT_V0_1.md) defines typed lot/reservation aggregate identities, complete expected-version vectors, command-scoped idempotency, globally contiguous command event ordinals, immutable receipts, and exact event groups for register/reserve/commit/expiry/release/consume/quarantine.
