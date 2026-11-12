@@ -136,7 +136,8 @@ def main():
             json.dumps(receipt_inventory, sort_keys=True, separators=(",", ":")).encode("utf-8")
         )
         manifest = {
-            "service_id": "synergy-six-register-protocol",
+            "manifest_schema_version": 1,
+        "service_id": "synergy-six-register-protocol",
             "database_schema_version": 1,
             "mapper_version": "cross-register-coordinator-protocol@1",
             "projection_generation": 0,
