@@ -104,7 +104,7 @@ def _negative_controls():
         )
         try:
             coordinator.execute("coordinator-negative-002")
-        except Exception:
+        except CoordinatorError:
             pass
         else:
             raise AssertionError("stale participant revision was accepted")
