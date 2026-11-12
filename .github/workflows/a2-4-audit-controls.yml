@@ -71,6 +71,8 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_registry.py
       - name: A2.4.4 P2 atomic projection, coverage, cursor and replay recovery
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_store.py
+      - name: A2.4.4 P2 subprocess crash, restart and backup recovery
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_p2_crash_recovery.py
       - name: A2.4.5 labour, time and consent fixture
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
       - name: A2.4.7 unified synthetic cross-register integration
