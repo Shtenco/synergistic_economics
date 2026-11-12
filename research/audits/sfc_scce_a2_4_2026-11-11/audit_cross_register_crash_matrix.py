@@ -333,12 +333,7 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] == "--crash-recovery-setup":
         os.environ["SYNERGY_COORDINATOR_CRASH_AT"] = "after_commit_decision"
         coordinator, _ = _paths(Path(sys.argv[2]))
-        txid = ("coordinator-execute-recover-race-001"
-                if (Path(sys.argv[2]) / "coordinator.sqlite3").exists()
-                and "coordinator-execute-recover-race-001" in
-                str((Path(sys.argv[2]) / "coordinator.sqlite3"))
-                else "coordinator-concurrent-recovery-001")
-        # Resolve the transaction from the durable database, not from the
+        # Resolve the transaction from the durable database, not from a
         # process command's caller-supplied identity.
         with sqlite3.connect(Path(sys.argv[2]) / "coordinator.sqlite3") as con:
             rows = con.execute("SELECT transaction_id FROM coordinator_transactions").fetchall()
