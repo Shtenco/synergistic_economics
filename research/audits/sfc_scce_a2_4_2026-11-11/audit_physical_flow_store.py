@@ -49,6 +49,7 @@ def main():
         with closing(sqlite3.connect(db)) as con:
             con.execute("DROP TRIGGER physical_flows_no_update")
             con.execute("UPDATE physical_flows SET payload_json='{}' WHERE flow_id='PF-001'")
+            con.commit()
         assert restarted.verify() is False
     print("A2.4 durable physical flow register: PASS")
     print("paired endpoints, append-only hash chain, restart retry and node consolidation verified")

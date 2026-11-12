@@ -59,6 +59,7 @@ def main():
         with closing(sqlite3.connect(db)) as con:
             con.execute("DROP TRIGGER product_events_no_update")
             con.execute("UPDATE product_events SET payload_json='{}' WHERE event_id='BAL-P1'")
+            con.commit()
         assert restarted.verify() is False
     print("A2.4 typed durable product register: PASS")
     print("catalog identity, native-unit balance, closing-to-opening carry-forward and price denominator verified")
