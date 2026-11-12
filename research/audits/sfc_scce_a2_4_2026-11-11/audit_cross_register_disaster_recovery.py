@@ -122,6 +122,19 @@ def main():
 
         signer = Ed25519Signer.generate("synergy-dr-recovery-key")
         trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
+        with closing(sqlite3.connect(coordinator.database_path)) as con:
+            envelope_json = con.execute(
+                "SELECT envelope_json FROM coordinator_transactions WHERE transaction_id=?",
+                ("cross-register-dr-001",),
+            ).fetchone()[0]
+        event_root = sha256_bytes(envelope_json.encode("utf-8"))
+        receipt_inventory = sorted(
+            (name, participants[name].status("cross-register-dr-001")["receipt_json"])
+            for name in PARTICIPANTS
+        )
+        projection_hash = sha256_bytes(
+            json.dumps(receipt_inventory, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        )
         manifest = {
             "service_id": "synergy-six-register-protocol",
             "database_schema_version": 1,
@@ -129,10 +142,10 @@ def main():
             "projection_generation": 0,
             "commit_sequence": 1,
             "event_count": 6,
-            "event_log_root": hashlib.sha256(b"cross-register-dr-envelope-root").hexdigest(),
+            "event_log_root": event_root,
             "instrument_opening_hash": hashlib.sha256(b"protocol-fixture-instrument-openings").hexdigest(),
             "control_opening_hash": hashlib.sha256(b"protocol-fixture-control-openings").hexdigest(),
-            "projection_state_hash": hashlib.sha256(b"cross-register-dr-state").hexdigest(),
+            "projection_state_hash": projection_hash,
             "coverage_count": 6,
             "applied_through_cursor": 1,
             "period": 0,
@@ -171,6 +184,8 @@ def main():
 
         # Re-open every independent participant and coordinator after restore.
         restored_coordinator, restored_participants = _open(live)
+        assert verify_checkpoint(checkpoint_ref, checkpoint_digest, trust, anchor) == manifest
+        assert verify_backup_bytes(manifest, bundle)
         assert restored_coordinator.recover("cross-register-dr-001") == "COMMITTED"
         assert restored_coordinator.is_visible("cross-register-dr-001")
         for name, participant in restored_participants.items():
