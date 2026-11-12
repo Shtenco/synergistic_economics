@@ -8,10 +8,12 @@ on:
   push:
     paths:
       - "prototype/**"
+      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - ".github/workflows/prototype-validation.yml"
   pull_request:
     paths:
       - "prototype/**"
+      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - ".github/workflows/prototype-validation.yml"
 
 jobs:
