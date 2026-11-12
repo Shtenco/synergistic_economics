@@ -799,7 +799,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                         or checkpoint["current_period"] != last_event.get("effective_period")
                         or checkpoint["state_sha256"] != last_checkpoint["state_sha256"]):
                     return False
-            coverage_rows = con.execute("""SELECT c.event_id,c.commit_sequence,c.event_index,c.mapping_version,
+            coverage_rows = con.execute("""SELECT c.event_id,c.group_id,c.commit_sequence,c.event_index,c.mapping_version,
                 c.disposition,c.delta_count,e.group_id AS stored_group_id,
                 e.event_index AS stored_event_index,g.commit_sequence AS stored_sequence,e.payload_json
                 FROM sfc_event_coverage c JOIN events e ON e.event_id=c.event_id
