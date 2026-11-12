@@ -192,7 +192,16 @@ class PhysicalFlowStore:
         nodes=set(node_ids)
         if not nodes: raise PhysicalFlowError("consolidation requires at least one node")
         for node in nodes: _text(node,"node_id")
-        return sum((self.node_net(n,product_id,grade_id,period,unit) for n in nodes), D("0"))
+        rows = self._rows()
+        total = D("0")
+        for row in rows:
+            payload = json.loads(row["payload_json"])
+            out, inc = payload["outflow"], payload["inflow"]
+            if (out["product_id"],out["grade_id"],out["period"],out["unit"]) != (product_id,grade_id,period,unit):
+                continue
+            if out["node_id"] in nodes: total -= D(out["quantity"])
+            if inc["node_id"] in nodes: total += D(inc["quantity"])
+        return total
 
     def verify(self):
         try:
