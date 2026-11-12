@@ -49,6 +49,7 @@ def main():
         with closing(sqlite3.connect(db)) as con:
             con.execute("DROP TRIGGER capital_cohort_periods_no_update")
             con.execute("UPDATE capital_cohort_periods SET closing_state_json='{}' WHERE period=2026")
+            con.commit()
         assert restarted.verify() is False
     print("A2.4 durable B8.1 capital cohort register: PASS")
     print("opening seal, immutable period batches, stock-flow replay and same-period idempotency verified")
