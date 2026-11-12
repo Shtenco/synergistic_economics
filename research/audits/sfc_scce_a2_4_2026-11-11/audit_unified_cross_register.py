@@ -66,6 +66,8 @@ def main():
     result = model.step(1)
     assert model.validate() is True
     assert result.period == 1 and model.periods[-1].period == 1
+    model._record("cross_register_scenario_link",
+                  {"scenario_id":scenario_id,"period":1},scenario_id)
     assert cohort_result.opening_physical_units == cohort_result.closing_physical_units
 
     # 2) Physical flow endpoint register and native-unit product valuation.
@@ -145,6 +147,7 @@ def main():
         "labour_event_id":labour_event["event_id"],
         "valuation_source_id":valuation.source_id,
         "financial_causation_id":group["causation_id"],
+        "scce_event_key":model.events[-1]["key"],
         "physical_period":outflow.period,
         "capital_period":cohort_result.period,
         "labour_period":labour_event["period"],
@@ -154,7 +157,7 @@ def main():
     }
     assert {manifest[k] for k in (
         "scenario_id","physical_flow_id","capital_event_id","labour_event_id",
-        "valuation_source_id","financial_causation_id")} == {scenario_id}
+        "valuation_source_id","financial_causation_id","scce_event_key")} == {scenario_id}
     assert manifest["physical_period"] == "P1"
     assert manifest["capital_period"] == manifest["labour_period"] == 1
     assert manifest["financial_event_periods"] == [1,2,3,4]
