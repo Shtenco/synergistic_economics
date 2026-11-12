@@ -162,8 +162,7 @@ def main():
 
 def _verify_bool(ref, digest, trust, anchor):
     try:
-        verify_checkpoint(ref, digest, trust, anchor)
-        return True
+        return verify_checkpoint(ref, digest, trust, anchor)
     except Exception:
         return False
 
