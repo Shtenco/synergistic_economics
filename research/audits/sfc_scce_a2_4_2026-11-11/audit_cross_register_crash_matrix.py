@@ -62,6 +62,16 @@ def _recover_child(root):
     assert coordinator.recover("coordinator-concurrent-recovery-001") == "COMMITTED"
 
 
+def _execute_recovery_race_child(root, action):
+    coordinator, _ = _paths(Path(root))
+    if action == "execute":
+        assert coordinator.execute("coordinator-execute-recover-race-001") == "COMMITTED"
+    elif action == "recover":
+        assert coordinator.recover("coordinator-execute-recover-race-001") == "COMMITTED"
+    else:
+        raise AssertionError(f"unknown race action: {action}")
+
+
 def _run_concurrency_controls():
     with tempfile.TemporaryDirectory(prefix="synergy-coord-concurrent-execute-") as directory:
         root = Path(directory)
@@ -109,6 +119,39 @@ def _run_concurrency_controls():
         assert recovered.is_visible("coordinator-concurrent-recovery-001")
         assert all(p.event_count("coordinator-concurrent-recovery-001") == 1
                    for p in participants.values())
+
+    # A process that retries execute and another that performs recovery must
+    # serialize around the same durable decision. Exercise both launch orders.
+    for iteration in range(2):
+        with tempfile.TemporaryDirectory(prefix="synergy-coord-execute-recover-race-") as directory:
+            root = Path(directory)
+            coordinator, _ = _paths(root)
+            txid = "coordinator-execute-recover-race-001"
+            coordinator.submit(txid, "scenario-execute-recover-race",
+                               "execute-vs-recover", _operations())
+            env = os.environ.copy()
+            env["SYNERGY_COORDINATOR_CRASH_AT"] = "after_commit_decision"
+            crashed = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve()),
+                 "--crash-recovery-setup", str(root)],
+                cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+            )
+            assert crashed.returncode == CRASH_EXIT, crashed.stderr[-1500:]
+            actions = ["execute", "recover"] if iteration == 0 else ["recover", "execute"]
+            workers = [
+                subprocess.Popen(
+                    [sys.executable, str(Path(__file__).resolve()),
+                     "--execute-recover-race", str(root), action],
+                    cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                ) for action in actions
+            ]
+            results = [worker.communicate(timeout=45) + (worker.returncode,)
+                       for worker in workers]
+            assert all(code == 0 for _, _, code in results), results
+            recovered, participants = _paths(root)
+            assert recovered.state(txid) == "COMMITTED"
+            assert recovered.is_visible(txid)
+            assert all(p.event_count(txid) == 1 for p in participants.values())
 
 
 def _negative_controls():
@@ -277,6 +320,7 @@ def _run_parent():
     print("PASS: no partial transaction crosses the coordinator visibility barrier")
     print("PASS: repeated recovery is idempotent; no duplicate native event effects")
     print("PASS: concurrent execute/execute and recover/recover workers are serialized")
+    print("PASS: execute/recover races in both launch orders preserve one committed effect")
 
 
 if __name__ == "__main__":
@@ -289,7 +333,20 @@ if __name__ == "__main__":
     elif len(sys.argv) == 3 and sys.argv[1] == "--crash-recovery-setup":
         os.environ["SYNERGY_COORDINATOR_CRASH_AT"] = "after_commit_decision"
         coordinator, _ = _paths(Path(sys.argv[2]))
-        coordinator.execute("coordinator-concurrent-recovery-001")
+        txid = ("coordinator-execute-recover-race-001"
+                if (Path(sys.argv[2]) / "coordinator.sqlite3").exists()
+                and "coordinator-execute-recover-race-001" in
+                str((Path(sys.argv[2]) / "coordinator.sqlite3"))
+                else "coordinator-concurrent-recovery-001")
+        # Resolve the transaction from the durable database, not from the
+        # process command's caller-supplied identity.
+        with sqlite3.connect(Path(sys.argv[2]) / "coordinator.sqlite3") as con:
+            rows = con.execute("SELECT transaction_id FROM coordinator_transactions").fetchall()
+        if len(rows) != 1:
+            raise AssertionError("crash setup requires exactly one transaction")
+        coordinator.execute(rows[0][0])
         raise AssertionError("crash point was not reached")
+    elif len(sys.argv) == 4 and sys.argv[1] == "--execute-recover-race":
+        _execute_recovery_race_child(sys.argv[2], sys.argv[3])
     else:
         _run_parent()
