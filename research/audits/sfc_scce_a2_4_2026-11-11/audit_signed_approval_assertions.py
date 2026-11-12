@@ -19,7 +19,7 @@ ISSUER = "https://identity.example.test"
 AUDIENCE = "synergy-period-governance"
 KID = "approval-ed25519-2026-01"
 NOW = 1_800_000_000
-DOMAIN = b"SYNERGY_PERIOD_APPROVAL_ASSERTION_V1\\0"
+
 
 
 def _canonical(value):
@@ -28,11 +28,15 @@ def _canonical(value):
 
 
 def _sign(payload, private_key):
-    segment = encode_assertion_payload(payload)
-    signature = private_key.sign(DOMAIN + segment.encode("ascii"))
     import base64
+    kid = payload.pop("kid")
+    header = {"alg": "EdDSA", "kid": kid, "typ": "JWT"}
+    header_segment = base64.urlsafe_b64encode(_canonical(header)).decode("ascii").rstrip("=")
+    payload_segment = encode_assertion_payload(payload)
+    signing_input = header_segment + "." + payload_segment
+    signature = private_key.sign(signing_input.encode("ascii"))
     encoded = base64.urlsafe_b64encode(signature).decode("ascii").rstrip("=")
-    return segment + "." + encoded
+    return signing_input + "." + encoded
 
 
 def _payload(context, *, sub="controller-A", role="period_owner",
