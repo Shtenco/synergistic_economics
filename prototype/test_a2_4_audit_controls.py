@@ -116,6 +116,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_period_governance(self):
         self._run_script("audit_period_governance.py")
 
+    def test_audit_external_checkpoints(self):
+        self._run_script("audit_external_checkpoints.py")
+
 
 if __name__ == "__main__":
     unittest.main()
