@@ -1,7 +1,6 @@
 """Subprocess crash/restart and SQLite backup-recovery audit for P2."""
 from contextlib import closing
 from pathlib import Path
-from decimal import Decimal
 import os
 import shutil
 import sqlite3
@@ -144,20 +143,33 @@ def _run_parent():
         backup = FinancialEventStore(backup_path)
         assert verify_projection_replay(backup), "backup failed independent projection replay"
 
-        # Replace the primary with an unmistakably invalid database image.
-        corrupt_path = root / "corrupt-primary.sqlite3"
-        corrupt_path.write_bytes(b"not-a-sqlite-database")
+        # The recovery drill must corrupt the actual committed primary,
+        # quarantine it, then restore into a separate clean location.
+        with closing(source._connect()) as src:
+            assert src.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0] == 0
+        corrupt_bytes = b"not-a-sqlite-database"
+        source_path.write_bytes(corrupt_bytes)
         try:
-            FinancialEventStore(corrupt_path)
+            FinancialEventStore(source_path)
         except sqlite3.DatabaseError:
             pass
         else:
-            raise AssertionError("corrupt database image was accepted")
+            raise AssertionError("corrupt primary database image was accepted")
+        quarantine_path = root / "quarantined-corrupt-primary.sqlite3"
+        shutil.move(source_path, quarantine_path)
+        assert quarantine_path.read_bytes() == corrupt_bytes
         restored_path = root / "restored-from-backup.sqlite3"
         shutil.copy2(backup_path, restored_path)
         restored = FinancialEventStore(restored_path)
+        with closing(restored._connect()) as con:
+            assert con.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+            assert con.execute("PRAGMA foreign_key_check").fetchall() == []
         assert verify_projection_replay(restored), "restored backup failed independent replay"
         assert restored.counts()["events"] == len(events)
+        assert append_projected_group(
+            EntityJournal(registry), restored, "backup-group", events,
+            causation_id="backup-audit",
+        ) is False, "restored backup duplicated committed events"
 
     print("P2 subprocess crash/restart: PASS at every selected durable write boundary")
     print("pre-COMMIT crashes leave no partial group; post-COMMIT crash recovers committed group")
