@@ -256,6 +256,8 @@ class LocalImmutableAnchor:
                     return False
                 if sequence < current:
                     raise CheckpointError("checkpoint sequence rollback is forbidden")
+                if old and sequence != current + 1:
+                    raise CheckpointError("checkpoint sequence gap requires explicit reconciliation")
                 con.execute("INSERT INTO checkpoint_history VALUES(?,?,?,?)",
                             (service_id, sequence, object_key, object_digest))
                 if old:
