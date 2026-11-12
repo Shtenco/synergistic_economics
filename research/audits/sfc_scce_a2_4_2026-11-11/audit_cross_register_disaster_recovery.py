@@ -85,6 +85,60 @@ def _verify_database(path):
         assert con.execute("PRAGMA foreign_key_check").fetchall() == [], path
 
 
+def _event_inventory(participants, txid):
+    inventory = []
+    for name in PARTICIPANTS:
+        participant = participants[name]
+        event = participant.committed_event(txid)
+        status = participant.status(txid)
+        assert event is not None and status is not None
+        receipt = json.loads(status["receipt_json"])
+        payload_hash = hashlib.sha256(event["payload_json"].encode("utf-8")).hexdigest()
+        assert payload_hash == event["payload_digest"]
+        assert receipt["participant"] == name
+        assert receipt["transaction_id"] == txid
+        assert receipt["native_event_id"] == event["native_event_id"]
+        assert receipt["payload_digest"] == event["payload_digest"]
+        assert receipt["revision"] == event["revision"]
+        inventory.append({
+            "participant": name,
+            "native_event_id": event["native_event_id"],
+            "stream_id": event["stream_id"],
+            "revision": event["revision"],
+            "payload_digest": event["payload_digest"],
+            "payload_sha256": payload_hash,
+            "receipt": receipt,
+        })
+    inventory.sort(key=lambda item: item["participant"])
+    assert [item["participant"] for item in inventory] == sorted(PARTICIPANTS)
+    assert len({item["native_event_id"] for item in inventory}) == len(PARTICIPANTS)
+    return inventory
+
+
+def _event_root(inventory):
+    canonical = json.dumps(
+        inventory, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(
+        b"SYNERGY_CROSS_REGISTER_NATIVE_EVENT_ROOT_V1\\0" + canonical
+    ).hexdigest()
+
+
+def _assert_event_root_negative_controls(inventory, expected):
+    assert _event_root(inventory) == expected
+    assert _event_root(list(reversed(inventory))) != expected
+    assert _event_root(inventory[:-1]) != expected
+    assert _event_root(inventory + [inventory[0]]) != expected
+    changed_payload = [dict(item) for item in inventory]
+    changed_payload[0]["payload_digest"] = "0" * 64
+    assert _event_root(changed_payload) != expected
+    changed_receipt = [dict(item) for item in inventory]
+    changed_receipt[0]["receipt"] = dict(inventory[0]["receipt"])
+    changed_receipt[0]["receipt"]["revision"] += 1
+    assert _event_root(changed_receipt) != expected
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="synergy-cross-register-dr-") as directory:
         root = Path(directory)
@@ -122,18 +176,11 @@ def main():
 
         signer = Ed25519Signer.generate("synergy-dr-recovery-key")
         trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
-        with closing(sqlite3.connect(coordinator.database_path)) as con:
-            envelope_json = con.execute(
-                "SELECT envelope_json FROM coordinator_transactions WHERE transaction_id=?",
-                ("cross-register-dr-001",),
-            ).fetchone()[0]
-        event_root = sha256_bytes(envelope_json.encode("utf-8"))
-        receipt_inventory = sorted(
-            (name, participants[name].status("cross-register-dr-001")["receipt_json"])
-            for name in PARTICIPANTS
-        )
+        event_inventory_before = _event_inventory(participants, "cross-register-dr-001")
+        event_root = _event_root(event_inventory_before)
+        _assert_event_root_negative_controls(event_inventory_before, event_root)
         projection_hash = sha256_bytes(
-            json.dumps(receipt_inventory, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(event_inventory_before, sort_keys=True, separators=(",", ":")).encode("utf-8")
         )
         manifest = {
             "manifest_schema_version": 1,
@@ -189,6 +236,14 @@ def main():
         assert verify_backup_bytes(manifest, bundle)
         assert restored_coordinator.recover("cross-register-dr-001") == "COMMITTED"
         assert restored_coordinator.is_visible("cross-register-dr-001")
+        event_inventory_after = _event_inventory(restored_participants, "cross-register-dr-001")
+        event_root_after = _event_root(event_inventory_after)
+        assert event_root_after == event_root, (
+            "native cross-register event root changed across disaster recovery"
+        )
+        assert event_inventory_after == event_inventory_before, (
+            "participant event/receipt inventory changed across restore"
+        )
         for name, participant in restored_participants.items():
             assert participant.event_count("cross-register-dr-001") == 1
             with closing(sqlite3.connect(participant.database_path)) as con:
@@ -207,6 +262,9 @@ def main():
         print("PASS: Ed25519 checkpoint anchored the combined backup package digest")
         print("PASS: all corrupted primaries quarantined and restored from verified backups")
         print("PASS: all six participant receipts and native payloads survived restore")
+        print("PASS: canonical native-event root independently recomputed before/after restore")
+        print("PASS: event-root omission, duplicate, reorder, payload and receipt tampering rejected")
+        print("PASS: participant event/receipt inventory is identical across restore")
         print("PASS: commit barrier and repeated recovery preserve exactly one effect per register")
         print(f"RESTORE_DURATION_SECONDS={restore_seconds:.6f}")
         print("LIMIT: protocol-store DR conformance only; authoritative domain DBs and remote WORM remain external gates")
