@@ -623,10 +623,17 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 return False
             if runtime["state_sha256"] != _state_hash(con,current):
                 return False
-            for row in con.execute("SELECT period,financial_net_lending FROM sfc_sector_flows").fetchall():
-                total=con.execute("SELECT COALESCE(SUM(CAST(financial_net_lending AS NUMERIC)),0) FROM sfc_sector_flows WHERE period=?",(row["period"],)).fetchone()[0]
-                if D(str(total)) != 0:
+            for period_row in con.execute("SELECT DISTINCT period FROM sfc_sector_flows").fetchall():
+                flow_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?",
+                                        (period_row["period"],)).fetchall()
+                if sum((D(row["financial_net_lending"]) for row in flow_rows), D("0")) != 0:
                     return False
+            expected_instrument_count = len(instrument_expected)
+            actual_instrument_count = con.execute("SELECT COUNT(*) FROM sfc_projection_positions").fetchone()[0]
+            expected_control_count = len(control_expected)
+            actual_control_count = con.execute("SELECT COUNT(*) FROM sfc_control_positions").fetchone()[0]
+            if actual_instrument_count != expected_instrument_count or actual_control_count != expected_control_count:
+                return False
             return True
     except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError, SFCProjectionStoreError):
         return False
