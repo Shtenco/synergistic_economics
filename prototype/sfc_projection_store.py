@@ -288,8 +288,8 @@ def _verify_event_payload_semantics(event_payload):
     if not isinstance(postings,list) or not postings:
         raise SFCProjectionStoreError("stored event postings are missing")
     actual = {}
-    debit = D("0")
-    credit = D("0")
+    debit_terms = []
+    credit_terms = []
     amounts = set()
     for line in postings:
         account, side = line.get("account"), line.get("side")
@@ -297,9 +297,13 @@ def _verify_event_payload_semantics(event_payload):
         if not amount.is_finite() or amount <= 0 or side not in ("D","C"):
             raise SFCProjectionStoreError("stored event contains an invalid amount or side")
         amounts.add(amount)
-        debit += amount if side=="D" else D("0")
-        credit += amount if side=="C" else D("0")
+        if side == "D":
+            debit_terms.append(amount)
+        else:
+            credit_terms.append(amount)
         actual.setdefault(account,[]).append(side)
+    debit = _sum_exact(debit_terms)
+    credit = _sum_exact(credit_terms)
     expected = EXPECTED_ACCOUNTS[event_type]
     if set(actual) != set(expected) or debit != credit or len(amounts) != 1:
         raise SFCProjectionStoreError("stored event balance/account composition mismatch")
@@ -564,7 +568,7 @@ def _assert_control_invariants(con, period):
     if _sum_exact((loan,memo)) < 0:
         raise SFCProjectionStoreError("contractual principal cannot be negative")
     sector_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?", (period,)).fetchall()
-    if sum((D(row[0]) for row in sector_rows), D("0")) != 0:
+    if _sum_exact(D(row[0]) for row in sector_rows) != 0:
         raise SFCProjectionStoreError("transaction-only sector financial net lending must sum to zero")
 
 
@@ -821,13 +825,13 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                     if key not in instrument_expected or instrument_expected[key][0] != D(row["opening_balance"]):
                         return False
                     col={"T":1,"V":2,"O":3}[row["component"]]
-                    instrument_expected[key][col] += D(row["amount"])
+                    instrument_expected[key][col] = _sum_exact((instrument_expected[key][col],D(row["amount"])))
                 for row in ctrl_by_event.get(ev["event_id"],[]):
                     key=(row["control_id"],row["entity_id"],row["sector"],row["currency"],row["valuation_basis"],target)
                     if key not in control_expected or control_expected[key][0] != D(row["opening_balance"]):
                         return False
                     col={"T":1,"V":2,"O":3}[row["component"]]
-                    control_expected[key][col] += D(row["amount"])
+                    control_expected[key][col] = _sum_exact((control_expected[key][col],D(row["amount"])))
                 # Event checkpoint hash is recomputed from rebuilt state at this period.
                 inst_payload=[]
                 for (ident,p),vals in sorted(instrument_expected.items(),key=lambda x:(x[0][1],x[0][0])):
@@ -837,7 +841,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                             ident
                         )) | {"opening_balance":_canon(vals[0]),"transaction_delta":_canon(vals[1]),
                               "revaluation_delta":_canon(vals[2]),"other_volume_delta":_canon(vals[3]),
-                              "closing_balance":_canon(vals[0]+sum(vals[1:],D(0)))})
+                              "closing_balance":_canon(_sum_exact((vals[0],*vals[1:])))})
                 ctrl_payload=[]
                 for (cid,ent,sec,cur,basis,p),vals in sorted(control_expected.items()):
                     if p==target:
@@ -893,7 +897,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
             if actual_flows != normalized_expected:
                 return False
             for period in {key[0] for key in actual_flows}:
-                if sum((values[2] for key, values in actual_flows.items() if key[0] == period), D("0")) != 0:
+                if _sum_exact(values[2] for key, values in actual_flows.items() if key[0] == period) != 0:
                     return False
             expected_instrument_count = len(instrument_expected)
             actual_instrument_count = con.execute("SELECT COUNT(*) FROM sfc_projection_positions").fetchone()[0]
