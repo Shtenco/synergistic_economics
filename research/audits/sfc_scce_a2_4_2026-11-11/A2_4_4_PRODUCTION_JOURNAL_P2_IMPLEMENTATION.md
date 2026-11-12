@@ -83,10 +83,11 @@ period.
 
 `verify_projection_replay()` is read-only. It verifies the v4 group chain,
 event/posting mirrors, both opening snapshots, event semantics, per-event
-coverage, re-derives mapper deltas from immutable event envelopes, replays
-instrument and control positions from explicit openings, checks event and
-group checkpoints, rebuilds transaction-only sector flows and compares the
-materialized positions and cursor.
+coverage, re-derives mapper deltas from immutable event envelopes, invokes the pure
+SFC projection kernel for an independent instrument T/V/O roll-forward,
+replays separate control positions from explicit openings, checks event and
+group checkpoints, rebuilds transaction-only sector flows with exact Decimal
+arithmetic and compares the materialized positions and cursor.
 
 The dedicated controls are:
 
