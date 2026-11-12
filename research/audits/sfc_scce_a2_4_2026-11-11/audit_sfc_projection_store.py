@@ -66,6 +66,9 @@ def main():
                 "SELECT control_id,closing_balance FROM sfc_control_positions WHERE period=4")}
             assert positions == {"LOAN-001":Decimal("60"),"DEP-001":Decimal("76"),"INT-001":Decimal("6")}
             assert controls == {"impairment_allowance":Decimal("5"),"writeoff_memorandum":Decimal("15")}
+            allowance_position = con.execute("""SELECT currency,valuation_basis,closing_balance
+                FROM sfc_control_positions WHERE control_id='impairment_allowance' AND period=4""").fetchone()
+            assert tuple(allowance_position) == ("LCU","NOMINAL","5")
             assert con.execute("SELECT COUNT(*) FROM sfc_event_coverage").fetchone()[0] == 7
             assert con.execute("SELECT COUNT(*) FROM sfc_projection_event_checkpoints").fetchone()[0] == 7
             assert con.execute("SELECT COUNT(*) FROM sfc_projection_group_checkpoints").fetchone()[0] == 1
