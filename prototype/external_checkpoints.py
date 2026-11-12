@@ -160,6 +160,20 @@ class LocalImmutableAnchor:
                     object_key TEXT NOT NULL,
                     object_digest TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS checkpoint_history(
+                    service_id TEXT NOT NULL,
+                    checkpoint_sequence INTEGER NOT NULL,
+                    object_key TEXT NOT NULL,
+                    object_digest TEXT NOT NULL,
+                    PRIMARY KEY(service_id,checkpoint_sequence),
+                    UNIQUE(object_key)
+                );
+                CREATE TRIGGER IF NOT EXISTS checkpoint_history_no_update
+                    BEFORE UPDATE ON checkpoint_history
+                    BEGIN SELECT RAISE(ABORT,'checkpoint anchor history is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS checkpoint_history_no_delete
+                    BEFORE DELETE ON checkpoint_history
+                    BEGIN SELECT RAISE(ABORT,'checkpoint anchor history is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS checkpoint_objects_no_update
                     BEFORE UPDATE ON checkpoint_objects
                     BEGIN SELECT RAISE(ABORT,'checkpoint objects are immutable'); END;
@@ -229,6 +243,8 @@ class LocalImmutableAnchor:
                     return False
                 if sequence < current:
                     raise CheckpointError("checkpoint sequence rollback is forbidden")
+                con.execute("INSERT INTO checkpoint_history VALUES(?,?,?,?)",
+                            (service_id, sequence, object_key, object_digest))
                 if old:
                     con.execute("""UPDATE checkpoint_latest SET checkpoint_sequence=?,
                         object_key=?,object_digest=? WHERE service_id=?""",
@@ -251,6 +267,14 @@ class LocalImmutableAnchor:
             ).fetchone()
             return dict(row) if row else None
 
+    def is_anchored(self, service_id, sequence, object_key, object_digest):
+        with closing(self._connect()) as con:
+            row = con.execute(
+                "SELECT object_key,object_digest FROM checkpoint_history WHERE service_id=? AND checkpoint_sequence=?",
+                (service_id, sequence),
+            ).fetchone()
+            return bool(row and (row["object_key"], row["object_digest"]) == (object_key, object_digest))
+
 
 def publish_checkpoint(manifest, signer: Ed25519Signer, anchor: LocalImmutableAnchor):
     manifest = validate_manifest(dict(manifest))
@@ -272,7 +296,7 @@ def publish_checkpoint(manifest, signer: Ed25519Signer, anchor: LocalImmutableAn
 
 
 def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegistry,
-                      anchor: LocalImmutableAnchor):
+                      anchor: LocalImmutableAnchor, *, require_latest=True):
     expected = _hash(expected_object_digest, "expected_object_digest")
     object_bytes = anchor.get(object_key)
     if sha256_bytes(object_bytes) != expected:
@@ -291,10 +315,16 @@ def verify_checkpoint(object_key, expected_object_digest, trust: TrustedKeyRegis
     if object_key != f"checkpoints/{manifest['service_id']}/{manifest['checkpoint_sequence']}.json":
         raise CheckpointError("checkpoint object key does not match manifest identity")
     latest = anchor.latest(manifest["service_id"])
-    if not latest or (latest["checkpoint_sequence"], latest["object_key"], latest["object_digest"]) != (
-        manifest["checkpoint_sequence"], object_key, expected
-    ):
-        raise CheckpointError("checkpoint is not the latest externally anchored sequence; rollback rejected")
+    if not latest:
+        raise CheckpointError("service has no externally anchored checkpoint sequence")
+    if require_latest:
+        if (latest["checkpoint_sequence"], latest["object_key"], latest["object_digest"]) != (
+            manifest["checkpoint_sequence"], object_key, expected
+        ):
+            raise CheckpointError("checkpoint is not the latest externally anchored sequence; rollback rejected")
+    elif (manifest["checkpoint_sequence"] > latest["checkpoint_sequence"]
+          or not anchor.is_anchored(manifest["service_id"], manifest["checkpoint_sequence"], object_key, expected)):
+        raise CheckpointError("checkpoint is not present in immutable external anchor history")
     signature_hex = envelope["signature_hex"]
     if (not isinstance(signature_hex, str) or len(signature_hex) != 128
             or any(c not in "0123456789abcdef" for c in signature_hex)):
