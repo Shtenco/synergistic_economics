@@ -8,7 +8,7 @@ consensus or a production security certification.
 from __future__ import annotations
 
 from contextlib import closing
-from decimal import Decimal
+from decimal import Decimal, localcontext
 import hashlib
 import json
 import sqlite3
@@ -48,6 +48,15 @@ def _canon(value):
     if not isinstance(value, D) or not value.is_finite():
         raise SFCProjectionStoreError("projection amount must be a finite Decimal")
     return canonical_decimal(format(value, "f"))
+
+
+def _sum_exact(values):
+    values = tuple(values)
+    if any(not isinstance(value,D) or not value.is_finite() for value in values):
+        raise SFCProjectionStoreError("exact projection sum requires finite Decimals")
+    with localcontext() as context:
+        context.prec = 4096
+        return sum(values,D("0"))
 
 
 def _control_rows(rows):
@@ -489,14 +498,14 @@ def _apply_instrument_delta(con, identity, period, component, amount):
         raise SFCProjectionStoreError("instrument delta has no explicit opening identity")
     opening = _dec(row["opening_balance"], "opening_balance")
     current_component = {"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]
-    new_component = _dec(row[current_component], current_component) + amount
-    closing = opening + _dec(row["transaction_delta"],"T") + _dec(row["revaluation_delta"],"V") + _dec(row["other_volume_delta"],"O")
+    new_component = _sum_exact((_dec(row[current_component], current_component), amount))
+    closing = _sum_exact((opening,_dec(row["transaction_delta"],"T"),_dec(row["revaluation_delta"],"V"),_dec(row["other_volume_delta"],"O")))
     if component == "T":
-        closing = opening + new_component + _dec(row["revaluation_delta"],"V") + _dec(row["other_volume_delta"],"O")
+        closing = _sum_exact((opening,new_component,_dec(row["revaluation_delta"],"V"),_dec(row["other_volume_delta"],"O")))
     elif component == "V":
-        closing = opening + _dec(row["transaction_delta"],"T") + new_component + _dec(row["other_volume_delta"],"O")
+        closing = _sum_exact((opening,_dec(row["transaction_delta"],"T"),new_component,_dec(row["other_volume_delta"],"O")))
     else:
-        closing = opening + _dec(row["transaction_delta"],"T") + _dec(row["revaluation_delta"],"V") + new_component
+        closing = _sum_exact((opening,_dec(row["transaction_delta"],"T"),_dec(row["revaluation_delta"],"V"),new_component))
     if closing < 0:
         raise SFCProjectionStoreError("GOLD-2A recognized instrument position cannot become negative")
     con.execute(f"UPDATE sfc_projection_positions SET {current_component}=?,closing_balance=? WHERE {where} AND period=?",
@@ -511,10 +520,10 @@ def _apply_control_delta(con, control_id, entity, sector, currency, basis, perio
         raise SFCProjectionStoreError("control delta has no explicit matching opening position")
     opening = _dec(row["opening_balance"],"control opening")
     col = {"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]
-    updated = _dec(row[col],col) + amount
+    updated = _sum_exact((_dec(row[col],col),amount))
     parts = {k:_dec(row[k],k) for k in ("transaction_delta","revaluation_delta","other_volume_delta")}
     parts[{"T":"transaction_delta","V":"revaluation_delta","O":"other_volume_delta"}[component]] = updated
-    closing = opening + sum(parts.values(), D("0"))
+    closing = _sum_exact((opening,*parts.values()))
     if closing < 0:
         raise SFCProjectionStoreError(f"{control_id} control position cannot become negative")
     con.execute(f"""UPDATE sfc_control_positions SET {col}=?,closing_balance=?
@@ -532,8 +541,8 @@ def _update_sector_flows(con, identity, component, amount, period):
         row = con.execute("SELECT transaction_asset_delta,transaction_liability_delta FROM sfc_sector_flows WHERE period=? AND sector=?",
                           (period,sector)).fetchone()
         old_a, old_l = (D(row[0]),D(row[1])) if row else (D("0"),D("0"))
-        new_a, new_l = old_a + asset, old_l + liability
-        nl = new_a - new_l
+        new_a, new_l = _sum_exact((old_a,asset)), _sum_exact((old_l,liability))
+        nl = _sum_exact((new_a,-new_l))
         con.execute("""INSERT INTO sfc_sector_flows VALUES(?,?,?,?,?)
             ON CONFLICT(period,sector) DO UPDATE SET transaction_asset_delta=excluded.transaction_asset_delta,
             transaction_liability_delta=excluded.transaction_liability_delta,financial_net_lending=excluded.financial_net_lending""",
@@ -552,7 +561,7 @@ def _assert_control_invariants(con, period):
         raise SFCProjectionStoreError("impairment allowance must remain between zero and recognized gross loan")
     if memo < 0:
         raise SFCProjectionStoreError("written-off legal claim memorandum cannot be negative")
-    if loan + memo < 0:
+    if _sum_exact((loan,memo)) < 0:
         raise SFCProjectionStoreError("contractual principal cannot be negative")
     sector_rows = con.execute("SELECT financial_net_lending FROM sfc_sector_flows WHERE period=?", (period,)).fetchall()
     if sum((D(row[0]) for row in sector_rows), D("0")) != 0:
@@ -802,9 +811,9 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                     return False
                 for p in range(current+1,target+1):
                     for (ident,oldp),vals in list(instrument_expected.items()):
-                        if oldp==p-1: instrument_expected[(ident,p)] = [vals[0]+sum(vals[1:],D(0)),D(0),D(0),D(0)]
+                        if oldp==p-1: instrument_expected[(ident,p)] = [_sum_exact((vals[0],*vals[1:])),D(0),D(0),D(0)]
                     for (cid,ent,sec,cur,basis,oldp),vals in list(control_expected.items()):
-                        if oldp==p-1: control_expected[(cid,ent,sec,cur,basis,p)] = [vals[0]+sum(vals[1:],D(0)),D(0),D(0),D(0)]
+                        if oldp==p-1: control_expected[(cid,ent,sec,cur,basis,p)] = [_sum_exact((vals[0],*vals[1:])),D(0),D(0),D(0)]
                 current = target
                 for row in inst_by_event.get(ev["event_id"],[]):
                     ident = tuple(row[f] for f in SFCIdentity.__dataclass_fields__)
@@ -872,7 +881,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 ):
                     key = (period, sector)
                     old_a, old_l = expected_flows.get(key, (D("0"), D("0")))
-                    expected_flows[key] = (old_a + asset, old_l + liability)
+                    expected_flows[key] = (_sum_exact((old_a,asset)), _sum_exact((old_l,liability)))
             actual_flows = {}
             for row in con.execute("SELECT * FROM sfc_sector_flows").fetchall():
                 actual_flows[(row["period"], row["sector"])] = (
@@ -880,7 +889,7 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                     D(row["transaction_liability_delta"]),
                     D(row["financial_net_lending"]),
                 )
-            normalized_expected = {key: (a, l, a-l) for key, (a,l) in expected_flows.items()}
+            normalized_expected = {key: (a, l, _sum_exact((a,-l))) for key, (a,l) in expected_flows.items()}
             if actual_flows != normalized_expected:
                 return False
             for period in {key[0] for key in actual_flows}:
