@@ -451,6 +451,17 @@ class CrossRegisterCoordinator:
         with closing(_connect(self.database_path)) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                row = con.execute("SELECT state,prepare_token FROM coordinator_operations WHERE transaction_id=? AND participant=?",
+                                  (txid, name)).fetchone()
+                if row is None:
+                    raise CoordinatorError("coordinator operation is missing")
+                if row["state"] == "PREPARED":
+                    if row["prepare_token"] != token:
+                        raise CoordinatorError("prepare receipt changed on retry")
+                    con.execute("COMMIT")
+                    return
+                if row["state"] != "PENDING":
+                    raise CoordinatorError("coordinator operation cannot accept a prepare receipt")
                 con.execute("""UPDATE coordinator_operations SET state='PREPARED',prepare_token=?
                     WHERE transaction_id=? AND participant=? AND state='PENDING'""",
                     (token, txid, name))
@@ -465,9 +476,30 @@ class CrossRegisterCoordinator:
         with closing(_connect(self.database_path)) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                row = con.execute("SELECT * FROM coordinator_operations WHERE transaction_id=? AND participant=?",
+                                  (txid, name)).fetchone()
+                if row is None:
+                    raise CoordinatorError("coordinator operation is missing")
+                expected = {
+                    "participant": name, "transaction_id": txid,
+                    "native_event_id": row["native_event_id"],
+                    "payload_digest": row["payload_digest"],
+                    "prepare_token": row["prepare_token"],
+                    "revision": row["expected_revision"] + 1,
+                }
+                if receipt != expected:
+                    raise CoordinatorError("participant commit receipt does not match prepared operation")
+                receipt_json = _canonical(receipt)
+                if row["state"] == "COMMITTED":
+                    if row["receipt_json"] != receipt_json:
+                        raise CoordinatorError("commit receipt changed on retry")
+                    con.execute("COMMIT")
+                    return
+                if row["state"] != "PREPARED":
+                    raise CoordinatorError("coordinator operation was not durably prepared")
                 con.execute("""UPDATE coordinator_operations SET state='COMMITTED',receipt_json=?
-                    WHERE transaction_id=? AND participant=?""",
-                    (_canonical(receipt), txid, name))
+                    WHERE transaction_id=? AND participant=? AND state='PREPARED'""",
+                    (receipt_json, txid, name))
                 con.execute("COMMIT")
             except Exception:
                 if con.in_transaction:
@@ -489,7 +521,7 @@ class CrossRegisterCoordinator:
         self._set_state(txid, "COMMITTING")
         operations = self._operations(txid)
         if len(operations) != len(PARTICIPANTS) or {row["participant"] for row in operations} != set(PARTICIPANTS):
-            return False
+            raise CoordinatorError("commit decision has incomplete participant operation coverage")
         for row in operations:
             name = row["participant"]
             status = self.participants[name].status(txid)
