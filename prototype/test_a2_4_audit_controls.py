@@ -110,6 +110,9 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_unified_cross_register(self):
         self._run_script("audit_unified_cross_register.py")
 
+    def test_audit_cross_register_crash_matrix(self):
+        self._run_script("audit_cross_register_crash_matrix.py")
+
 
 if __name__ == "__main__":
     unittest.main()
