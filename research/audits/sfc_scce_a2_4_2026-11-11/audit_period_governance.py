@@ -131,6 +131,18 @@ def main():
             "reopen-001", _sha("global-reconciliation"),
             generation1_ref, generation1_digest,
         )
+        assert not governance.publish_generation(
+            "reopen-001", _sha("global-reconciliation"),
+            generation1_ref, generation1_digest,
+        )
+        assert not governance.approve_reopen(
+            "reopen-001", "person-A", "period_owner", "approval://owner-A"
+        )
+        assert not governance.record_rebuild(
+            "reopen-001", "physical", root_hash, 100,
+            _sha("physical-opening"), _sha("physical-closing"),
+            _sha("physical-reconciliation"),
+        )
         assert governance.active_generation(7) == 1
 
         with sqlite3.connect(root / "period-governance.sqlite3") as con:
