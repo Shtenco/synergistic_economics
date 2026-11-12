@@ -56,15 +56,17 @@ The coordinator uses SQLite transactions for individual state changes, but the p
 - Verify role authorization and separation-of-duties policy before inserting the immutable approval.
 - Add tests for unauthorized identities, role spoofing, revoked identities, expired assertions, changed request scope and replay across requests/services.
 
-### F-GOV-02 — publication checkpoint is not bound to rebuild roots and reconciliation
+### F-GOV-02 — signed checkpoint/rebuild binding (IMPLEMENTED; CI PENDING)
 
 `publish_generation()` verifies that six receipts share a source root and generation numbers, and that the signed manifest identifies the period/new generation. It does not require the manifest's `event_log_root` to equal the six receipts' shared `source_event_root`, nor does it bind `projection_state_hash` to the supplied global reconciliation hash. A correctly signed checkpoint for the same period/generation can therefore be paired with unrelated internally consistent receipt/reconciliation values.
 
-**Required remediation**
-- Require `manifest.event_log_root == source_event_root`.
-- Define a canonical reconciliation object, hash it, and require the signed checkpoint's projection/reconciliation commitment to match that hash.
-- Bind all six participant receipt digests into the canonical global reconciliation object.
-- Add negative tests using a valid signed checkpoint with a different event root, different projection hash and mismatched participant receipt inventory.
+**Remediation committed**
+- Publication now builds a canonical, register-name-ordered inventory of all six persisted rebuild receipts and recomputes its SHA-256 digest.
+- The caller-supplied global reconciliation hash must equal that digest.
+- The signed checkpoint's `event_log_root` must equal the shared source root, and its `projection_state_hash` must equal the computed six-receipt reconciliation digest.
+- The governance audit now rejects a validly signed checkpoint for another event root and rejects an unrelated global reconciliation hash.
+
+**Remaining validation:** run the governance audit and full A2.4 workflow on the exact resulting HEAD. This binds attestations; it does not yet prove that the receipts were produced by authenticated authoritative-domain rebuild adapters (F-GOV-03).
 
 ### F-GOV-03 — rebuild receipts are accepted as caller-supplied attestations
 
@@ -76,15 +78,16 @@ The governance database validates receipt field shape and cross-register agreeme
 - Verify source cursor/root, event count, opening state hash, closing state hash and reconciliation evidence against the authoritative participant store.
 - Preserve the old generation and prove that it remains readable until the new generation is published.
 
-### F-CHK-01 — local anchor mutation contract is weaker than its publication helper
+### F-CHK-01 — local anchor object/digest binding (IMPLEMENTED; CI PENDING)
 
 `LocalImmutableAnchor.advance_latest()` records the supplied object key and digest without independently checking that the immutable object exists and that its stored bytes hash to that digest. The normal `publish_checkpoint()` helper writes the object first, but the anchor method itself does not enforce this invariant. A malformed direct call can advance the latest pointer to an absent or mismatched object and make recovery unavailable.
 
-**Required remediation**
-- In one anchor transaction, require an existing immutable object and compare its stored digest to the requested digest before advancing latest.
-- Add a foreign-key or equivalent relational constraint where practical.
-- Define an explicit trusted bootstrap rule for the first checkpoint sequence; do not silently accept an arbitrary starting sequence.
-- Test missing object, wrong digest, arbitrary first sequence, concurrent sequence advancement and replay.
+**Remediation committed**
+- `advance_latest()` now validates service ID, sequence, object key and digest inputs.
+- Inside the same SQLite write transaction, it requires the immutable object to exist and verifies both its stored digest and the digest recomputed from its bytes before changing the latest pointer.
+- The checkpoint audit now tests missing objects and mismatched digests separately, while retaining a distinct sequence-gap control.
+
+**Remaining validation:** run the external-checkpoint audit on the exact resulting HEAD. A production anchor still requires independently administered WORM/object-lock and external trust-root custody.
 
 ### F-DR-01 — disaster-recovery event root label is not a root of all participant event logs
 
@@ -100,8 +103,12 @@ The DR fixture computes `event_log_root` from the coordinator transaction envelo
 
 - `209c442b3f8f9093c2bbd4f405a097a6efc6ef10`: terminal-state idempotent execute/recovery handling and native-event verification in the visibility barrier.
 - `5921b7ede87aee223042d83fe9f08efd8b039a5f`: crash-matrix assertions for repeated execute, terminal abort retry and native-event deletion tampering.
+- `17e085fe38d5b86e0ab27b409a52c59beaa4c261`: checkpoint anchor requires an existing object whose bytes match the supplied digest.
+- `cae07e97c6b693b89b1315737a7775fe6d305290`: missing-object and wrong-digest anchor negative controls.
+- `afa6907b56a7ad7eed5f8000a58277d443248724`: signed period-generation publication bound to the six-receipt reconciliation digest and event root.
+- `49770b1b2a74591b67336a59b7e7926b39e8629d`: governance negative controls for wrong event root and unrelated global reconciliation.
 
-These are source/test commits, not execution evidence. The full CI run must complete on the resulting exact HEAD before either remediation is marked PASS.
+These are source/test commits, not execution evidence. The full CI run must complete on the resulting exact HEAD before any remediation is marked PASS.
 
 ## Crash matrix review
 
@@ -125,7 +132,7 @@ The inspected workflow definitions run the A2.4 audit controls, prototype unitte
 - A2.4 audit controls: `43206084481`
 - SCCE Stage-C2: `43206084428`
 
-At the live job inspection during this audit, all three jobs remained `queued`, with no executed steps and no logs. No PASS is claimed.
+At the subsequent live poll, the three previously identified jobs had been cancelled (completed with conclusion `cancelled`), not passed. The latest source/test commits have an empty combined-status response and no PR-triggered runs are exposed by the available lookup. The workflows are push-triggered; their fresh exact-HEAD run IDs and logs have not yet been observed. No PASS is claimed.
 
 ## Gate disposition
 
