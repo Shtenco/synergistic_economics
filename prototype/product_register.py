@@ -66,11 +66,9 @@ class PriceQuote:
 @dataclass(frozen=True)
 class ValuationRecord:
     valuation_id: str
+    balance_id: str
     price_id: str
-    quantity: D
-    unit: str
-    period: str
-    boundary: str
+    quantity_component: str
     value: D
     evidence_ref: str
 
@@ -136,14 +134,19 @@ def _validate_price(p,spec):
     _amount(p.price,"price")
 
 
-def _validate_valuation(v,price):
+def _validate_valuation(v,price,balance):
     if not isinstance(v,ValuationRecord): raise ProductRegisterError("ValuationRecord required")
-    for f in ("valuation_id","price_id","unit","period","boundary","evidence_ref"): _text(getattr(v,f),f)
-    quantity=_amount(v.quantity,"quantity")
-    if v.price_id!=price.price_id or v.unit!=price.denominator_unit or v.period!=price.period:
-        raise ProductRegisterError("valuation and price quote identity/period/unit mismatch")
+    for f in ("valuation_id","balance_id","price_id","quantity_component","evidence_ref"): _text(getattr(v,f),f)
+    if v.quantity_component not in {"opening","output","imports","intermediate","final","gfcf","exports","losses","closing"}:
+        raise ProductRegisterError("unknown balance quantity component")
+    if (v.balance_id!=balance.balance_id or v.price_id!=price.price_id
+            or balance.product_id!=price.product_id or balance.grade_id!=price.grade_id
+            or balance.period!=price.period or balance.unit!=price.denominator_unit):
+        raise ProductRegisterError("valuation, balance and price identities/period/unit mismatch")
+    quantity=_amount(getattr(balance,v.quantity_component),v.quantity_component)
     expected=quantity*price.price
-    if _amount(v.value,"value")!=expected: raise ProductRegisterError("valuation amount differs from quantity times price")
+    if _amount(v.value,"value")!=expected:
+        raise ProductRegisterError("valuation amount differs from referenced balance quantity times price")
 
 
 class ProductRegister:
@@ -212,9 +215,10 @@ class ProductRegister:
                 if p.price_id in prices: raise ProductRegisterError("duplicate price ID")
                 prices[p.price_id]=p
             elif typ=="valuation":
-                v=ValuationRecord(**(payload | {"quantity":D(payload["quantity"]),"value":D(payload["value"])}))
-                if v.price_id not in prices: raise ProductRegisterError("valuation references unknown price")
-                _validate_valuation(v,prices[v.price_id])
+                v=ValuationRecord(**(payload | {"value":D(payload["value"])}))
+                if v.price_id not in prices or v.balance_id not in balances:
+                    raise ProductRegisterError("valuation references unknown price or balance")
+                _validate_valuation(v,prices[v.price_id],balances[v.balance_id])
                 if v.valuation_id in valuations: raise ProductRegisterError("duplicate valuation ID")
                 valuations[v.valuation_id]=v
             else: raise ProductRegisterError("unknown product event type")
