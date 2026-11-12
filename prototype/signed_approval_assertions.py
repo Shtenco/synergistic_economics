@@ -1,15 +1,15 @@
 """Fail-closed verifier for externally signed period-governance approvals.
 
-The issuer and revocation service remain independently administered. This module
-verifies Ed25519 assertions and atomically consumes assertion IDs to prevent
-replay; it does not mint identities or approval credentials.
+Accepts compact JWT/JWS assertions signed with EdDSA (Ed25519). Issuer keys
+and revocation state must be supplied by independently administered services.
+This verifier validates and consumes assertions; it does not mint credentials.
 """
 from __future__ import annotations
 
 import base64
 from contextlib import closing
-import json
 import hashlib
+import json
 import math
 from pathlib import Path
 import sqlite3
@@ -20,10 +20,10 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
-_DOMAIN = b"SYNERGY_PERIOD_APPROVAL_ASSERTION_V1\\0"
+_HEADER_FIELDS = {"alg", "kid", "typ"}
 _FIELDS = {
-    "alg", "iss", "sub", "aud", "service_id", "request_id",
-    "request_digest", "role", "evidence_ref", "jti", "iat", "exp", "kid",
+    "iss", "sub", "aud", "service_id", "request_id",
+    "request_digest", "role", "evidence_ref", "jti", "iat", "exp",
 }
 
 
@@ -41,20 +41,19 @@ def _canonical(value):
 
 def _b64decode(value):
     if not isinstance(value, str) or not value or any(ch.isspace() for ch in value):
-        raise ApprovalAssertionError("assertion segment must be non-empty base64url text")
+        raise ApprovalAssertionError("JWS segment must be non-empty base64url text")
     try:
         raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
     except Exception as exc:
-        raise ApprovalAssertionError("invalid base64url assertion segment") from exc
+        raise ApprovalAssertionError("invalid base64url JWS segment") from exc
     if base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=") != value:
-        raise ApprovalAssertionError("assertion segment is not canonical base64url")
+        raise ApprovalAssertionError("JWS segment is not canonical base64url")
     return raw
 
 
 def encode_assertion_payload(payload):
-    """Canonical base64url payload helper for independently signing test fixtures."""
-    raw = _canonical(payload)
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    """Canonical base64url payload helper for independent issuer/test signing."""
+    return base64.urlsafe_b64encode(_canonical(payload)).decode("ascii").rstrip("=")
 
 
 class SignedApprovalVerifier:
@@ -62,8 +61,8 @@ class SignedApprovalVerifier:
 
     key_resolver(issuer, key_id) -> raw 32-byte Ed25519 public key or None.
     is_revoked(issuer, key_id, jti) -> literal bool; True means revoked.
-    Both resolvers must consult independently administered, current trust state.
-    evidence_ref passed by PeriodGovernance is the compact payload.signature token.
+    Both callbacks must consult independently administered, current trust state.
+    evidence_ref passed by PeriodGovernance is a compact EdDSA JWT/JWS assertion.
     """
 
     def __init__(self, database_path, *, issuer: str, audience: str,
@@ -124,17 +123,20 @@ class SignedApprovalVerifier:
         if (_canonical(header) != header_bytes or header["alg"] != "EdDSA"
                 or header["typ"] != "JWT"):
             raise ApprovalAssertionError("only canonical JWT JWS with EdDSA is accepted")
-        if not isinstance(header["kid"], str) or not header["kid"] or header["kid"] != header["kid"].strip():
+        kid = header["kid"]
+        if not isinstance(kid, str) or not kid or kid != kid.strip():
             raise ApprovalAssertionError("JWS kid must be trimmed non-empty text")
         if not isinstance(payload, dict) or set(payload) != _FIELDS:
             raise ApprovalAssertionError("assertion claims do not match the strict schema")
         if _canonical(payload) != payload_bytes:
             raise ApprovalAssertionError("assertion payload is not canonical JSON")
         for field in ("iss", "sub", "aud", "service_id", "request_id",
-                      "request_digest", "role", "evidence_ref", "jti", "kid"):
+                      "request_digest", "role", "evidence_ref", "jti"):
             value = payload[field]
             if not isinstance(value, str) or not value or value != value.strip():
                 raise ApprovalAssertionError(f"assertion {field} must be trimmed non-empty text")
+        if len(payload["jti"]) > 256:
+            raise ApprovalAssertionError("assertion jti exceeds 256 characters")
         digest = payload["request_digest"]
         if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
             raise ApprovalAssertionError("request_digest must be lowercase SHA-256 hex")
@@ -148,7 +150,7 @@ class SignedApprovalVerifier:
         if payload["iss"] != self.issuer or payload["aud"] != self.audience:
             raise ApprovalAssertionError("assertion issuer or audience is not trusted")
         try:
-            raw_key = self.key_resolver(payload["iss"], header["kid"])
+            raw_key = self.key_resolver(payload["iss"], kid)
         except Exception as exc:
             raise ApprovalAssertionError("trusted signing-key lookup failed") from exc
         if not isinstance(raw_key, bytes) or len(raw_key) != 32:
@@ -160,7 +162,7 @@ class SignedApprovalVerifier:
         except (InvalidSignature, ValueError) as exc:
             raise ApprovalAssertionError("approval assertion signature is invalid") from exc
         try:
-            revoked = self.is_revoked(payload["iss"], header["kid"], payload["jti"])
+            revoked = self.is_revoked(payload["iss"], kid, payload["jti"])
         except Exception as exc:
             raise ApprovalAssertionError("live revocation check failed") from exc
         if revoked is not False:
@@ -173,12 +175,12 @@ class SignedApprovalVerifier:
             raise ApprovalAssertionError("approval assertion is not yet valid")
         if payload["exp"] <= now - self.clock_skew_seconds:
             raise ApprovalAssertionError("approval assertion has expired")
-        return payload, _canonical(payload), int(now)
+        return payload, hashlib.sha256(token.encode("ascii")).hexdigest(), int(now), kid
 
     def __call__(self, approver_id, role, request_context, evidence_ref):
         if not isinstance(request_context, dict):
             raise ApprovalAssertionError("request context must be a mapping")
-        payload, canonical, now = self._decode_and_verify(evidence_ref)
+        payload, assertion_digest, now, _kid = self._decode_and_verify(evidence_ref)
         expected = {
             "sub": approver_id,
             "role": role,
@@ -189,7 +191,6 @@ class SignedApprovalVerifier:
         for claim, value in expected.items():
             if payload[claim] != value:
                 raise ApprovalAssertionError(f"approval assertion {claim} does not match the request")
-        assertion_digest = hashlib.sha256(token.encode("ascii")).hexdigest()
         with closing(sqlite3.connect(self.database_path, timeout=30)) as con:
             con.execute("PRAGMA synchronous=FULL")
             con.execute("BEGIN IMMEDIATE")
