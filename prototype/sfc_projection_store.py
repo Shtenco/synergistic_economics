@@ -293,6 +293,15 @@ def _verify_event_payload_semantics(event_payload):
     if event_type == "creditor_write_off":
         if D(event_payload.get("writeoff_claim_delta")) != amount:
             raise SFCProjectionStoreError("stored write-off memo delta mismatch")
+    if event_type == "bank_loan_origination":
+        loan = next(x for x in postings if x.get("account")=="loan_asset")
+        borrower = loan.get("issuer_entity_id")
+        bank = loan.get("entity_id")
+        deposit_asset = next(x for x in postings if x.get("account")=="deposit_asset")
+        if (loan.get("institutional_sector")!="CB"
+                or deposit_asset.get("entity_id")!=borrower
+                or deposit_asset.get("issuer_entity_id")!=bank):
+            raise SFCProjectionStoreError("stored bank origination participant roles mismatch")
     if event_type == "legal_debt_forgiveness":
         evidence = event_payload.get("legal_evidence")
         parties = evidence.get("parties") if isinstance(evidence,dict) else None
@@ -300,6 +309,7 @@ def _verify_event_payload_semantics(event_payload):
         if (D(event_payload.get("forgiven_principal")) != amount or not isinstance(evidence,dict)
                 or not all(isinstance(evidence.get(k),str) and evidence[k].strip()
                            for k in ("evidence_ref","authority","effective_at","scope"))
+                or evidence.get("scope") != f"principal:{amount}"
                 or not isinstance(parties,list) or len(parties) < 2
                 or len(set(parties)) != len(parties)
                 or not set(parties).issubset(event_entities)):
