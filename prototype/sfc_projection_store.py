@@ -641,6 +641,23 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                 return False
             if con.execute("SELECT COUNT(*) FROM sfc_projection_group_checkpoints").fetchone()[0] != len(groups):
                 return False
+            event_checkpoint_rows = con.execute("SELECT * FROM sfc_projection_event_checkpoints").fetchall()
+            event_checkpoint_map = {row["event_id"]:row for row in event_checkpoint_rows}
+            group_checkpoint_rows = con.execute("SELECT * FROM sfc_projection_group_checkpoints ORDER BY commit_sequence").fetchall()
+            for group_row, checkpoint in zip(groups, group_checkpoint_rows):
+                if checkpoint["commit_sequence"] != group_row["commit_sequence"]:
+                    return False
+                envelope = json.loads(group_row["payload_json"])
+                group_events = envelope.get("events", [])
+                if not group_events:
+                    return False
+                last_event = group_events[-1]
+                last_checkpoint = event_checkpoint_map.get(last_event.get("event_id"))
+                if (checkpoint["group_id"] != envelope.get("group_id")
+                        or last_checkpoint is None
+                        or checkpoint["current_period"] != last_event.get("effective_period")
+                        or checkpoint["state_sha256"] != last_checkpoint["state_sha256"]):
+                    return False
             coverage_rows = con.execute("""SELECT c.event_id,c.commit_sequence,c.event_index,c.mapping_version,
                 c.disposition,c.delta_count,e.group_id,e.event_index AS stored_event_index,
                 g.commit_sequence AS stored_sequence,e.payload_json
