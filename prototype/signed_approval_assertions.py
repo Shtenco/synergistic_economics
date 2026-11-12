@@ -10,6 +10,7 @@ import base64
 from contextlib import closing
 import json
 import hashlib
+import math
 from pathlib import Path
 import sqlite3
 import time
@@ -158,18 +159,19 @@ class SignedApprovalVerifier:
         if revoked is not False:
             raise ApprovalAssertionError("approval assertion or signing key is revoked")
         now = self.clock()
-        if not isinstance(now, (int, float)) or isinstance(now, bool):
+        if (not isinstance(now, (int, float)) or isinstance(now, bool)
+                or not math.isfinite(now)):
             raise ApprovalAssertionError("clock returned an invalid timestamp")
         if payload["iat"] > now + self.clock_skew_seconds:
             raise ApprovalAssertionError("approval assertion is not yet valid")
         if payload["exp"] <= now - self.clock_skew_seconds:
             raise ApprovalAssertionError("approval assertion has expired")
-        return payload, _canonical(payload)
+        return payload, _canonical(payload), int(now)
 
     def __call__(self, approver_id, role, request_context, evidence_ref):
         if not isinstance(request_context, dict):
             raise ApprovalAssertionError("request context must be a mapping")
-        payload, canonical = self._decode_and_verify(evidence_ref)
+        payload, canonical, now = self._decode_and_verify(evidence_ref)
         expected = {
             "sub": approver_id,
             "role": role,
@@ -181,7 +183,6 @@ class SignedApprovalVerifier:
             if payload[claim] != value:
                 raise ApprovalAssertionError(f"approval assertion {claim} does not match the request")
         assertion_digest = hashlib.sha256(canonical).hexdigest()
-        now = int(self.clock())
         with closing(sqlite3.connect(self.database_path, timeout=30)) as con:
             con.execute("PRAGMA synchronous=FULL")
             con.execute("BEGIN IMMEDIATE")
