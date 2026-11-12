@@ -91,6 +91,13 @@ def _positive_decimal(value, field):
     return value
 
 
+def _decimal_text(value):
+    fixed = format(value, "f")
+    if "." in fixed:
+        fixed = fixed.rstrip("0").rstrip(".")
+    return fixed
+
+
 @dataclass(frozen=True)
 class SectorMembership:
     entity_id: str
@@ -349,7 +356,7 @@ class EntityJournal:
             if event.forgiven_principal != amount:
                 raise EntityJournalError("forgiven_principal must equal the legally extinguished amount")
             _validate_legal_evidence(event.legal_evidence, event)
-            if event.legal_evidence.scope != f"principal:{amount}":
+            if event.legal_evidence.scope != f"principal:{_decimal_text(amount)}":
                 raise EntityJournalError("legal evidence scope must identify the exact forgiven principal amount")
         elif event.forgiven_principal is not None or event.legal_evidence is not None:
             raise EntityJournalError("forgiveness metadata is only valid for legal_debt_forgiveness")
