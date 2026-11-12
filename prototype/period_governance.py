@@ -257,12 +257,12 @@ class PeriodGovernance:
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
-                closed = con.execute(
-                    "SELECT 1 FROM period_closures WHERE period=?", (period,)
-                ).fetchone()
-                if closed:
+                latest_closed = con.execute(
+                    "SELECT MAX(period) FROM period_closures"
+                ).fetchone()[0]
+                if latest_closed is not None and period <= latest_closed:
                     raise PeriodGovernanceError(
-                        "corrections to closed periods must be posted in a currently open period"
+                        "corrections at or before the latest closed period must use a governed reopening"
                     )
                 old = con.execute(
                     "SELECT payload_digest,effective_period,original_event_id,reason,authority,evidence_ref "
@@ -308,10 +308,10 @@ class PeriodGovernance:
                 if (closure["checkpoint_ref"], closure["checkpoint_digest"]) != (ref, digest):
                     raise PeriodGovernanceError("pre-reopen checkpoint must match the currently active generation")
                 old = con.execute(
-                    "SELECT period,reason,evidence_ref,scope_json,pre_reopen_checkpoint_digest "
+                    "SELECT period,reason,evidence_ref,scope_json,pre_reopen_checkpoint_ref,pre_reopen_checkpoint_digest "
                     "FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()
-                expected = (period, reason, evidence, scope_json, digest)
+                expected = (period, reason, evidence, scope_json, ref, digest)
                 if old:
                     if tuple(old) != expected:
                         raise PeriodGovernanceError("reopen request ID reused with changed content")
