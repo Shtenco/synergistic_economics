@@ -334,13 +334,12 @@ class SQLiteEventRepository:
                 raise SQLiteRepositoryError("outbox event not found")
             return cur.rowcount == 1
 
-    def audit(self):
-        """Fail-closed integrity audit of event rows, sequence, receipt groups and outbox."""
-        with closing(self._connect()) as con:
-            events = con.execute("SELECT * FROM events ORDER BY sequence").fetchall()
-            commands = con.execute("SELECT * FROM commands").fetchall()
-            outbox = con.execute("SELECT * FROM outbox").fetchall()
-            meta = con.execute("SELECT schema_version FROM repository_meta WHERE singleton=1").fetchone()
+    def _audit_connection(self, con):
+        """Audit all durable tables inside the caller's SQLite read snapshot."""
+        events = con.execute("SELECT * FROM events ORDER BY sequence").fetchall()
+        commands = con.execute("SELECT * FROM commands").fetchall()
+        outbox = con.execute("SELECT * FROM outbox").fetchall()
+        meta = con.execute("SELECT schema_version FROM repository_meta WHERE singleton=1").fetchone()
         if meta is None or meta[0] != self.SCHEMA_VERSION:
             raise SQLiteRepositoryError("repository schema metadata mismatch")
         if len(outbox) != len(events):
@@ -348,28 +347,34 @@ class SQLiteEventRepository:
         if [r["sequence"] for r in events] != list(range(1, len(events)+1)):
             raise SQLiteRepositoryError("global event sequence is not contiguous")
         by_command = {}
+        aggregate_versions = {}
         for row in events:
-            envelope = json.loads(row["envelope_json"])
-            if canonical_json(envelope) != row["envelope_json"]:
-                raise SQLiteRepositoryError("event envelope is not canonical")
-            if sha256(row["envelope_json"].encode()).hexdigest() != row["envelope_digest"]:
-                raise SQLiteRepositoryError("event envelope digest mismatch")
-            if (envelope.get("event_id") != row["event_id"]
-                    or envelope.get("event_type") != row["event_type"]
-                    or envelope.get("aggregate_type") != row["aggregate_type"]
-                    or envelope.get("aggregate_id") != row["aggregate_id"]
-                    or envelope.get("aggregate_version") != row["aggregate_version"]
-                    or envelope.get("event_ordinal") != row["event_ordinal"]
-                    or envelope.get("idempotency_key") != row["idempotency_key"]
-                    or envelope.get("command_id") != row["command_id"]):
-                raise SQLiteRepositoryError("event identity or aggregate metadata mismatch")
-            if envelope.get("payload_digest") != row["payload_digest"]:
-                raise SQLiteRepositoryError("payload digest metadata mismatch")
-            if sha256(canonical_json(envelope["payload"]).encode()).hexdigest() != row["payload_digest"]:
-                raise SQLiteRepositoryError("domain payload digest mismatch")
+            try:
+                envelope = json.loads(row["envelope_json"])
+                if canonical_json(envelope) != row["envelope_json"]:
+                    raise SQLiteRepositoryError("event envelope is not canonical")
+                if sha256(row["envelope_json"].encode()).hexdigest() != row["envelope_digest"]:
+                    raise SQLiteRepositoryError("event envelope digest mismatch")
+                if (envelope.get("event_id") != row["event_id"]
+                        or envelope.get("event_type") != row["event_type"]
+                        or envelope.get("aggregate_type") != row["aggregate_type"]
+                        or envelope.get("aggregate_id") != row["aggregate_id"]
+                        or envelope.get("aggregate_version") != row["aggregate_version"]
+                        or envelope.get("event_ordinal") != row["event_ordinal"]
+                        or envelope.get("idempotency_key") != row["idempotency_key"]
+                        or envelope.get("command_id") != row["command_id"]):
+                    raise SQLiteRepositoryError("event identity or aggregate metadata mismatch")
+                if envelope.get("payload_digest") != row["payload_digest"]:
+                    raise SQLiteRepositoryError("payload digest metadata mismatch")
+                if sha256(canonical_json(envelope["payload"]).encode()).hexdigest() != row["payload_digest"]:
+                    raise SQLiteRepositoryError("domain payload digest mismatch")
+            except (KeyError, TypeError, ValueError) as exc:
+                raise SQLiteRepositoryError("malformed durable event envelope") from exc
             key = row["command_id"]
             by_command.setdefault(key, []).append(row)
-        receipt_by_command = {r["command_id"]:r for r in commands}
+            aggregate_key = (row["aggregate_type"], row["aggregate_id"])
+            aggregate_versions.setdefault(aggregate_key, set()).add(row["aggregate_version"])
+        receipt_by_command = {r["command_id"]: r for r in commands}
         if set(by_command) != set(receipt_by_command):
             raise SQLiteRepositoryError("event groups and command receipts differ")
         for command_id, rows in by_command.items():
@@ -379,8 +384,15 @@ class SQLiteEventRepository:
                 raise SQLiteRepositoryError("receipt event IDs/order mismatch")
             if [r["event_ordinal"] for r in rows] != list(range(len(rows))):
                 raise SQLiteRepositoryError("command event ordinals are not contiguous")
-            if any(r["aggregate_version"] != receipt["aggregate_version"] for r in rows):
-                raise SQLiteRepositoryError("command aggregate version mismatch")
+            if any(r["aggregate_version"] != receipt["aggregate_version"]
+                   or r["aggregate_type"] != receipt["aggregate_type"]
+                   or r["aggregate_id"] != receipt["aggregate_id"] for r in rows):
+                raise SQLiteRepositoryError("command aggregate version/identity mismatch")
+            if rows[-1]["sequence"] != receipt["commit_sequence"]:
+                raise SQLiteRepositoryError("receipt commit sequence differs from command tail")
+        for key, versions in aggregate_versions.items():
+            if versions != set(range(1, max(versions) + 1)):
+                raise SQLiteRepositoryError("aggregate event version history has a gap")
         event_by_id = {e["event_id"]: e for e in events}
         for row in outbox:
             linked = event_by_id.get(row["event_id"])
@@ -388,19 +400,39 @@ class SQLiteEventRepository:
                 raise SQLiteRepositoryError("orphan outbox row")
             if row["sequence"] != linked["sequence"]:
                 raise SQLiteRepositoryError("outbox sequence differs from event sequence")
-        return {"events":len(events),"commands":len(commands),"outbox":len(outbox)}
+        return {"events": len(events), "commands": len(commands), "outbox": len(outbox)}
+
+    def audit(self):
+        """Fail-closed integrity audit in one consistent SQLite read snapshot."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            try:
+                report = self._audit_connection(con)
+                con.commit()
+                return report
+            except Exception:
+                con.rollback()
+                raise
 
     def recover(self):
-        """Audit then return persisted aggregate heads; never guesses missing state."""
-        self.audit()
+        """Audit and read aggregate heads from the same consistent snapshot."""
         with closing(self._connect()) as con:
-            rows = con.execute("SELECT aggregate_type,aggregate_id,version,state_json,state_digest "
-                               "FROM aggregates ORDER BY aggregate_type,aggregate_id").fetchall()
-        recovered = {}
-        for row in rows:
-            if sha256(row["state_json"].encode()).hexdigest() != row["state_digest"]:
-                raise SQLiteRepositoryError("aggregate state digest mismatch")
-            recovered[(row["aggregate_type"],row["aggregate_id"])] = {
-                "version":row["version"],"state":json.loads(row["state_json"])
-            }
-        return recovered
+            con.execute("BEGIN")
+            try:
+                self._audit_connection(con)
+                rows = con.execute(
+                    "SELECT aggregate_type,aggregate_id,version,state_json,state_digest "
+                    "FROM aggregates ORDER BY aggregate_type,aggregate_id"
+                ).fetchall()
+                recovered = {}
+                for row in rows:
+                    if sha256(row["state_json"].encode()).hexdigest() != row["state_digest"]:
+                        raise SQLiteRepositoryError("aggregate state digest mismatch")
+                    recovered[(row["aggregate_type"], row["aggregate_id"])] = {
+                        "version": row["version"], "state": json.loads(row["state_json"])
+                    }
+                con.commit()
+                return recovered
+            except Exception:
+                con.rollback()
+                raise
