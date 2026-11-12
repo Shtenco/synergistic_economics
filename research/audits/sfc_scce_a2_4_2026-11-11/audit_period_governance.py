@@ -1,4 +1,4 @@
-"""Adversarial closed-period governance and generation-switch audit."""
+"""Adversarial closed-period governance integrated with signed Ed25519 checkpoints."""
 from pathlib import Path
 import hashlib
 import sqlite3
@@ -8,6 +8,10 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "prototype"))
 
+from external_checkpoints import (
+    Ed25519Signer, LocalImmutableAnchor, TrustedKeyRegistry,
+    publish_checkpoint, sha256_bytes, verify_checkpoint,
+)
 from period_governance import (
     REGISTERS, PeriodGovernance, PeriodGovernanceError,
 )
@@ -15,6 +19,32 @@ from period_governance import (
 
 def _sha(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _checkpoint(signer, anchor, sequence, generation):
+    backup = f"period-{7}-generation-{generation}-backup".encode()
+    manifest = {
+        "service_id": "synergy-period-governance",
+        "database_schema_version": 4,
+        "mapper_version": "gold2a-entity-journal-mapper@1",
+        "projection_generation": generation,
+        "commit_sequence": sequence,
+        "event_count": 100,
+        "event_log_root": _sha("period-7-event-root"),
+        "instrument_opening_hash": _sha("instrument-openings"),
+        "control_opening_hash": _sha("control-openings"),
+        "projection_state_hash": _sha(f"projection-generation-{generation}"),
+        "coverage_count": 100,
+        "applied_through_cursor": sequence,
+        "period": 7,
+        "period_closed": True,
+        "backup_sha256": sha256_bytes(backup),
+        "checkpoint_sequence": sequence,
+        "created_at_utc": f"2026-11-12T10:0{sequence}:00Z",
+        "signer_key_id": signer.key_id,
+    }
+    ref, digest = publish_checkpoint(manifest, signer, anchor)
+    return ref, digest
 
 
 def _rejects(call, message):
@@ -28,19 +58,15 @@ def _rejects(call, message):
 def main():
     with tempfile.TemporaryDirectory(prefix="synergy-period-governance-") as directory:
         root = Path(directory)
-        trusted = {
-            "period-7-close": _sha("signed-close-generation-0"),
-            "period-7-generation-1": _sha("signed-reopen-generation-1"),
-        }
-        verify = lambda ref, digest: trusted.get(ref) == digest
+        anchor = LocalImmutableAnchor(root / "external-anchor.sqlite3")
+        signer = Ed25519Signer.generate("synergy-period-close-key-2026")
+        trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
+        close_ref, close_digest = _checkpoint(signer, anchor, 1, 0)
+        verify = lambda ref, digest: _verify_bool(ref, digest, trust, anchor)
         governance = PeriodGovernance(root / "period-governance.sqlite3", verify)
 
-        assert governance.close_period(
-            7, 0, "period-7-close", trusted["period-7-close"], "controller-A"
-        )
-        assert not governance.close_period(
-            7, 0, "period-7-close", trusted["period-7-close"], "controller-A"
-        )
+        assert governance.close_period(7, 0, close_ref, close_digest, "controller-A")
+        assert not governance.close_period(7, 0, close_ref, close_digest, "controller-A")
         assert governance.active_generation(7) == 0
 
         correction = {
@@ -68,8 +94,7 @@ def main():
         scope = list(REGISTERS)
         assert governance.request_reopen(
             "reopen-001", 7, "correct material cohort classification",
-            "authority://reopen-001", scope,
-            "period-7-close", trusted["period-7-close"],
+            "authority://reopen-001", scope, close_ref, close_digest,
         )
         assert governance.approve_reopen(
             "reopen-001", "person-A", "period_owner", "approval://owner-A"
@@ -90,9 +115,10 @@ def main():
                 _sha(name + "-opening"), _sha(name + "-closing"),
                 _sha(name + "-reconciliation"),
             )
+        generation1_ref, generation1_digest = _checkpoint(signer, anchor, 2, 1)
         _rejects(lambda: governance.publish_generation(
             "reopen-001", _sha("global-reconciliation"),
-            "period-7-generation-1", trusted["period-7-generation-1"],
+            generation1_ref, generation1_digest,
         ), "generation published without all six register rebuild receipts")
         assert governance.active_generation(7) == 0
 
@@ -103,38 +129,43 @@ def main():
         )
         assert governance.publish_generation(
             "reopen-001", _sha("global-reconciliation"),
-            "period-7-generation-1", trusted["period-7-generation-1"],
+            generation1_ref, generation1_digest,
         )
         assert governance.active_generation(7) == 1
 
-        # The prior generation remains in the immutable history, and a second
-        # reopen must bind to generation 1's checkpoint rather than generation 0.
         with sqlite3.connect(root / "period-governance.sqlite3") as con:
             history = con.execute(
                 "SELECT generation,checkpoint_ref FROM generation_history "
                 "WHERE period=7 ORDER BY generation"
             ).fetchall()
-            assert history == [(0, "period-7-close"), (1, "period-7-generation-1")]
+            assert history == [(0, close_ref), (1, generation1_ref)]
             _rejects(lambda: con.execute(
                 "UPDATE period_closures SET generation=99 WHERE period=7"
             ), "closed-period snapshot was mutable")
 
         _rejects(lambda: governance.request_reopen(
             "reopen-stale", 7, "stale generation checkpoint",
-            "authority://stale", scope, "period-7-close",
-            trusted["period-7-close"],
+            "authority://stale", scope, close_ref, close_digest,
         ), "reopen accepted stale generation checkpoint")
         assert governance.request_reopen(
             "reopen-002", 7, "second governed correction",
             "authority://reopen-002", scope,
-            "period-7-generation-1", trusted["period-7-generation-1"],
+            generation1_ref, generation1_digest,
         )
         assert governance.active_generation(7) == 1
 
     print("PASS: corrections append in an open period; closed period remains immutable")
     print("PASS: reopening requires two distinct approvers in separate roles")
     print("PASS: generation switch waits for all six same-root rebuild receipts")
-    print("PASS: prior generation retained; repeated reopen binds to active generation checkpoint")
+    print("PASS: prior generation retained; repeated reopen binds to active signed checkpoint")
+
+
+def _verify_bool(ref, digest, trust, anchor):
+    try:
+        verify_checkpoint(ref, digest, trust, anchor)
+        return True
+    except Exception:
+        return False
 
 
 if __name__ == "__main__":
