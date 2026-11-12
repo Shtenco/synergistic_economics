@@ -295,11 +295,19 @@ def _verify_event_payload_semantics(event_payload):
             raise SFCProjectionStoreError("stored write-off memo delta mismatch")
     if event_type == "legal_debt_forgiveness":
         evidence = event_payload.get("legal_evidence")
+        parties = evidence.get("parties") if isinstance(evidence,dict) else None
+        event_entities = {line.get("entity_id") for line in postings}
         if (D(event_payload.get("forgiven_principal")) != amount or not isinstance(evidence,dict)
                 or not all(isinstance(evidence.get(k),str) and evidence[k].strip()
                            for k in ("evidence_ref","authority","effective_at","scope"))
-                or not isinstance(evidence.get("parties"),list) or len(evidence["parties"]) < 2):
+                or not isinstance(parties,list) or len(parties) < 2
+                or len(set(parties)) != len(parties)
+                or not set(parties).issubset(event_entities)):
             raise SFCProjectionStoreError("stored legal forgiveness lacks complete legal evidence")
+    elif event_payload.get("forgiven_principal") is not None or event_payload.get("legal_evidence") is not None:
+        raise SFCProjectionStoreError("non-forgiveness event carries legal forgiveness metadata")
+    if event_type != "creditor_write_off" and event_payload.get("writeoff_claim_delta") is not None:
+        raise SFCProjectionStoreError("non-write-off event carries a write-off memo delta")
 
 
 def _map_payload_event(event_payload):
