@@ -273,6 +273,15 @@ class SQLiteParticipant:
                 "SELECT COUNT(*) FROM participant_events WHERE transaction_id=?", (txid,)
             ).fetchone()[0]
 
+    def committed_event(self, txid):
+        """Return the persisted native event, not merely its inbox receipt."""
+        with closing(_connect(self.database_path)) as con:
+            row = con.execute(
+                "SELECT native_event_id,stream_id,revision,payload_digest,payload_json "
+                "FROM participant_events WHERE transaction_id=?", (txid,)
+            ).fetchone()
+            return dict(row) if row else None
+
 
 class CrossRegisterCoordinator:
     """Durable coordinator with an irreversible commit decision and read barrier."""
@@ -536,6 +545,22 @@ class CrossRegisterCoordinator:
         _fault("after_commit_barrier")
 
     def execute(self, txid):
+        # A client may retry after losing the response to a successful commit.
+        # Never attempt to move a terminal transaction back into PREPARING.
+        state = self.state(txid)
+        if state is None:
+            raise CoordinatorError("unknown coordinator transaction")
+        if state == "COMMITTED":
+            if not self.is_visible(txid):
+                raise CoordinatorError("committed transaction failed native-event visibility verification")
+            return "COMMITTED"
+        if state == "ABORTED":
+            return "ABORTED"
+        if state in {"ABORT_DECIDED", "COMMIT_DECIDED", "COMMITTING"}:
+            return self.recover(txid)
+        if state not in {"NEW", "PREPARING", "PREPARED"}:
+            raise CoordinatorError(f"unsupported execute state: {state}")
+
         self._set_state(txid, "PREPARING")
         try:
             for row in self._operations(txid):
@@ -557,6 +582,7 @@ class CrossRegisterCoordinator:
         self._set_state(txid, "COMMIT_DECIDED")
         _fault("after_commit_decision")
         self._commit_after_decision(txid)
+        return self.state(txid)
 
     def recover(self, txid):
         with closing(_connect(self.database_path)) as con:
@@ -586,22 +612,47 @@ class CrossRegisterCoordinator:
             return row["state"] if row else None
 
     def is_visible(self, txid):
-        """Read barrier: true only after all six durable participant receipts match."""
+        """Read barrier: all six receipts AND native persisted events must match."""
         if self.state(txid) != "COMMITTED":
             return False
-        for row in self._operations(txid):
+        operations = self._operations(txid)
+        if len(operations) != len(PARTICIPANTS) or {r["participant"] for r in operations} != set(PARTICIPANTS):
+            return False
+        for row in operations:
             name = row["participant"]
-            status = self.participants[name].status(txid)
+            participant = self.participants[name]
+            status = participant.status(txid)
             if not status or status["state"] != "COMMITTED":
                 return False
-            receipt = json.loads(row["receipt_json"]) if row["receipt_json"] else None
-            if not receipt or receipt != json.loads(status["receipt_json"]):
+            if not row["receipt_json"] or not status["receipt_json"]:
                 return False
-            if (receipt["participant"] != name
-                    or receipt["transaction_id"] != txid
-                    or receipt["native_event_id"] != row["native_event_id"]
-                    or receipt["payload_digest"] != row["payload_digest"]
-                    or receipt["prepare_token"] != row["prepare_token"]
-                    or receipt["revision"] != row["expected_revision"] + 1):
+            try:
+                receipt = json.loads(row["receipt_json"])
+                participant_receipt = json.loads(status["receipt_json"])
+            except (TypeError, json.JSONDecodeError):
+                return False
+            if not receipt or receipt != participant_receipt:
+                return False
+            if (receipt.get("participant") != name
+                    or receipt.get("transaction_id") != txid
+                    or receipt.get("native_event_id") != row["native_event_id"]
+                    or receipt.get("payload_digest") != row["payload_digest"]
+                    or receipt.get("prepare_token") != row["prepare_token"]
+                    or receipt.get("revision") != row["expected_revision"] + 1):
+                return False
+
+            # A receipt is not proof that the native event row still exists.
+            # Verify the authoritative participant-side persisted effect too.
+            event = participant.committed_event(txid)
+            if participant.event_count(txid) != 1 or event is None:
+                return False
+            if (event["native_event_id"] != row["native_event_id"]
+                    or event["stream_id"] != row["stream_id"]
+                    or event["revision"] != row["expected_revision"] + 1
+                    or event["payload_digest"] != row["payload_digest"]
+                    or event["payload_json"] != row["payload_json"]):
+                return False
+            actual_digest = hashlib.sha256(event["payload_json"].encode("utf-8")).hexdigest()
+            if actual_digest != row["payload_digest"]:
                 return False
         return True
