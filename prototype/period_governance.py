@@ -454,7 +454,20 @@ class PeriodGovernance:
                 request = con.execute(
                     "SELECT * FROM reopen_requests WHERE request_id=?", (request_id,)
                 ).fetchone()
-                if request is None or request["state"] != "REBUILDING":
+                if request is None:
+                    raise PeriodGovernanceError("unknown reopen request")
+                if request["state"] == "PUBLISHED":
+                    published = con.execute(
+                        "SELECT period,old_generation,new_generation,global_reconciliation_hash,checkpoint_ref,checkpoint_digest "
+                        "FROM generation_publications WHERE request_id=?", (request_id,)
+                    ).fetchone()
+                    expected = (request["period"], request["old_generation"], request["new_generation"],
+                                global_reconcile, ref, digest)
+                    if published is None or tuple(published) != expected:
+                        raise PeriodGovernanceError("published generation retry changed immutable publication content")
+                    con.execute("COMMIT")
+                    return False
+                if request["state"] != "REBUILDING":
                     raise PeriodGovernanceError("generation publication requires a rebuilding request")
                 if (manifest.get("period") != request["period"]
                         or manifest.get("projection_generation") != request["new_generation"]
