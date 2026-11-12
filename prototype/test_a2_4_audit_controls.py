@@ -101,6 +101,12 @@ class A24AuditControlScriptsTest(unittest.TestCase):
     def test_audit_sfc_projection_registry(self):
         self._run_script("audit_sfc_projection_registry.py")
 
+    def test_audit_sfc_projection_store(self):
+        self._run_script("audit_sfc_projection_store.py")
+
+    def test_audit_unified_cross_register(self):
+        self._run_script("audit_unified_cross_register.py")
+
 
 if __name__ == "__main__":
     unittest.main()
