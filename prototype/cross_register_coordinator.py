@@ -597,9 +597,11 @@ class CrossRegisterCoordinator:
             receipt = json.loads(row["receipt_json"]) if row["receipt_json"] else None
             if not receipt or receipt != json.loads(status["receipt_json"]):
                 return False
-            if (receipt["transaction_id"] != txid
+            if (receipt["participant"] != name
+                    or receipt["transaction_id"] != txid
                     or receipt["native_event_id"] != row["native_event_id"]
                     or receipt["payload_digest"] != row["payload_digest"]
-                    or receipt["prepare_token"] != row["prepare_token"]):
+                    or receipt["prepare_token"] != row["prepare_token"]
+                    or receipt["revision"] != row["expected_revision"] + 1):
                 return False
         return True
