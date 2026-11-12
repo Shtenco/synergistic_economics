@@ -108,7 +108,7 @@ class EntityRegistry:
             if not isinstance(row, SectorMembership):
                 raise EntityJournalError("registry rows must be SectorMembership values")
             _required_text(row.entity_id, "entity_id")
-            if row.sector not in SECTORS:
+            if not isinstance(row.sector, str) or row.sector not in SECTORS:
                 raise EntityJournalError(f"unknown institutional sector: {row.sector}")
             if not isinstance(row.effective_from, int) or isinstance(row.effective_from, bool) or row.effective_from < 0:
                 raise EntityJournalError("effective_from must be a non-negative integer")
@@ -262,7 +262,7 @@ class EntityJournal:
         _required_text(event.event_id, "event_id")
         if event.event_id in self.events:
             raise EntityJournalError("duplicate event_id")
-        if event.event_type not in CANONICAL_GOLD_2A_EVENTS:
+        if not isinstance(event.event_type, str) or event.event_type not in CANONICAL_GOLD_2A_EVENTS:
             raise EntityJournalError(f"non-canonical or unsupported GOLD-2A event: {event.event_type}")
         if (not isinstance(event.effective_period, int) or isinstance(event.effective_period, bool)
                 or event.effective_period < 0):
@@ -314,11 +314,10 @@ class EntityJournal:
                            line.entity_id, line.currency, line.maturity,
                            line.denomination, line.valuation_basis)
                     liabilities[key] = liabilities.get(key, D("0")) + (line.amount if line.side == "C" else -line.amount)
-            # Interest and principal events can contain offsetting movements;
-            # compare absolute movement by the complete instrument key.
-            if event.event_type in {"bank_loan_origination", "interest_accrual"}:
-                if assets != liabilities:
-                    raise EntityJournalError("claim asset/liability identity mirror mismatch")
+            # Every bilateral claim event must mirror by full instrument,
+            # holder and issuer identity, including reductions and forgiveness.
+            if assets != liabilities:
+                raise EntityJournalError("claim asset/liability identity mirror mismatch")
 
         if event.event_type == "creditor_write_off":
             _positive_decimal(event.writeoff_claim_delta, "writeoff_claim_delta")
