@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import base64
 from contextlib import closing
-from datetime import datetime, timezone
 import json
+import hashlib
 from pathlib import Path
 import sqlite3
 import time
@@ -180,12 +180,26 @@ class SignedApprovalVerifier:
         for claim, value in expected.items():
             if payload[claim] != value:
                 raise ApprovalAssertionError(f"approval assertion {claim} does not match the request")
-        assertion_digest = __import__("hashlib").sha256(canonical).hexdigest()
+        assertion_digest = hashlib.sha256(canonical).hexdigest()
         now = int(self.clock())
         with closing(sqlite3.connect(self.database_path, timeout=30)) as con:
             con.execute("PRAGMA synchronous=FULL")
             con.execute("BEGIN IMMEDIATE")
             try:
+                old = con.execute(
+                    "SELECT assertion_digest FROM approval_assertion_replays "
+                    "WHERE issuer=? AND jti=?",
+                    (payload["iss"], payload["jti"]),
+                ).fetchone()
+                if old:
+                    if old[0] != assertion_digest:
+                        raise ApprovalAssertionError(
+                            "approval assertion jti was reused with different signed content"
+                        )
+                    # Exact assertion retries are idempotent. The governance
+                    # ledger's unique (request, role) key prevents a second effect.
+                    con.execute("COMMIT")
+                    return True
                 con.execute(
                     "INSERT INTO approval_assertion_replays VALUES(?,?,?,?)",
                     (payload["iss"], payload["jti"], assertion_digest, now),
