@@ -30,6 +30,11 @@ def _corpus_events():
             currency=p.get("currency"), maturity=p.get("maturity"),
             denomination=p.get("denomination"), valuation_basis=p.get("valuation_basis"),
         ) for p in raw["postings"])
+        if raw["event_type"] == "impairment_allowance_recognition":
+            # Explicit synthetic reporting basis for this frozen test corpus.
+            lines = tuple(replace(line, currency="LCU", valuation_basis="NOMINAL")
+                          if line.account == "impairment_allowance" else line
+                          for line in lines)
         evidence = None
         if raw["event_type"] == "legal_debt_forgiveness":
             # Evidence is supplied by the integration fixture; the frozen corpus stays immutable.
