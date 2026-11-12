@@ -7,7 +7,7 @@ legal/rights and financial stores before production use.
 """
 from __future__ import annotations
 
-from contextlib import closing
+from contextlib import closing, contextmanager
 import hashlib
 import json
 import os
@@ -58,6 +58,33 @@ def _connect(path):
     con.execute("PRAGMA synchronous=FULL")
     con.execute("PRAGMA journal_mode=WAL")
     return con
+
+
+@contextmanager
+def _exclusive_process_lock(path):
+    """Crash-released cross-process lock shared by coordinator instances.
+
+    The lock is a separate SQLite database so participant/coordinator writes
+    can proceed while this transaction remains open. A process death releases
+    the OS file lock and rolls back the empty transaction. This deliberately
+    serializes execution globally; it is a local/shared-filesystem conformance
+    mechanism, not a distributed lease for hosts without reliable SQLite locks.
+    """
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(str(path), timeout=30, isolation_level=None)
+    try:
+        con.execute("PRAGMA busy_timeout=30000")
+        con.execute("PRAGMA journal_mode=DELETE")
+        con.execute("BEGIN EXCLUSIVE")
+        yield
+        con.execute("COMMIT")
+    except Exception:
+        if con.in_transaction:
+            con.execute("ROLLBACK")
+        raise
+    finally:
+        con.close()
 
 
 class SQLiteParticipant:
@@ -293,6 +320,9 @@ class CrossRegisterCoordinator:
             raise CoordinatorError("participant mapping/name mismatch")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        self.execution_lock_path = self.database_path.with_name(
+            self.database_path.name + ".execution-lock.sqlite3"
+        )
         self.participants = dict(participants)
         with closing(_connect(self.database_path)) as con:
             con.executescript("""
@@ -545,6 +575,12 @@ class CrossRegisterCoordinator:
         _fault("after_commit_barrier")
 
     def execute(self, txid):
+        # One shared SQLite exclusive lock serializes independent coordinator
+        # processes; the kernel releases it automatically on process death.
+        with _exclusive_process_lock(self.execution_lock_path):
+            return self._execute_locked(txid)
+
+    def _execute_locked(self, txid):
         # A client may retry after losing the response to a successful commit.
         # Never attempt to move a terminal transaction back into PREPARING.
         state = self.state(txid)
@@ -557,7 +593,7 @@ class CrossRegisterCoordinator:
         if state == "ABORTED":
             return "ABORTED"
         if state in {"ABORT_DECIDED", "COMMIT_DECIDED", "COMMITTING"}:
-            return self.recover(txid)
+            return self._recover_locked(txid)
         if state not in {"NEW", "PREPARING", "PREPARED"}:
             raise CoordinatorError(f"unsupported execute state: {state}")
 
@@ -585,6 +621,10 @@ class CrossRegisterCoordinator:
         return self.state(txid)
 
     def recover(self, txid):
+        with _exclusive_process_lock(self.execution_lock_path):
+            return self._recover_locked(txid)
+
+    def _recover_locked(self, txid):
         with closing(_connect(self.database_path)) as con:
             row = con.execute(
                 "SELECT state FROM coordinator_transactions WHERE transaction_id=?", (txid,)
