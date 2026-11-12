@@ -64,6 +64,9 @@ def main():
     assert service_by_cell["cell-4"].physical_units == 2.0
     assert service_by_cell["cell-4"].operating_units == 1.0
     assert service_by_cell["cell-4"].capital_multiplier == 0.5
+    assert model.cells["cell-4"].capital == 0.5
+    assert all(model.cells[cell_id].capital == 1.0
+               for cell_id in model.cells if cell_id != "cell-4")
     result = model.step(1)
     assert model.validate() is True
     assert result.period == 1 and model.periods[-1].period == 1
@@ -92,7 +95,8 @@ def main():
                       "synthetic_basic_price",f"{scenario_id}::PRICE::001")
     valuation = value_quantity(product,quantity,price)
     assert valuation.quantity == D("2.5") and valuation.value == D("10")
-    assert valuation.source_id == scenario_id
+    assert valuation.source_id == f"{scenario_id}::PRICE::001"
+    assert valuation.native_unit == "t" and valuation.currency == "LCU"
 
     # 3) Labour/time/consent: planned and delivered hours remain distinct.
     allocated = validate_time_budget((
