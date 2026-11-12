@@ -2069,3 +2069,16 @@ Added `prototype/external_checkpoints.py` and `audit_external_checkpoints.py`. T
 **Evidence status:** source and CI wiring committed; neither new audit has completed exact-HEAD CI in this session. No PASS is claimed.
 
 **Production boundary:** the local SQLite anchor is a conformance fixture, not independently administered WORM/object-lock storage. Actual KMS/HSM key custody, external trust-root and revocation management, remote monotonic sequence anchoring, and real six-register rebuild execution remain open. The governance ledger records receipts and switches a generation pointer; it does not itself rebuild the authoritative domain stores.
+
+
+### Crash barriers, checkpoint-bound reopening and six-store DR drill — 12 November 2026
+
+Expanded `audit_cross_register_crash_matrix.py` to 27 subprocess termination points, including the durable all-prepared barrier and the exact irreversible `COMMIT_DECIDED` point. Recovery semantics are split at that boundary: pre-decision must abort all participants without effects; post-decision must finish all six commits and publish the read barrier. The coordinator now seals canonical transaction envelopes and operation payload dimensions against update, and participant payloads must be JSON objects.
+
+Period governance now requires the external checkpoint verifier to return the verified manifest. The governance ledger checks that close/reopen/publication manifests identify the exact period and projection generation. Reopening binds to the currently active generation checkpoint, preventing reuse of a stale prior-generation checkpoint.
+
+Added `audit_cross_register_disaster_recovery.py`: seven independent protocol databases (six participant stores plus coordinator) are backed up online, integrity/foreign-key checked, bound to a combined Ed25519-signed backup digest, corrupted and quarantined, restored, reopened and replay-verified. The test checks all six native payloads, the commit barrier and idempotent recovery with no duplicate effects.
+
+**Evidence status:** implementation and CI wiring committed; exact-HEAD execution and log inspection are still pending. No PASS is claimed.
+
+**Production boundary:** all six SQLite participant stores remain protocol conformance stores rather than adapters to authoritative domain registers. The DR test uses a local anchor, not a remote WORM/object-lock trust domain; no production RPO/RTO is established. Real domain rebuild receipts, physical/financial reconciliation, external KMS/HSM custody and remote anti-rollback storage remain OPEN.
