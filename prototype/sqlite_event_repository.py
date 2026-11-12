@@ -13,11 +13,13 @@ from hashlib import sha256
 import json
 import sqlite3
 from contextlib import closing
+from types import SimpleNamespace
 from typing import Callable, Mapping
 
 from real_economy_event_bridge import (
     EventBridgeConflict, EventBridgeError, canonical_json, map_domain_event,
 )
+from real_economy_event_replay import audit_canonical_event_log, _store_digest
 
 
 class SQLiteRepositoryError(RuntimeError):
@@ -348,6 +350,7 @@ class SQLiteEventRepository:
             raise SQLiteRepositoryError("global event sequence is not contiguous")
         by_command = {}
         aggregate_versions = {}
+        replay_events = []
         for row in events:
             try:
                 envelope = json.loads(row["envelope_json"])
@@ -370,10 +373,23 @@ class SQLiteEventRepository:
                     raise SQLiteRepositoryError("domain payload digest mismatch")
             except (KeyError, TypeError, ValueError) as exc:
                 raise SQLiteRepositoryError("malformed durable event envelope") from exc
+            replay_events.append(SimpleNamespace(
+                sequence=row["sequence"], event_id=row["event_id"],
+                event_type=row["event_type"], payload=envelope,
+                idempotency_key=row["idempotency_key"],
+                digest=_store_digest(row["event_type"], envelope),
+            ))
             key = row["command_id"]
             by_command.setdefault(key, []).append(row)
             aggregate_key = (row["aggregate_type"], row["aggregate_id"])
             aggregate_versions.setdefault(aggregate_key, set()).add(row["aggregate_version"])
+        class _ReplayView:
+            def replay(self):
+                return tuple(replay_events)
+        try:
+            audit_canonical_event_log(_ReplayView())
+        except EventBridgeError as exc:
+            raise SQLiteRepositoryError("canonical event replay audit failed") from exc
         receipt_by_command = {r["command_id"]: r for r in commands}
         if set(by_command) != set(receipt_by_command):
             raise SQLiteRepositoryError("event groups and command receipts differ")
