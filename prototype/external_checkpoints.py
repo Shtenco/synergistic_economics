@@ -241,9 +241,25 @@ class LocalImmutableAnchor:
             return payload
 
     def advance_latest(self, service_id, sequence, object_key, object_digest):
+        if not isinstance(service_id, str) or not service_id or service_id != service_id.strip():
+            raise CheckpointError("service_id must be trimmed non-empty text")
+        if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
+            raise CheckpointError("checkpoint sequence must be a non-negative integer")
+        if not isinstance(object_key, str) or not object_key or object_key != object_key.strip():
+            raise CheckpointError("checkpoint object key must be trimmed non-empty text")
+        object_digest = _hash(object_digest, "object_digest")
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                obj = con.execute(
+                    "SELECT object_digest,object_bytes FROM checkpoint_objects WHERE object_key=?",
+                    (object_key,),
+                ).fetchone()
+                if obj is None:
+                    raise CheckpointError("cannot anchor a checkpoint object that does not exist")
+                actual_digest = sha256_bytes(bytes(obj["object_bytes"]))
+                if obj["object_digest"] != actual_digest or actual_digest != object_digest:
+                    raise CheckpointError("checkpoint anchor digest does not match immutable object bytes")
                 old = con.execute(
                     "SELECT checkpoint_sequence,object_key,object_digest FROM checkpoint_latest WHERE service_id=?",
                     (service_id,)
