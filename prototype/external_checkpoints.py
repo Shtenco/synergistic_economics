@@ -218,7 +218,7 @@ class LocalImmutableAnchor:
             con.execute("BEGIN IMMEDIATE")
             try:
                 old = con.execute(
-                    "SELECT checkpoint_sequence FROM checkpoint_latest WHERE service_id=?",
+                    "SELECT checkpoint_sequence,object_key,object_digest FROM checkpoint_latest WHERE service_id=?",
                     (service_id,)
                 ).fetchone()
                 current = old["checkpoint_sequence"] if old else -1
