@@ -52,6 +52,65 @@ def _child(root, crash_point):
     raise AssertionError(f"crash point was not reached: {crash_point}")
 
 
+def _execute_child(root):
+    coordinator, _ = _paths(Path(root))
+    assert coordinator.execute("coordinator-concurrent-001") == "COMMITTED"
+
+
+def _recover_child(root):
+    coordinator, _ = _paths(Path(root))
+    assert coordinator.recover("coordinator-concurrent-recovery-001") == "COMMITTED"
+
+
+def _run_concurrency_controls():
+    with tempfile.TemporaryDirectory(prefix="synergy-coord-concurrent-execute-") as directory:
+        root = Path(directory)
+        coordinator, participants = _paths(root)
+        coordinator.submit(
+            "coordinator-concurrent-001", "scenario-concurrent",
+            "execute-vs-execute", _operations(),
+        )
+        workers = [
+            subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), "--execute", str(root)],
+                cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ) for _ in range(2)
+        ]
+        results = [worker.communicate(timeout=45) + (worker.returncode,) for worker in workers]
+        assert all(code == 0 for _, _, code in results), results
+        assert coordinator.state("coordinator-concurrent-001") == "COMMITTED"
+        assert coordinator.is_visible("coordinator-concurrent-001")
+        assert all(p.event_count("coordinator-concurrent-001") == 1 for p in participants.values())
+
+    with tempfile.TemporaryDirectory(prefix="synergy-coord-concurrent-recover-") as directory:
+        root = Path(directory)
+        coordinator, participants = _paths(root)
+        coordinator.submit(
+            "coordinator-concurrent-recovery-001", "scenario-concurrent",
+            "recover-vs-recover", _operations(),
+        )
+        env = os.environ.copy()
+        env["SYNERGY_COORDINATOR_CRASH_AT"] = "after_commit_decision"
+        crashed = subprocess.run(
+            [sys.executable, str(Path(__file__).resolve()), "--crash-recovery-setup", str(root)],
+            cwd=ROOT, env=env, text=True, capture_output=True, check=False,
+        )
+        assert crashed.returncode == CRASH_EXIT, crashed.stderr[-1500:]
+        workers = [
+            subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), "--recover", str(root)],
+                cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            ) for _ in range(2)
+        ]
+        results = [worker.communicate(timeout=45) + (worker.returncode,) for worker in workers]
+        assert all(code == 0 for _, _, code in results), results
+        recovered, participants = _paths(root)
+        assert recovered.state("coordinator-concurrent-recovery-001") == "COMMITTED"
+        assert recovered.is_visible("coordinator-concurrent-recovery-001")
+        assert all(p.event_count("coordinator-concurrent-recovery-001") == 1
+                   for p in participants.values())
+
+
 def _negative_controls():
     with tempfile.TemporaryDirectory(prefix="synergy-coord-negative-") as directory:
         root = Path(directory)
@@ -211,15 +270,26 @@ def _run_parent():
                 assert participant.event_count("coordinator-crash-matrix-001") == expected_events
 
     _negative_controls()
+    _run_concurrency_controls()
     print(f"PASS: {len(crash_points)} subprocess termination points")
     print("PASS: pre-COMMIT_DECIDED recovery aborts all prepared participants")
     print("PASS: post-COMMIT_DECIDED recovery completes all six participants")
     print("PASS: no partial transaction crosses the coordinator visibility barrier")
     print("PASS: repeated recovery is idempotent; no duplicate native event effects")
+    print("PASS: concurrent execute/execute and recover/recover workers are serialized")
 
 
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--child":
         _child(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) == 3 and sys.argv[1] == "--execute":
+        _execute_child(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == "--recover":
+        _recover_child(sys.argv[2])
+    elif len(sys.argv) == 3 and sys.argv[1] == "--crash-recovery-setup":
+        os.environ["SYNERGY_COORDINATOR_CRASH_AT"] = "after_commit_decision"
+        coordinator, _ = _paths(Path(sys.argv[2]))
+        coordinator.execute("coordinator-concurrent-recovery-001")
+        raise AssertionError("crash point was not reached")
     else:
         _run_parent()
