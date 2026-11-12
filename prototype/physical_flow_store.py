@@ -91,7 +91,7 @@ def validate_pair(outflow, inflow):
     shared = ("origin_node","destination_node","origin_boundary","destination_boundary",
               "product_id","grade_id","quantity","unit","event_time","period","flow_class",
               "quality","measurement_method","uncertainty","evidence_status")
-    for field in shared:
+    for field in shared + ("correction_of", "correction_reason"):
         if getattr(outflow, field) != getattr(inflow, field):
             raise PhysicalFlowError(f"endpoint {field} mismatch")
     if outflow.node_id != outflow.origin_node or inflow.node_id != inflow.destination_node:
