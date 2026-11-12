@@ -23,12 +23,13 @@ from sfc_projection_store import append_projected_group, verify_projection_repla
 CRASH_EXIT = 83
 STAGES = (
     "INSERT INTO SFC_PROJECTION_POSITIONS",
+    "INSERT INTO SFC_PROJECTION_POSITIONS@4",
     "INSERT INTO SFC_CONTROL_POSITIONS",
+    "INSERT INTO SFC_CONTROL_POSITIONS@3",
     "INSERT INTO SFC_PROJECTION_RUNTIME",
     "INSERT INTO EVENT_GROUPS",
     "INSERT INTO EVENTS(",
     "INSERT INTO JOURNAL_LINES",
-    "INSERT INTO SFC_PROJECTION_POSITIONS",
     "UPDATE SFC_PROJECTION_POSITIONS SET",
     "UPDATE SFC_PROJECTION_RUNTIME SET CURRENT_PERIOD",
     "INSERT INTO SFC_SECTOR_FLOWS",
@@ -45,19 +46,30 @@ STAGES = (
 
 class CrashConnection(sqlite3.Connection):
     crash_stage = None
+    crash_occurrence = 1
+    crash_hits = 0
 
     def execute(self, sql, parameters=()):
         result = super().execute(sql, parameters)
         normalized = " ".join(str(sql).upper().split())
         if self.crash_stage and self.crash_stage in normalized:
-            os._exit(CRASH_EXIT)
+            type(self).crash_hits += 1
+            if type(self).crash_hits >= type(self).crash_occurrence:
+                os._exit(CRASH_EXIT)
         return result
 
 
 def _child(database, stage):
     registry, events = _corpus_events()
     store = FinancialEventStore(database)
-    CrashConnection.crash_stage = stage
+    if "@" in stage:
+        needle, occurrence = stage.rsplit("@", 1)
+        CrashConnection.crash_stage = needle
+        CrashConnection.crash_occurrence = int(occurrence)
+    else:
+        CrashConnection.crash_stage = stage
+        CrashConnection.crash_occurrence = 1
+    CrashConnection.crash_hits = 0
 
     def crash_connect():
         con = sqlite3.connect(
