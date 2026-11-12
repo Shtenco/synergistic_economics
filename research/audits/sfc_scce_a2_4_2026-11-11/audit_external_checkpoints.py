@@ -79,8 +79,18 @@ def main():
                  "older checkpoint was accepted after a newer external anchor")
         _rejects(lambda: anchor.advance_latest(manifest1["service_id"], 12, ref1, digest1),
                  "external latest sequence accepted a rollback")
-        _rejects(lambda: anchor.advance_latest(manifest1["service_id"], 15, "gap-object", "0" * 64),
-                 "external latest sequence accepted an unexplained gap")
+        _rejects(lambda: anchor.advance_latest(manifest1["service_id"], 15, "missing-object", "0" * 64),
+                 "external latest sequence accepted an absent immutable object")
+        mismatch_bytes = b"immutable-object-for-digest-control"
+        anchor.put_immutable("wrong-digest-object", mismatch_bytes)
+        _rejects(lambda: anchor.advance_latest(
+            manifest1["service_id"], 14, "wrong-digest-object", "0" * 64
+        ), "external latest sequence accepted a mismatched object digest")
+        anchor.put_immutable("gap-object", b"immutable-object-for-gap-control")
+        _rejects(lambda: anchor.advance_latest(
+            manifest1["service_id"], 15, "gap-object",
+            sha256_bytes(b"immutable-object-for-gap-control")
+        ), "external latest sequence accepted an unexplained gap")
         with sqlite3.connect(root / "independent-anchor.sqlite3") as con:
             _rejects(lambda: con.execute(
                 "UPDATE checkpoint_history SET object_digest=? WHERE service_id=? AND checkpoint_sequence=?",
