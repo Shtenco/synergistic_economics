@@ -61,5 +61,62 @@ class DurableDomainRegisterTests(unittest.TestCase):
             self.assertTrue(store.verify())
 
 
+
+    def test_physical_integrity_matrix(self):
+        cases=[("payload","UPDATE physical_flows SET payload_json='{}' WHERE flow_id='F-1'"),("digest","UPDATE physical_flows SET payload_sha256='bad' WHERE flow_id='F-1'"),("chain","UPDATE physical_flows SET chain_hash='bad' WHERE flow_id='F-1'"),("tail","UPDATE physical_flow_meta SET tail_hash='bad' WHERE singleton_id=1"),("count","UPDATE physical_flow_meta SET event_count=8 WHERE singleton_id=1")]
+        for name,sql in cases:
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as tmp:
+                db=Path(tmp)/"p.db"; st=PhysicalFlowStore(db); st.append(*flow_pair("F-1","mine","mill",12))
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER physical_flows_no_update"); con.execute(sql)
+                self.assertFalse(st.verify())
+                for read in (st.flow_count,lambda:st.node_net("mine","steel","S235","P1","t"),lambda:st.consolidated_net({"mine","mill"},"steel","S235","P1","t")):
+                    with self.assertRaises(Exception): read()
+
+    def test_capital_integrity_matrix(self):
+        cases=[("payload","UPDATE capital_cohort_periods SET payload_json='{}' WHERE period=2026"),("payload_hash","UPDATE capital_cohort_periods SET payload_sha256='bad' WHERE period=2026"),("chain","UPDATE capital_cohort_periods SET chain_hash='bad' WHERE period=2026"),("closing","UPDATE capital_cohort_periods SET closing_state_json='{}' WHERE period=2026"),("closing_hash","UPDATE capital_cohort_periods SET state_sha256='bad' WHERE period=2026"),("tail","UPDATE capital_cohort_meta SET tail_hash='bad' WHERE singleton_id=1"),("count","UPDATE capital_cohort_meta SET period_count=8 WHERE singleton_id=1"),("opening","UPDATE capital_cohort_meta SET opening_state_json='{}' WHERE singleton_id=1"),("opening_hash","UPDATE capital_cohort_meta SET opening_state_sha256='bad' WHERE singleton_id=1")]
+        for name,sql in cases:
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as tmp:
+                db=Path(tmp)/"c.db"; st=CapitalCohortStore(db)
+                opening=(CapitalCohort("C1","cell-1","machine",2020,6,10,10,"operating",.9,.8,.95),)
+                ev=(CohortEvent("E1","C1","physical_loss",2,"operating",None,"accident"),)
+                st.initialize(opening); st.append_period(2026,ev,())
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER capital_cohort_periods_no_update"); con.execute(sql)
+                self.assertFalse(st.verify())
+                with self.assertRaises(Exception): st.current_state()
+
+    def test_product_integrity_matrix(self):
+        cases=[("payload","UPDATE product_events SET payload_json='{}' WHERE event_id='V1'"),("digest","UPDATE product_events SET payload_sha256='bad' WHERE event_id='V1'"),("chain","UPDATE product_events SET chain_hash='bad' WHERE event_id='V1'"),("tail","UPDATE product_register_meta SET tail_hash='bad' WHERE singleton_id=1"),("count","UPDATE product_register_meta SET event_count=8 WHERE singleton_id=1")]
+        for name,sql in cases:
+            with self.subTest(name=name),tempfile.TemporaryDirectory() as tmp:
+                db=Path(tmp)/"r.db"; st=ProductRegister(db)
+                spec=ProductSpec("steel","S235","mass","t","stockable","period_flow","SPEC-E1")
+                bal=ProductBalance("B1","steel","S235","P1",0,"plant-A","t",D("0"),D("10"),D("2"),D("3"),D("4"),D("0"),D("2"),D("1"),D("2"),"BAL-E1")
+                price=PriceQuote("P1-PRICE","steel","S235",D("2"),"t","LCU","P1","basic_price","SRC-1","PRICE-E1")
+                val=ValuationRecord("V1","B1","P1-PRICE","output",D("20"),"VAL-E1")
+                st.register_product(spec); st.record_balance(bal); st.record_price(price); st.record_valuation(val)
+                with closing(__import__("sqlite3").connect(db)) as con: con.execute("DROP TRIGGER product_events_no_update"); con.execute(sql)
+                self.assertFalse(st.verify())
+                with self.assertRaises(Exception): st.valuation("V1")
+
+    def test_correction_lineage_replayed_after_fully_rehashed_orphan_tamper(self):
+        import hashlib,json
+        from physical_flow_store import _canonical
+        with tempfile.TemporaryDirectory() as tmp:
+            db=Path(tmp)/"p.db"; st=PhysicalFlowStore(db); st.append(*flow_pair("ORIG","mine","mill",12))
+            common=dict(flow_id="CORR",origin_node="mill",destination_node="mine",origin_boundary="domestic",destination_boundary="domestic",product_id="steel",grade_id="S235",quantity=D("12"),unit="t",event_time="2026-11-12T12:00:00Z",period="P1",flow_class="compensation",quality="conforming",measurement_method="weighbridge",uncertainty=D("0.01"),evidence_status="measured",correction_of="ORIG",correction_reason="reversal")
+            st.append(FlowPosting(node_id="mill",role="outflow",**common),FlowPosting(node_id="mine",role="inflow",**common))
+            self.assertTrue(st.verify())
+            with closing(__import__("sqlite3").connect(db)) as con:
+                con.execute("DROP TRIGGER physical_flows_no_update")
+                seq,raw=con.execute("SELECT commit_sequence,payload_json FROM physical_flows WHERE flow_id='CORR'").fetchone()
+                payload=json.loads(raw); payload["outflow"]["correction_of"]="ORPHAN"; payload["inflow"]["correction_of"]="ORPHAN"
+                encoded=_canonical(payload); digest=hashlib.sha256(encoded.encode()).hexdigest()
+                prev=con.execute("SELECT chain_hash FROM physical_flows WHERE flow_id='ORIG'").fetchone()[0]
+                chain=PhysicalFlowStore._chain_hash(seq,"CORR",digest,prev)
+                con.execute("UPDATE physical_flows SET payload_json=?,payload_sha256=?,previous_hash=?,chain_hash=? WHERE flow_id='CORR'",(encoded,digest,prev,chain))
+                con.execute("UPDATE physical_flow_meta SET tail_hash=? WHERE singleton_id=1",(chain,))
+            self.assertFalse(st.verify())
+            with self.assertRaises(Exception): st.node_net("mine","steel","S235","P1","t")
+
 if __name__=="__main__":
     unittest.main()
