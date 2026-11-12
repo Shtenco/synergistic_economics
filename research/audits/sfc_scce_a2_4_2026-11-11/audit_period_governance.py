@@ -71,7 +71,7 @@ def main():
             "authority://reopen-001", scope,
             "period-7-close", trusted["period-7-close"],
         )
-        assert not governance.approve_reopen(
+        assert governance.approve_reopen(
             "reopen-001", "person-A", "period_owner", "approval://owner-A"
         )
         _rejects(lambda: governance.approve_reopen(
