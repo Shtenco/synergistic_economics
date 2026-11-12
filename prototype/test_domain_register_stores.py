@@ -10,10 +10,10 @@ from capital_cohort_store import CapitalCohortStore
 from product_register import ProductSpec, ProductBalance, PriceQuote, ValuationRecord, ProductRegister
 
 
-def flow_pair(flow_id, origin, destination, quantity):
+def flow_pair(flow_id, origin, destination, quantity, unit="t"):
     common=dict(flow_id=flow_id,origin_node=origin,destination_node=destination,
         origin_boundary="domestic",destination_boundary="domestic",product_id="steel",
-        grade_id="S235",quantity=D(str(quantity)),unit="t",event_time="2026-11-12T12:00:00Z",
+        grade_id="S235",quantity=D(str(quantity)),unit=unit,event_time="2026-11-12T12:00:00Z",
         period="P1",flow_class="internal_transfer",quality="conforming",
         measurement_method="weighbridge",uncertainty=D("0.01"),evidence_status="measured")
     return (FlowPosting(node_id=origin,role="outflow",**common),
@@ -27,7 +27,9 @@ class DurableDomainRegisterTests(unittest.TestCase):
             pair=flow_pair("F-1","mine","mill",12)
             self.assertTrue(store.append(*pair))
             self.assertFalse(store.append(*pair))
+            self.assertTrue(store.append(*flow_pair("F-2","mine","mill",1000,"kg")))
             self.assertEqual(store.node_net("mine","steel","S235","P1","t"),D("-12"))
+            self.assertEqual(store.node_net("mine","steel","S235","P1","kg"),D("-1000"))
             self.assertEqual(store.consolidated_net({"mine","mill"},"steel","S235","P1","t"),D("0"))
             self.assertTrue(store.verify())
 
