@@ -44,6 +44,12 @@ def _dec(value, field):
     return result
 
 
+def _canon(value):
+    if not isinstance(value, D) or not value.is_finite():
+        raise SFCProjectionStoreError("projection amount must be a finite Decimal")
+    return canonical_decimal(format(value, "f"))
+
+
 def _control_rows(rows):
     if not isinstance(rows, (tuple, list)) or not rows:
         raise SFCProjectionStoreError("explicit control opening positions are required")
@@ -336,7 +342,7 @@ def _apply_instrument_delta(con, identity, period, component, amount):
     if closing < 0:
         raise SFCProjectionStoreError("GOLD-2A recognized instrument position cannot become negative")
     con.execute(f"UPDATE sfc_projection_positions SET {current_component}=?,closing_balance=? WHERE {where} AND period=?",
-                (canonical_decimal(new_component),canonical_decimal(closing)) + key + (period,))
+                (_canon(new_component),_canon(closing)) + key + (period,))
 
 
 def _apply_control_delta(con, control_id, entity, sector, currency, basis, period, component, amount):
@@ -355,7 +361,7 @@ def _apply_control_delta(con, control_id, entity, sector, currency, basis, perio
         raise SFCProjectionStoreError(f"{control_id} control position cannot become negative")
     con.execute(f"""UPDATE sfc_control_positions SET {col}=?,closing_balance=?
         WHERE control_id=? AND entity_id=? AND currency=? AND valuation_basis=? AND period=?""",
-        (canonical_decimal(updated),canonical_decimal(closing),control_id,entity,currency,basis,period))
+        (_canon(updated),_canon(closing),control_id,entity,currency,basis,period))
 
 
 def _update_sector_flows(con, identity, component, amount, period):
@@ -373,7 +379,7 @@ def _update_sector_flows(con, identity, component, amount, period):
         con.execute("""INSERT INTO sfc_sector_flows VALUES(?,?,?,?,?)
             ON CONFLICT(period,sector) DO UPDATE SET transaction_asset_delta=excluded.transaction_asset_delta,
             transaction_liability_delta=excluded.transaction_liability_delta,financial_net_lending=excluded.financial_net_lending""",
-            (period,sector,canonical_decimal(new_a),canonical_decimal(new_l),canonical_decimal(nl)))
+            (period,sector,_canon(new_a),_canon(new_l),_canon(nl)))
 
 
 def _assert_control_invariants(con, period):
@@ -478,7 +484,7 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                         _apply_instrument_delta(con,identity,event.effective_period,component,amount)
                         con.execute("""INSERT INTO sfc_instrument_deltas VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                             (event.event_id,delta_index,*_position_key(identity),event.effective_period,component,
-                             canonical_decimal(amount),canonical_decimal(opening)))
+                             _canon(amount),_canon(opening)))
                         _update_sector_flows(con,identity,component,amount,event.effective_period)
                         delta_index += 1
                     control_index = 0
@@ -492,7 +498,7 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
                         _apply_control_delta(con,control_id,entity,sector,currency,basis,event.effective_period,component,amount)
                         con.execute("""INSERT INTO sfc_control_deltas VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
                             (event.event_id,control_index,control_id,entity,sector,currency,basis,
-                             event.effective_period,component,canonical_decimal(amount),canonical_decimal(opening)))
+                             event.effective_period,component,_canon(amount),_canon(opening)))
                         control_index += 1
                     _assert_control_invariants(con,event.effective_period)
                     digest = _state_hash(con,event.effective_period)
@@ -590,16 +596,16 @@ def verify_projection_replay(store: FinancialEventStore) -> bool:
                         inst_payload.append(dict(zip(
                             tuple(SFCIdentity.__dataclass_fields__),
                             ident
-                        )) | {"opening_balance":canonical_decimal(vals[0]),"transaction_delta":canonical_decimal(vals[1]),
-                              "revaluation_delta":canonical_decimal(vals[2]),"other_volume_delta":canonical_decimal(vals[3]),
-                              "closing_balance":canonical_decimal(vals[0]+sum(vals[1:],D(0)))})
+                        )) | {"opening_balance":_canon(vals[0]),"transaction_delta":_canon(vals[1]),
+                              "revaluation_delta":_canon(vals[2]),"other_volume_delta":_canon(vals[3]),
+                              "closing_balance":_canon(vals[0]+sum(vals[1:],D(0)))})
                 ctrl_payload=[]
                 for (cid,ent,sec,cur,basis,p),vals in sorted(control_expected.items()):
                     if p==target:
                         ctrl_payload.append({"control_id":cid,"entity_id":ent,"sector":sec,"currency":cur,
-                            "valuation_basis":basis,"opening_balance":canonical_decimal(vals[0]),
-                            "transaction_delta":canonical_decimal(vals[1]),"revaluation_delta":canonical_decimal(vals[2]),
-                            "other_volume_delta":canonical_decimal(vals[3]),"closing_balance":canonical_decimal(vals[0]+sum(vals[1:],D(0)))})
+                            "valuation_basis":basis,"opening_balance":_canon(vals[0]),
+                            "transaction_delta":_canon(vals[1]),"revaluation_delta":_canon(vals[2]),
+                            "other_volume_delta":_canon(vals[3]),"closing_balance":_canon(vals[0]+sum(vals[1:],D(0)))})
                 digest=hashlib.sha256(_json({"period":target,"instruments":inst_payload,"controls":ctrl_payload}).encode("utf-8")).hexdigest()
                 if checkpoints.get(ev["event_id"]) != digest:
                     return False
