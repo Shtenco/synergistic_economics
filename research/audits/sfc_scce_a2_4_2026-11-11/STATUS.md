@@ -1973,3 +1973,20 @@ The frozen GOLD-2A corpus is unchanged. Its legal-forgiveness event has no legal
 Current branch HEAD: 3c999606a3a07ca8ee91791dfd7a4a08971d87f8. Exact-head Prototype validation run 43189796647 and A2.4 audit-control run 43189787395 are QUEUED; another Prototype run 43189787855 is also QUEUED. No conclusion, job steps or logs are available yet; no PASS is claimed. PR #4 remains Draft/Open and main is unchanged.
 
 Remaining open gates: exact-head CI execution; a production cross-register transaction/recovery coordinator; P5 sidecar recovery; external signed checkpoints and operational multi-writer/crash testing; authoritative legal-evidence integration; closed-period correction/reopen governance. A2.4.7 Gate 2 and A2.4.8 remain OPEN/BLOCKED. No empirical synergy, legal enforceability or production-readiness claim follows from this implementation.
+
+
+### Cross-register identity separation and CI queue control — 12 November
+
+The unified integration fixture was tightened so that a scenario provenance root is no longer reused as every register's event identifier. The SCCE engine, physical flow, capital cohort, labour, product-price source and financial group now retain distinct record/event keys, while the shared scenario root is carried in each test envelope and as the financial group's causation ID. The test asserts six distinct register record IDs under one scenario root. This prevents a shared correlation identifier from being mistaken for six identical events.
+
+The three relevant workflows now use a branch/workflow concurrency group with cancel-in-progress enabled. This is intended to supersede stale queued branch runs when a newer HEAD is pushed, rather than consuming runner capacity on intermediate revisions. Some earlier queued jobs remain visible while GitHub processes cancellation; this is not evidence that the newest code has executed.
+
+At HEAD fde0e72189d2a18b231b40a565a243eec9ae8a87:
+- A2.4 audit control fixtures: run 43191503973, QUEUED.
+- Prototype validation: run 43191511330, QUEUED.
+- SCCE Stage-C2 validation: run 43191511372, QUEUED.
+- No exact-HEAD workflow conclusion or execution logs are available. No PASS is claimed.
+
+PR #4 remains Draft/Open/unmerged. Main remains unchanged. The cross-register fixture remains synthetic and does not establish a single production transaction coordinator. P2's code-level atomic boundary is SQLite-local; it does not establish distributed atomicity across the physical, cohort, labour, product, rights and financial registers.
+
+Next verification gate: wait for the exact HEAD workflows to leave QUEUED, inspect the A2.4 job logs step-by-step, repair any failures, and only then advance to crash/restart and cross-register recovery controls.
