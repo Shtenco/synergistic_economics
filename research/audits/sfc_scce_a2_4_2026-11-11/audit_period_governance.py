@@ -1,6 +1,7 @@
 """Adversarial closed-period governance integrated with signed Ed25519 checkpoints."""
 from pathlib import Path
 import hashlib
+import json
 import sqlite3
 import sys
 import tempfile
@@ -21,7 +22,7 @@ def _sha(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _checkpoint(signer, anchor, sequence, generation):
+def _checkpoint(signer, anchor, sequence, generation, event_root=None, projection_hash=None):
     backup = f"period-{7}-generation-{generation}-backup".encode()
     manifest = {
         "manifest_schema_version": 1,
@@ -31,10 +32,10 @@ def _checkpoint(signer, anchor, sequence, generation):
         "projection_generation": generation,
         "commit_sequence": sequence,
         "event_count": 100,
-        "event_log_root": _sha("period-7-event-root"),
+        "event_log_root": event_root or _sha("period-7-event-root"),
         "instrument_opening_hash": _sha("instrument-openings"),
         "control_opening_hash": _sha("control-openings"),
-        "projection_state_hash": _sha(f"projection-generation-{generation}"),
+        "projection_state_hash": projection_hash or _sha(f"projection-generation-{generation}"),
         "coverage_count": 100,
         "applied_through_cursor": sequence,
         "period": 7,
@@ -46,6 +47,22 @@ def _checkpoint(signer, anchor, sequence, generation):
     }
     ref, digest = publish_checkpoint(manifest, signer, anchor)
     return ref, digest
+
+
+def _reconciliation_hash(source_root):
+    receipts = [{
+        "register_name": name,
+        "old_generation": 0,
+        "new_generation": 1,
+        "source_event_root": source_root,
+        "event_count": 100,
+        "opening_state_hash": _sha(name + "-opening"),
+        "closing_state_hash": _sha(name + "-closing"),
+        "reconciliation_hash": _sha(name + "-reconciliation"),
+    } for name in sorted(REGISTERS)]
+    canonical = json.dumps(receipts, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def _rejects(call, message):
@@ -114,15 +131,19 @@ def main():
         )
 
         root_hash = _sha("immutable-event-log-root-period-7")
+        global_reconciliation = _reconciliation_hash(root_hash)
         for name in REGISTERS[:-1]:
             governance.record_rebuild(
                 "reopen-001", name, root_hash, 100,
                 _sha(name + "-opening"), _sha(name + "-closing"),
                 _sha(name + "-reconciliation"),
             )
-        generation1_ref, generation1_digest = _checkpoint(signer, anchor, 2, 1)
+        generation1_ref, generation1_digest = _checkpoint(
+            signer, anchor, 2, 1, event_root=root_hash,
+            projection_hash=global_reconciliation,
+        )
         _rejects(lambda: governance.publish_generation(
-            "reopen-001", _sha("global-reconciliation"),
+            "reopen-001", global_reconciliation,
             generation1_ref, generation1_digest,
         ), "generation published without all six register rebuild receipts")
         assert governance.active_generation(7) == 0
@@ -132,12 +153,33 @@ def main():
             _sha("financial-opening"), _sha("financial-closing"),
             _sha("financial-reconciliation"),
         )
+        # A valid signature for the same period/generation is insufficient
+        # when its event root does not match the six participant rebuilds.
+        wrong_root_ref, wrong_root_digest = _checkpoint(
+            signer, anchor, 3, 1, event_root=_sha("wrong-event-root"),
+            projection_hash=global_reconciliation,
+        )
+        _rejects(lambda: governance.publish_generation(
+            "reopen-001", global_reconciliation,
+            wrong_root_ref, wrong_root_digest,
+        ), "publication accepted a signed checkpoint for another event root")
+
+        # The global hash must be the canonical digest of all six receipts.
+        _rejects(lambda: governance.publish_generation(
+            "reopen-001", _sha("wrong-global-reconciliation"),
+            wrong_root_ref, wrong_root_digest,
+        ), "publication accepted an unrelated global reconciliation hash")
+
+        generation1_ref, generation1_digest = _checkpoint(
+            signer, anchor, 4, 1, event_root=root_hash,
+            projection_hash=global_reconciliation,
+        )
         assert governance.publish_generation(
-            "reopen-001", _sha("global-reconciliation"),
+            "reopen-001", global_reconciliation,
             generation1_ref, generation1_digest,
         )
         assert not governance.publish_generation(
-            "reopen-001", _sha("global-reconciliation"),
+            "reopen-001", global_reconciliation,
             generation1_ref, generation1_digest,
         )
         assert not governance.approve_reopen(
