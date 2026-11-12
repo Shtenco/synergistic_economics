@@ -199,7 +199,7 @@ def _validate_line(line: JournalLine, registry: EntityRegistry, period: int) -> 
     if not isinstance(line, JournalLine):
         raise EntityJournalError("journal line has the wrong type")
     _required_text(line.account, "account")
-    if line.side not in {"D", "C"}:
+    if not isinstance(line.side, str) or line.side not in {"D", "C"}:
         raise EntityJournalError("journal side must be D or C")
     _positive_decimal(line.amount, "journal amount")
     if line.institutional_sector != registry.sector_of(line.entity_id, period):
@@ -273,10 +273,10 @@ class EntityJournal:
         if not isinstance(event.lines, tuple) or not event.lines:
             raise EntityJournalError("event lines must be a non-empty immutable tuple")
 
-        debit = sum((line.amount for line in event.lines if line.side == "D"), D("0"))
-        credit = sum((line.amount for line in event.lines if line.side == "C"), D("0"))
         for line in event.lines:
             _validate_line(line, self.registry, event.effective_period)
+        debit = sum((line.amount for line in event.lines if line.side == "D"), D("0"))
+        credit = sum((line.amount for line in event.lines if line.side == "C"), D("0"))
         if debit != credit:
             raise EntityJournalError(f"unbalanced event {event.event_id}: {debit} != {credit}")
 
