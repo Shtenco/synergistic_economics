@@ -10,8 +10,9 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "prototype"))
 AUDIT_DIR = ROOT / "research" / "audits" / "sfc_scce_a2_4_2026-11-11"
+sys.path.insert(0, str(ROOT / "prototype"))
+sys.path.insert(0, str(AUDIT_DIR))
 
 from audit_financial_journal_adapter import _corpus_events
 from audit_sfc_projection_store import _activate
