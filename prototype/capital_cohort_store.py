@@ -15,7 +15,7 @@ from capital_cohort_bridge import (
 )
 
 GENESIS = "0" * 64
-DOMAIN = b"SYNERGY_CAPITAL_COHORT_CHAIN_V1\\0"
+DOMAIN = b"SYNERGY_CAPITAL_COHORT_CHAIN_V1\0"
 
 
 class CapitalCohortStoreError(ValueError):
