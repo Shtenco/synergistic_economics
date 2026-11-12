@@ -71,12 +71,20 @@ def _control_rows(rows):
         if not isinstance(period, int) or isinstance(period, bool) or period != 0:
             raise SFCProjectionStoreError("control openings must explicitly start at period 0")
         amount = canonical_decimal(row.get("amount"))
+        if D(amount) < 0:
+            raise SFCProjectionStoreError("control opening balances must be non-negative")
         key = tuple(item[field] for field in ("control_id", "entity_id", "currency", "valuation_basis")) + (period,)
         if key in seen:
             raise SFCProjectionStoreError("duplicate control opening identity")
         seen.add(key)
         item.update(period=period, amount=amount)
         clean.append(item)
+    owners = {(row["entity_id"],row["currency"],row["valuation_basis"]) for row in clean}
+    for owner in owners:
+        present = {row["control_id"] for row in clean
+                   if (row["entity_id"],row["currency"],row["valuation_basis"]) == owner}
+        if present != CONTROL_IDS:
+            raise SFCProjectionStoreError("each control owner requires explicit allowance and write-off memorandum openings")
     clean.sort(key=lambda x: (x["control_id"], x["entity_id"], x["currency"], x["valuation_basis"], x["period"]))
     return clean
 
