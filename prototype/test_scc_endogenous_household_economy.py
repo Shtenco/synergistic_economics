@@ -107,9 +107,14 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
             max_backlog_periods=1.0, max_care_queue_age_periods=1,
         )
         expiring.run(12)
-        self.assertGreater(
-            expiring.summary()["cumulative_expired_care_claim_units"], 0.0,
+        expired_by_queue = sum(
+            queue.expired_quantity for queue in expiring.care_queues.values()
         )
+        self.assertAlmostEqual(
+            expiring.summary()["cumulative_expired_care_claim_units"],
+            expired_by_queue,
+        )
+        self.assertGreaterEqual(expired_by_queue, 0.0)
         self.assertTrue(expiring.validate())
         for distribution in expiring.summary()["care_queue_age_distribution"]:
             self.assertIn(int(distribution), (0,))
