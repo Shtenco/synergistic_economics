@@ -143,6 +143,27 @@ class NativeStoreParticipantTests(unittest.TestCase):
             self.assertEqual(financial_store.counts()["groups"],1)
             self.assertEqual(reconciled.mirror_group_count,1)
 
+            # Re-open all six native stores and the coordinator as after a process restart.
+            # The financial adapter must rebuild its in-memory journal from the durable group log.
+            reopened_journal=EntityJournal(registry)
+            reopened_financial_store=FinancialEventStore(root/"financial.sqlite3")
+            reopened_financial=make_financial_participant(reopened_financial_store,reopened_journal,AUTH)
+            self.assertIn(first_financial_event.event_id,reopened_journal.events)
+            self.assertTrue(verify_projection_replay(reopened_financial_store))
+            reopened_participants={
+                "physical":make_physical_participant(PhysicalFlowStore(root/"physical.sqlite3"),AUTH),
+                "capital":make_capital_participant(CapitalCohortStore(root/"capital.sqlite3"),AUTH),
+                "product":make_product_participant(ProductRegister(root/"product.sqlite3"),AUTH),
+                "labour":LabourRegister(root/"labour.sqlite3"),
+                "legal_rights":LegalRightsRegister(root/"rights.sqlite3"),
+                "financial":reopened_financial,
+            }
+            reopened_coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",reopened_participants)
+            self.assertTrue(reopened_coordinator.is_visible("TX-NATIVE-5"))
+            replayed_group=reopened_coordinator.committed_event_group("TX-NATIVE-5")
+            self.assertEqual(replayed_group["common_event_id"],group["common_event_id"])
+            self.assertEqual({x["register_id"] for x in replayed_group["events"]},set(PARTICIPANTS))
+
     def test_native_append_before_receipt_is_recovered_idempotently(self):
         with tempfile.TemporaryDirectory() as tmp:
             store=PhysicalFlowStore(Path(tmp)/"physical.sqlite3")

@@ -339,3 +339,8 @@ All six participants now target native stores. Remaining gaps: full lot/reservat
 ## 21. Native append-before-receipt recovery
 
 A deterministic fault-injection test terminates the participant operation after the native physical event append commits but before its receipt is persisted. A newly constructed participant retries the same prepare token; the native append is idempotent, the receipt completes and no duplicate flow is created. This covers the local native append/receipt crash window; full process-kill and multi-participant crash evidence remains in the coordinator crash matrix and exact-head CI.
+
+
+## 22. Native six-store restart recovery
+
+The native integration test reconstructs all six store adapters and the coordinator from their durable database files after a committed transaction. The financial participant rebuilds its in-memory EntityJournal from verified FinancialEventStore group history. The test verifies the original transaction remains visible and its canonical event group is preserved. This proves object/process restart over existing databases, not a clean-environment backup restore; the latter remains required for disaster-recovery acceptance.

@@ -288,6 +288,18 @@ def make_financial_participant(store,journal,authorizer):
     from sfc_projection_store import append_projected_group,verify_projection_replay,_verify_control_openings
     if not isinstance(journal,EntityJournal):
         raise NativeStoreParticipantError("canonical EntityJournal instance is required")
+    # Rebuild the in-memory validator from the durable canonical group log on
+    # process restart. The FinancialEventStore verifies group and posting chains
+    # before exposing any event for replay.
+    for stored in store.iter_groups():
+        group=stored["group"]
+        for raw_event in group.get("events",[]):
+            event=_decode_journal_event(raw_event)
+            previous=journal.events.get(event.event_id)
+            if previous is None:
+                journal.post(event)
+            elif previous!=event:
+                raise NativeStoreParticipantError("in-memory journal conflicts with durable financial event history")
 
     def projection_ready():
         with closing(store._connect()) as con:

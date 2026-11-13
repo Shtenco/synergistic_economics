@@ -46,3 +46,8 @@ The financial T/V/O movement metadata is independently derived by the same `_map
 ## Native commit-retry fault injection
 
 The native participant test suite now injects a failure after PhysicalFlowStore has committed its native append but before the coordinator receipt is persisted. A newly constructed participant retries the same immutable prepare; the native append is idempotent, the receipt completes, and the event count remains one. This covers the native append/receipt crash window without weakening the global commit barrier.
+
+
+## Financial journal restart replay
+
+On adapter construction, committed FinancialEventStore groups are replayed in immutable commit order into the supplied EntityJournal after the store verifies its event-group and posting-mirror chains. A conflicting preloaded in-memory event is rejected. This prevents a restarted process from validating new journal events against an empty in-memory journal while durable financial history already exists. The native integration test reopens all six stores and the coordinator, then verifies the committed event group and global visibility barrier.

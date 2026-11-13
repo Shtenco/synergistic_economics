@@ -118,3 +118,8 @@ All six coordinator participants now use native stores. The physical adapter sti
 ## Native append/receipt crash recovery
 
 The native participant test suite now injects a failure after a physical domain append has committed but before its participant receipt is written. A fresh adapter instance retries the same transaction and completes the receipt without duplicating the physical flow. This directly exercises the recoverable native append/receipt boundary. It is a deterministic fault injection in the test process; the broader subprocess crash matrix remains the evidence for actual process termination.
+
+
+## Six-store process restart
+
+The financial participant now rebuilds its in-memory EntityJournal from FinancialEventStore.iter_groups() on construction, after the store verifies the immutable group and posting chains. The native integration test then reopens all six domain stores and the coordinator from their durable databases and verifies that the transaction remains globally visible and the canonical six-register event group is identical. This is a process-restart test; online backup/restore of the actual six domain databases remains a separate acceptance gate.

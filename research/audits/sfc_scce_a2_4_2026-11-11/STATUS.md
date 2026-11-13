@@ -2204,3 +2204,8 @@ Added a deterministic fault-injection test that raises after the PhysicalFlowSto
 
 
 **Exact-head rerun trigger — S3 test fixture:** the test suite now supplies explicit bucket-owner/application account IDs and a KMS ARN in a separate security account, matching the hardened S3ObjectLockAnchor constructor. Commit `9c1536857171f9603e9f402cebffcac89aaa7e4d` contains the corrected tests. Exact-head CI is required.
+
+
+### 13 November continuation — six-store restart and financial journal replay
+
+The financial participant now replays committed groups from FinancialEventStore.iter_groups() into the in-memory EntityJournal when the adapter is reconstructed. It verifies the immutable event-group and posting-mirror chains first and rejects conflicts with preloaded journal events. The native integration test reopens all six domain stores and the coordinator from their durable databases, verifies financial projection replay, verifies the committed event group and checks the global visibility barrier after restart. Backup/restore of the six real domain stores remains OPEN.
