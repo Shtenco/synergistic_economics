@@ -114,7 +114,7 @@ class EconomicMarketplaceRegistry:
                 raise RegistryError(f"{collection[:-1]} already exists")
             if event_type.endswith(".duplicate_detected"):
                 # Duplicate source signal is recorded as a non-mutating audit event.
-                result = {"status": "duplicate", "existing_id": current["id"]}
+                result = {"status": "duplicate", "existing_id": current.get("demand_id") or current.get("offer_id")}
                 payload = {"tenant_id": tenant_id, "duplicate_of": current["id"],
                            "source_fingerprint": entity.get("source_fingerprint")}
             else:
