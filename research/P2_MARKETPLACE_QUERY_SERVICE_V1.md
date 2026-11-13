@@ -33,7 +33,7 @@ Tests cover ranking, tenant isolation, expiry, bounded limits and read-only beha
 
 `MatchCandidateStore` persists candidates in the existing tenant marketplace aggregate:
 
-- `marketplace.match_candidate.upserted`: create or refresh a deterministic tenant-scoped candidate keyed by tenant, demand, offer and matching policy version.
+- `marketplace.match_candidate.upserted`: create or refresh a deterministic tenant-scoped candidate keyed by tenant, demand, offer and matching policy version. The event type is stable across retries; the command receipt reports whether the record was created or refreshed.
 - `marketplace.match_candidate.staled`: explicit lifecycle transition when an operator or reconciliation process determines the candidate is no longer current.
 - `marketplace.match_candidate.withdrawn`: explicit withdrawal; withdrawn candidates are not silently reactivated by reads.
 - Each candidate stores the policy version, demand/offer canonical fingerprints, timestamps, source IDs and the routing-only match explanation.
