@@ -12,8 +12,8 @@ from capital_cohort_store import CapitalCohortStore
 from product_register import ProductRegister
 from financial_event_store import FinancialEventStore
 from entity_journal import EntityJournal
-from sfc_projection_registry import activate_sfc_projection, activate_control_openings
-from sfc_projection_store import verify_projection_replay
+from sfc_projection_registry import activate_sfc_projection
+from sfc_projection_store import activate_control_openings, verify_projection_replay
 from labour_register import LabourRegister
 from legal_rights_register import LegalRightsRegister
 from cross_register_coordinator import CrossRegisterCoordinator, SQLiteParticipant, PARTICIPANTS

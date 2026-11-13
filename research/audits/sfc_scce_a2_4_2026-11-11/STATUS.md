@@ -2181,3 +2181,6 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 
 
 **Exact-head CI trigger — all six native coordinator participants:** the projection-aware FinancialEventStore adapter, GOLD journal validator, SFC-derived instrument movement binding and financial-last commit order follow commit `9a22581b24b9c21ccea67f31ab18587db4284c96`. The exact-head run must exercise the full six-native integration test; do not mark this step complete from source inspection alone.
+
+
+**CI correction record — financial adapter test import:** the initial all-six participant run failed before executing the integration test because `activate_control_openings` is exported by `sfc_projection_store.py`, not `sfc_projection_registry.py`. The test import is corrected; no implementation or assertion was weakened. A fresh exact-HEAD run is required.
