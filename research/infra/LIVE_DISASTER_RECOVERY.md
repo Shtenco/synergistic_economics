@@ -15,10 +15,19 @@ Configure GitHub environment `host-live-dr` with required reviewers and:
 
 - Secret `SYNERGY_DO_API_TOKEN` scoped to droplet read and power actions.
 - Secret `SYNERGY_DR_SSH_PRIVATE_KEY` for the dedicated test VM.
+- Secret `SYNERGY_DR_SSH_KNOWN_HOSTS` containing the independently verified
+  OpenSSH known-hosts entry for the target's public IPv4 (hashed entries are valid).
+  Obtain and verify the host-key fingerprint through a trusted provisioning channel;
+  do not trust an unverified `ssh-keyscan` result by itself. If the droplet IP changes,
+  refresh this entry and verify the replacement fingerprint out of band.
 - Variable `SYNERGY_DR_SSH_USER`.
 - Variable `SYNERGY_DR_REMOTE_VERIFY_COMMAND`, an absolute executable path on the VM.
 
 The target must be disposable, active, and tagged exactly `synergy-dr-test`.
+Before any power-off action, the drill confirms that the pinned known-hosts file
+contains a key for the exact droplet IPv4. Both SSH and SCP enforce
+`StrictHostKeyChecking=yes`, `IdentitiesOnly=yes`, the explicit user known-hosts
+file, and `GlobalKnownHostsFile=/dev/null`; TOFU/accept-new is not permitted.
 The workflow requires explicit input `POWER_OFF_SYNERGY_DR_TEST_HOST`, performs
 provider-level VM power-off/power-on, then runs the remote verifier with one selected
 register (`physical`, `capital`, `labour`, `product`, `legal_rights`, or
