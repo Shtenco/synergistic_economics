@@ -2226,3 +2226,10 @@ The coordinator also exposes reconcile_event_stream(opening_positions, closing_p
 
 
 **Exact-head CI trigger — event-stream reconciliation and external anchor publication:** commit `87d26562b80f319a9460e0805d55da39949a5d99` adds coordinator.reconcile_event_stream() over the verified committed-prefix and publish_event_stream_checkpoint() which anchors genesis plus every committed sequence to an immutable anchor, verifies prior history and the latest pointer, and rejects gaps/rollback. The native integration test uses LocalImmutableAnchor for idempotent publish/verify. Exact-head CI must pass; live S3 deployment remains separate.
+
+
+### Coordinator stock-flow import correction — 13 November 2026
+
+The exact-HEAD CI wave on `9358c1d2e11567b6dabbc0c5cb39e0be280edf10` exposed one shared integration defect: `CrossRegisterCoordinator.reconcile_event_stream()` imported the module as `stock_flow_reconciliation`, while the checked-in module is `economic_stock_flow_reconciliation.py`. The coordinator import has been corrected in commit `31bcec09568c65c9bd02195f133e9d17fb9532dd`.
+
+The failure was an import-resolution error reached by the native six-register reconciliation test, not a failed T/V/O arithmetic assertion. All three workflows must be rerun against the post-fix branch head before the integration is accepted. Do not carry forward the prior exact-head PASS status as proof for this revision.
