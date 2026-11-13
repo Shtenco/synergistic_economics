@@ -2233,3 +2233,6 @@ The coordinator also exposes reconcile_event_stream(opening_positions, closing_p
 The exact-HEAD CI wave on `9358c1d2e11567b6dabbc0c5cb39e0be280edf10` exposed one shared integration defect: `CrossRegisterCoordinator.reconcile_event_stream()` imported the module as `stock_flow_reconciliation`, while the checked-in module is `economic_stock_flow_reconciliation.py`. The coordinator import has been corrected in commit `31bcec09568c65c9bd02195f133e9d17fb9532dd`.
 
 The failure was an import-resolution error reached by the native six-register reconciliation test, not a failed T/V/O arithmetic assertion. All three workflows must be rerun against the post-fix branch head before the integration is accepted. Do not carry forward the prior exact-head PASS status as proof for this revision.
+
+
+Exact-head validation dispatch: this documentation-only commit pins the corrected coordinator import and its evidence to the same PR revision. Await Prototype, A2.4 and SCCE Stage-C2 conclusions for this exact commit before promotion.
