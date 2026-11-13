@@ -56,6 +56,20 @@ Terminal states: ACCEPTED, CANCELLED.
 - Exact 10,000-basis-point split validation and deterministic cent allocation.
 - Unit tests for happy path, invalid evidence, stale versions, duplicate applications, self-review, unbalanced splits, and financial boundaries.
 
+## 5A. Phase-2 persistence increment
+
+The branch now also contains a file-backed SQLite work-order store in `prototype/league_store.py`:
+
+- Composite `(security_domain, order_id)` keys prevent cross-domain reads.
+- SQLite WAL mode and FULL synchronous durability are enabled.
+- Commands use idempotency keys; identical replay is a no-op and changed-content reuse is a conflict.
+- Work-order writes require an expected aggregate version and update the snapshot plus event atomically.
+- Event history is append-only at the database layer.
+- Canonical payload hashes, event-sequence checks, SQLite integrity checks, and foreign-key checks are exposed.
+- Restart, tenant-isolation, stale-write, replay, and append-only behavior have dedicated tests.
+
+The store's `security_domain` argument is a partition boundary, not authentication. A trusted service must derive it from a verified principal and enforce authorization before calling the store. Production backup/restore, power-loss, multi-process stress, KMS-backed evidence, and multi-host coordination remain release gates.
+
 ## 6. Explicitly not implemented
 
 - Authentication, identity proofing, authorization/RBAC, and consent registry.
