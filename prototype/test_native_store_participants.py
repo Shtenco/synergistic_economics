@@ -91,6 +91,9 @@ class NativeStoreParticipantTests(unittest.TestCase):
             self.assertTrue(coordinator.submit("TX-NATIVE-5","SCENARIO-NATIVE-5","CAUSE-NATIVE-5",operations))
             self.assertEqual(coordinator.execute("TX-NATIVE-5"),"COMMITTED")
             self.assertTrue(coordinator.is_visible("TX-NATIVE-5"))
+            physical_status=participants["physical"].status("TX-NATIVE-5")
+            self.assertEqual(participants["physical"].commit("TX-NATIVE-5",physical_status["prepare_token"]),
+                             __import__("json").loads(physical_status["receipt_json"]))
             self.assertEqual(physical.flow_count,1); self.assertTrue(physical.verify())
             self.assertEqual(capital.current_state().last_processed_period,1); self.assertTrue(capital.verify())
             self.assertTrue(product.verify())
@@ -102,6 +105,19 @@ class NativeStoreParticipantTests(unittest.TestCase):
             closings=(ClosingPosition(sender,1,D("5"),"CLOSE-SENDER"),ClosingPosition(receiver,1,D("5"),"CLOSE-RECEIVER"))
             reconciled=reconcile_periods(openings,movements,closings)
             self.assertEqual(reconciled.mirror_group_count,1)
+
+    def test_prepared_capital_stream_blocks_direct_period_append_until_abort(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=CapitalCohortStore(Path(tmp)/"capital.sqlite3")
+            store.initialize((CapitalCohort("C1","cell-1","machine",2026,0,1,1,"operating",1,1,1),))
+            participant=make_capital_participant(store,AUTH)
+            op={"stream_id":"capital","native_event_id":"CAPITAL-PERIOD:1","expected_revision":0,
+                "payload":envelope("capital.period_appended",{"period":1,"events":[],"additions":[]},"CAPITAL-PERIOD:1")}
+            participant.prepare("TX-CAPITAL-RESERVED",op)
+            from capital_cohort_store import CapitalCohortStoreError
+            with self.assertRaises(CapitalCohortStoreError): store.append_period(1,(),())
+            participant.abort("TX-CAPITAL-RESERVED")
+            self.assertIsNone(store.current_state().last_processed_period)
 
     def test_prepared_physical_stream_blocks_direct_write_until_abort(self):
         with tempfile.TemporaryDirectory() as tmp:

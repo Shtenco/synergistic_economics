@@ -2160,6 +2160,3 @@ Added native_store_participants.py, a recoverable participant adapter over exist
 The coordinator now has native adapters for PhysicalFlowStore (physical flows), CapitalCohortStore (cohort periods) and ProductRegister (product specifications/balances/prices/valuations). A six-participant integration test composes these with native LabourRegister and LegalRightsRegister plus the still-conformance-only financial participant. It verifies a common event group and physical sender/receiver stock-flow reconciliation.
 
 **Current boundary:** five of six participants are native domain stores; financial remains protocol-only pending the projection-aware journal adapter. Physical lot-inventory integration is not included in the physical-flow adapter. The current period test reconciles a physical flow, not all six SFC/GOLD balances. Exact-head CI is pending for these additions.
-
-
-**Exact-head CI trigger — native physical, capital and product participants:** the adapters and six-participant integration test follow commit `5267245ac752877f6afedbe5eb3626bf972b3590`. The financial participant remains a conformance store; the physical adapter is flow-only, not full lot inventory. All three workflows must finish on the resulting exact HEAD.

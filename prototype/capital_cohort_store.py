@@ -110,10 +110,8 @@ class CapitalCohortStore:
             con.execute("BEGIN IMMEDIATE")
             try:
                 table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_participant_inbox'").fetchone()
-                if table:
-                    pending = con.execute("SELECT transaction_id FROM native_participant_inbox WHERE stream_id='capital' AND state='PREPARED'").fetchone()
-                    if pending and pending["transaction_id"] != allow_prepared_txid:
-                        raise CapitalCohortStoreError("capital register reserved by a prepared coordinator transaction")
+                if table and con.execute("SELECT 1 FROM native_participant_inbox WHERE stream_id='capital' AND state='PREPARED'").fetchone():
+                    raise CapitalCohortStoreError("capital register reserved by a prepared coordinator transaction")
                 existing=con.execute("SELECT opening_state_sha256 FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
                 if existing:
                     if existing["opening_state_sha256"] != digest:
@@ -139,6 +137,11 @@ class CapitalCohortStore:
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_participant_inbox'").fetchone()
+                if table:
+                    pending = con.execute("SELECT transaction_id FROM native_participant_inbox WHERE stream_id='capital' AND state='PREPARED'").fetchone()
+                    if pending and pending["transaction_id"] != allow_prepared_txid:
+                        raise CapitalCohortStoreError("capital register reserved by a prepared coordinator transaction")
                 meta=con.execute("SELECT * FROM capital_cohort_meta WHERE singleton_id=1").fetchone()
                 if meta is None:
                     raise CapitalCohortStoreError("capital cohort opening snapshot is not initialized")
