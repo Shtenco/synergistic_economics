@@ -69,7 +69,7 @@ class EconomicRouterTests(unittest.TestCase):
         ranked = route_demand(DEMAND, [expensive, OFFER, OFFER], now=NOW)
         self.assertEqual([x["offer_id"] for x in ranked], ["off-1", "off-2"])
 
-    def test_match_ids_are_tenant_scoped(self):
+    def test_offer_deduplication_is_tenant_scoped(self):\n        foreign = dict(OFFER, tenant_id="tenant-2")\n        ranked = route_demand(DEMAND, [foreign, OFFER], now=NOW)\n        self.assertEqual([item["offer_id"] for item in ranked], ["off-1"])\n\n    def test_match_ids_are_tenant_scoped(self):
         other_demand = dict(DEMAND, tenant_id="tenant-2")
         other_offer = dict(OFFER, tenant_id="tenant-2")
         self.assertNotEqual(score_offer(DEMAND, OFFER, now=NOW)["match_id"],
