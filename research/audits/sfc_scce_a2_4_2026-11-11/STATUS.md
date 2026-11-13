@@ -2223,3 +2223,6 @@ The coordinator now persists a canonical six-register event group in an append-o
 
 
 The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.
+
+
+**Exact-head CI trigger — event-stream reconciliation and external anchor publication:** commit `87d26562b80f319a9460e0805d55da39949a5d99` adds coordinator.reconcile_event_stream() over the verified committed-prefix and publish_event_stream_checkpoint() which anchors genesis plus every committed sequence to an immutable anchor, verifies prior history and the latest pointer, and rejects gaps/rollback. The native integration test uses LocalImmutableAnchor for idempotent publish/verify. Exact-head CI must pass; live S3 deployment remains separate.
