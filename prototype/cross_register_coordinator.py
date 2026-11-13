@@ -493,6 +493,11 @@ class CrossRegisterCoordinator:
             payload = op.get("payload")
             if not isinstance(payload, Mapping):
                 raise CoordinatorError(f"{name}.payload must be a JSON object")
+            from register_event_contract import normalize_event_envelope
+            try:
+                payload = normalize_event_envelope(name, payload)
+            except ValueError as exc:
+                raise CoordinatorError(f"{name} native event contract rejected: {exc}") from exc
             payload_json = _canonical(payload)
             digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
             revision = op.get("expected_revision")
@@ -814,6 +819,8 @@ class CrossRegisterCoordinator:
                 "aggregate_version": operation["expected_revision"] + 1,
                 "payload_digest": operation["payload_digest"],
                 "event_type": event_type,
+                "event_schema_id": participant_payload.get("schema_id"),
+                "event_schema_version": participant_payload.get("schema_version"),
                 "payload": domain_payload,
             })
         if {event["register_id"] for event in events} != set(PARTICIPANTS) or len(events) != len(PARTICIPANTS):

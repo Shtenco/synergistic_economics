@@ -28,8 +28,8 @@ class S3ObjectLockAnchor:
         if not isinstance(kms_key_id,str) or kms_key_id!=kms_key_id.strip():
             raise CheckpointError("canonical KMS key ARN from a separate security account is required")
         match=re.fullmatch(r"arn:(?:aws|aws-cn|aws-us-gov):kms:[a-z0-9-]+:([0-9]{12}):key/[A-Za-z0-9-]+",kms_key_id)
-        if not match or match.group(1)==application_account_id:
-            raise CheckpointError("canonical KMS key ARN must identify a key in an account separate from the application")
+        if not match or match.group(1) in {application_account_id, expected_bucket_owner}:
+            raise CheckpointError("canonical KMS key ARN must identify a third, independent security account distinct from the application and bucket owner")
         if not isinstance(retention_days,int) or isinstance(retention_days,bool) or retention_days < 1:
             raise CheckpointError("Object Lock retention_days must be a positive integer")
         self.client, self.bucket, self.kms_key_id = client, bucket, kms_key_id

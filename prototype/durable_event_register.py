@@ -366,6 +366,11 @@ class DurableEventRegister:
         payload = operation.get("payload")
         if not isinstance(payload,Mapping): raise RegisterError("native event payload must be an object")
         envelope = dict(payload)
+        from register_event_contract import normalize_event_envelope
+        try:
+            envelope = normalize_event_envelope(self.REGISTER_NAME, envelope)
+        except ValueError as exc:
+            raise RegisterError(f"native event contract rejected: {exc}") from exc
         required = ("event_type","effective_at","recorded_at","actor_id","authority_ref","idempotency_key","payload")
         if any(field not in envelope for field in required):
             raise RegisterError("native event envelope is incomplete")

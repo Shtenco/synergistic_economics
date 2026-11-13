@@ -101,6 +101,10 @@ class S3ObjectLockAnchorTests(unittest.TestCase):
                 kms_key_id="arn:aws:kms:us-east-1:111111111111:key/id",
                 expected_bucket_owner="333333333333",application_account_id="111111111111")
         with self.assertRaises(CheckpointError):
+            S3ObjectLockAnchor(self.client,"same-security-account",
+                kms_key_id="arn:aws:kms:us-east-1:333333333333:key/id",
+                expected_bucket_owner="333333333333",application_account_id="111111111111")
+        with self.assertRaises(CheckpointError):
             S3ObjectLockAnchor(self.client,"bad-owner",
                 kms_key_id="arn:aws:kms:us-east-1:222222222222:key/id",
                 expected_bucket_owner="not-an-account",application_account_id="111111111111")

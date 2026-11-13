@@ -67,6 +67,11 @@ class NativeStoreParticipant:
             raise NativeStoreParticipantError("expected_revision must be a non-negative integer")
         envelope=op.get("payload")
         if not isinstance(envelope,dict): raise NativeStoreParticipantError("native event envelope must be an object")
+        from register_event_contract import normalize_event_envelope
+        try:
+            envelope=normalize_event_envelope(self.name,envelope)
+        except ValueError as exc:
+            raise NativeStoreParticipantError(f"native event contract rejected: {exc}") from exc
         for field in ("event_type","effective_at","recorded_at","actor_id","authority_ref","idempotency_key"):
             _required(envelope.get(field),field)
         for field in ("effective_at","recorded_at"):
