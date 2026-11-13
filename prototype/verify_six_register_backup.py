@@ -35,6 +35,8 @@ def _extract_verified(archive_path, destination):
     manifest=json.loads((destination/"backup-manifest.json").read_text(encoding="utf-8"))
     if manifest.get("schema")!="synergy.six-register-backup.v1" or manifest.get("registers_verified")!=6:
         raise RuntimeError("backup manifest schema or register count is invalid")
+    if manifest.get("snapshot_consistency")!="coordinator-exclusive-lock-v1":
+        raise RuntimeError("backup does not prove coordinator-locked cross-register snapshot consistency")
     for name in DB_FILES.values():
         raw=(destination/name).read_bytes()
         record=manifest.get("files",{}).get(name)
