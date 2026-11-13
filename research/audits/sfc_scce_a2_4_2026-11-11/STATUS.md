@@ -2201,3 +2201,6 @@ Added a deterministic fault-injection test that raises after the PhysicalFlowSto
 
 
 **Exact-head CI trigger — S3 account isolation and native crash retry:** commit `cee0c58fca43fe373479beee5aa0d68bf86347a0` adds mandatory bucket-owner/application account separation, ExpectedBucketOwner on every S3 call, and a native append-before-receipt recovery test. All three workflows must pass on the resulting exact HEAD; earlier green results do not certify these additions.
+
+
+**Exact-head rerun trigger — S3 test fixture:** the test suite now supplies explicit bucket-owner/application account IDs and a KMS ARN in a separate security account, matching the hardened S3ObjectLockAnchor constructor. Commit `9c1536857171f9603e9f402cebffcac89aaa7e4d` contains the corrected tests. Exact-head CI is required.
