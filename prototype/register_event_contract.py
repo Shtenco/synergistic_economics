@@ -56,10 +56,23 @@ def normalize_event_envelope(register_id, envelope):
     if not isinstance(result.get("payload"), Mapping):
         raise RegisterEventContractError("native domain payload must be an object")
     result["payload"] = dict(result["payload"])
-    if "stock_flow_movements" in result and not isinstance(result["stock_flow_movements"], list):
-        raise RegisterEventContractError("stock_flow_movements must be an array")
+    allowed = {"schema_id", "schema_version", "register_id", "event_type", "effective_at",
+               "recorded_at", "actor_id", "authority_ref", "idempotency_key", "payload",
+               "stock_flow_movements", "no_stock_flow_effect", "migration"}
+    unknown = set(result) - allowed
+    if unknown:
+        raise RegisterEventContractError(f"unknown native event envelope fields: {sorted(unknown)}")
+    if "stock_flow_movements" in result:
+        specs = result["stock_flow_movements"]
+        if not isinstance(specs, list) or not specs or any(not isinstance(item, Mapping) for item in specs):
+            raise RegisterEventContractError("stock_flow_movements must be a non-empty array of objects")
+        if "no_stock_flow_effect" in result:
+            raise RegisterEventContractError("event cannot declare movements and no-stock-flow effect together")
     if "no_stock_flow_effect" in result:
         _text(result["no_stock_flow_effect"], "no_stock_flow_effect")
-    if result.get("migration") is not None and not isinstance(result["migration"], Mapping):
-        raise RegisterEventContractError("migration provenance must be an object")
+    migration = result.get("migration")
+    if migration is not None and dict(migration) != {
+        "migration_id": "native-event-envelope-v0-to-v1", "source_schema_version": 0
+    }:
+        raise RegisterEventContractError("migration provenance does not match the registered v0-to-v1 migration")
     return result

@@ -336,8 +336,15 @@ def make_financial_participant(store,journal,authorizer):
         events=decode_group(envelope)
         candidate=EntityJournal(journal.registry)
         for event in events: candidate.post(event)
-        if envelope.get("stock_flow_movements") != financial_stock_flow_movement_specs(events):
-            raise NativeStoreParticipantError("financial T/V/O movement metadata differs from canonical SFC mapper")
+        expected_movements=financial_stock_flow_movement_specs(events)
+        actual_movements=envelope.get("stock_flow_movements")
+        if expected_movements:
+            if actual_movements != expected_movements or "no_stock_flow_effect" in envelope:
+                raise NativeStoreParticipantError("financial T/V/O movement metadata differs from canonical SFC mapper")
+        else:
+            reason=envelope.get("no_stock_flow_effect")
+            if actual_movements is not None or not isinstance(reason,str) or not reason.strip():
+                raise NativeStoreParticipantError("financial journal group with no instrument movement requires an explicit no-stock-flow reason")
 
     def apply(native_id,envelope,txid):
         payload=envelope["payload"]

@@ -31,12 +31,13 @@ from financial_journal_adapter import _event_payload
 AUTH=lambda actor,authority,event_type,payload: actor=="coordinator" and authority.startswith("AUTH:")
 
 
-def flow_pair(flow_id="FLOW-1",quantity="5"):
-    common=dict(flow_id=flow_id,origin_node="mine",destination_node="mill",
+def flow_pair(flow_id="FLOW-1",quantity="5",reverse=False,period="P1"):
+    origin,destination=("mill","mine") if reverse else ("mine","mill")
+    common=dict(flow_id=flow_id,origin_node=origin,destination_node=destination,
         origin_boundary="domestic",destination_boundary="domestic",product_id="steel",grade_id="S235",
-        quantity=D(quantity),unit="t",event_time=T,period="P1",flow_class="internal_transfer",
+        quantity=D(quantity),unit="t",event_time=T,period=period,flow_class="internal_transfer",
         quality="conforming",measurement_method="weighbridge",uncertainty=D("0.01"),evidence_status="measured")
-    return (FlowPosting(node_id="mine",role="outflow",**common),FlowPosting(node_id="mill",role="inflow",**common))
+    return (FlowPosting(node_id=origin,role="outflow",**common),FlowPosting(node_id=destination,role="inflow",**common))
 
 
 def envelope(event_type,payload,idempotency):

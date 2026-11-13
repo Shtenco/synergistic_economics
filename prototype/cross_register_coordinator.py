@@ -72,6 +72,12 @@ def _verify_event_group_chain(con) -> bool:
                 return False
             if any(not isinstance(event,dict) or event.get("common_event_id")!=row["transaction_id"] for event in events):
                 return False
+            for event in events:
+                schema_id, schema_version = event.get("event_schema_id"), event.get("event_schema_version")
+                if (schema_id is None) != (schema_version is None):
+                    return False
+                if schema_id is not None and (schema_id != "synergy.native-register-event" or schema_version != 1):
+                    return False
             if con.execute("SELECT 1 FROM coordinator_transactions WHERE transaction_id=?",(row["transaction_id"],)).fetchone() is None:
                 return False
             previous=expected_hash
@@ -513,6 +519,8 @@ class CrossRegisterCoordinator:
             envelope["participants"].append({
                 "name": name, "stream_id": stream, "native_event_id": native_id,
                 "expected_revision": revision, "payload_digest": digest,
+                "event_schema_id": payload.get("schema_id"),
+                "event_schema_version": payload.get("schema_version"),
             })
             rows.append((name, stream, native_id, payload_json, digest, revision))
         envelope_json = _canonical(envelope)
