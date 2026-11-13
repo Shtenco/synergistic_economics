@@ -722,7 +722,10 @@ class CrossRegisterCoordinator:
                 raise CoordinatorError("participant event payload must be a JSON object")
             if isinstance(participant_payload.get("payload"), dict) and isinstance(participant_payload.get("event_type"), str):
                 event_type = participant_payload["event_type"]
-                domain_payload = participant_payload["payload"]
+                domain_payload = dict(participant_payload["payload"])
+                for metadata_field in ("stock_flow_movements", "no_stock_flow_effect"):
+                    if metadata_field in participant_payload:
+                        domain_payload[metadata_field] = participant_payload[metadata_field]
             else:
                 event_type = participant_payload.get("event_type", "participant.command")
                 domain_payload = participant_payload

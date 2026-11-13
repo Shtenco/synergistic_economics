@@ -152,13 +152,18 @@ class PhysicalFlowStore:
         value = {"sequence":sequence,"flow_id":flow_id,"payload_sha256":digest,"previous_hash":previous}
         return hashlib.sha256(DOMAIN + _canonical(value).encode()).hexdigest()
 
-    def append(self, outflow, inflow):
+    def append(self, outflow, inflow, allow_prepared_txid=None):
         validate_pair(outflow, inflow)
         payload_json = _canonical({"outflow":_posting_dict(outflow),"inflow":_posting_dict(inflow)})
         digest = hashlib.sha256(payload_json.encode()).hexdigest()
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_participant_inbox'").fetchone()
+                if table:
+                    pending = con.execute("SELECT transaction_id FROM native_participant_inbox WHERE stream_id='physical' AND state='PREPARED'").fetchone()
+                    if pending and pending["transaction_id"] != allow_prepared_txid:
+                        raise PhysicalFlowError("physical register reserved by a prepared coordinator transaction")
                 old = con.execute("SELECT payload_sha256 FROM physical_flows WHERE flow_id=?",
                                   (outflow.flow_id,)).fetchone()
                 if old:

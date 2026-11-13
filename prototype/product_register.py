@@ -232,13 +232,18 @@ class ProductRegister:
             else: raise ProductRegisterError("unknown product event type")
         return specs,balances,prices,valuations
 
-    def _append(self,event_id,event_type,payload):
+    def _append(self,event_id,event_type,payload,allow_prepared_txid=None):
         _text(event_id,"event_id")
         payload_json=_canonical(payload)
         digest=hashlib.sha256(payload_json.encode()).hexdigest()
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_participant_inbox'").fetchone()
+                if table:
+                    pending = con.execute("SELECT transaction_id FROM native_participant_inbox WHERE stream_id='product' AND state='PREPARED'").fetchone()
+                    if pending and pending["transaction_id"] != allow_prepared_txid:
+                        raise ProductRegisterError("product register reserved by a prepared coordinator transaction")
                 old=con.execute("SELECT payload_sha256,event_type FROM product_events WHERE event_id=?",(event_id,)).fetchone()
                 if old:
                     if old["payload_sha256"]!=digest or old["event_type"]!=event_type:

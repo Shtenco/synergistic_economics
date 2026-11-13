@@ -102,5 +102,7 @@ jobs:
         run: python -m unittest discover -s prototype -p 'test_economic_stock_flow_reconciliation.py' -v
       - name: A2.4.7 S3 Object Lock checkpoint anchor contract
         run: python -m unittest discover -s prototype -p 'test_s3_object_lock_anchor.py' -v
+      - name: A2.4.7 native physical, capital and product coordinator adapters
+        run: python -m unittest discover -s prototype -p 'test_native_store_participants.py' -v
       - name: A2.4.7 unified synthetic cross-register integration
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_unified_cross_register.py

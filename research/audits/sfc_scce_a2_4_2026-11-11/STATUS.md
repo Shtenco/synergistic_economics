@@ -2151,3 +2151,12 @@ Added s3_object_lock_anchor.py with S3 versioning, conditional immutable writes,
 
 
 **Exact-head CI trigger — common event groups, SFC/GOLD T/V/O kernel and S3 Object Lock adapter:** these additions follow commit `0c6b5993e654a35666e1a3fcfc0b13e17d0d1fd7`. All three workflows must complete on the resulting branch HEAD. Mocked S3 contract tests are not evidence of a live AWS deployment.
+
+
+### 13 November continuation — native physical, capital and product adapters
+
+Added native_store_participants.py, a recoverable participant adapter over existing domain SQLite stores. It persists prepare/receipt state in each authoritative store database, requires an external authorizer callback, checks the expected native revision, validates candidate state before prepare, reserves the stream against direct writes, and invokes the store's idempotent native append on commit. If a process dies after native append but before receipt persistence, commit retry completes the receipt.
+
+The coordinator now has native adapters for PhysicalFlowStore (physical flows), CapitalCohortStore (cohort periods) and ProductRegister (product specifications/balances/prices/valuations). A six-participant integration test composes these with native LabourRegister and LegalRightsRegister plus the still-conformance-only financial participant. It verifies a common event group and physical sender/receiver stock-flow reconciliation.
+
+**Current boundary:** five of six participants are native domain stores; financial remains protocol-only pending the projection-aware journal adapter. Physical lot-inventory integration is not included in the physical-flow adapter. The current period test reconciles a physical flow, not all six SFC/GOLD balances. Exact-head CI is pending for these additions.

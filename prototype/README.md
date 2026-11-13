@@ -296,3 +296,8 @@ The independent Labour and Legal Rights implementation contract (DURABLE_LABOUR_
 The coordinator exposes a committed six-participant event group under one common transaction ID after its visibility barrier. Native Labour and Legal Rights event rows persist that common_event_id; other four participants remain protocol-conformance stores until native adapters are complete. The typed Decimal stock-flow kernel maps explicit participant movement declarations and checks T/V/O, mirror identities and period carry-forward. See SFC_CROSS_REGISTER_PERIOD_RECONCILIATION.md.
 
 S3ObjectLockAnchor implements the remote CheckpointAnchor interface with COMPLIANCE retention, versioning, SSE-KMS and append-only anchor sequence records. Deployment requirements and the current no-live-AWS boundary are documented in S3_OBJECT_LOCK_DEPLOYMENT.md.
+
+
+## Native adapters for physical, capital and product stores
+
+native_store_participants.py adds coordinator participant adapters over the existing PhysicalFlowStore, CapitalCohortStore and ProductRegister databases. Their native append APIs remain authoritative; the colocated participant inbox reserves each register stream and supports idempotent commit retry after a crash. The adapter requires an explicit external authorizer callback. Together with LabourRegister and LegalRightsRegister, five of six coordinator participants now target domain stores. Financial remains on a protocol-conformance participant pending a projection-aware journal adapter; physical lot-inventory integration is also still open. See NATIVE_STORE_PARTICIPANTS.md.

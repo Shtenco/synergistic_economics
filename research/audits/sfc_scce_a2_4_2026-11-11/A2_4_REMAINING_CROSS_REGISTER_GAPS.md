@@ -318,3 +318,10 @@ The new Decimal reconciliation kernel requires every participant to declare eith
 ## 17. S3 Object Lock anchor adapter
 
 The new S3 adapter requires bucket Object Lock and versioning, uses COMPLIANCE retention, conditional immutable object creation and a canonical external KMS key ARN, and verifies object version, retention, digest and encryption on reads. Per-service anchor records form a contiguous immutable hash chain. Tests use a mocked S3 client only. No live AWS bucket, IAM separation, KMS custody or disaster-recovery restore drill is available; deployment remains an explicit release gate.
+
+
+## 18. Native physical, capital and product participant adapters
+
+The coordinator can now bind directly to PhysicalFlowStore, CapitalCohortStore and ProductRegister. Each adapter uses the same database as its domain store for its prepared inbox and receipts, validates candidate operations against the current native revision/reducer, reserves the stream and invokes the store's idempotent append after the coordinator decision. Direct append operations are blocked while a prepare is outstanding. A mandatory external authorizer callback is injected; the adapter has no default allow policy.
+
+Together with LabourRegister and LegalRightsRegister, this yields five native participants out of six. Financial remains protocol-conformance-only until the adapter can atomically use the validated journal and SFC projection store. The physical adapter covers the physical-flow register, not the P6 lot/reservation inventory lifecycle. The integration test proves one physical mirror reconciliation, not full six-register SFC/GOLD closure.
