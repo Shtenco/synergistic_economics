@@ -2190,3 +2190,6 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 
 
 **CI correction record — opening-snapshot readiness:** the native financial adapter initially treated `verify_projection_replay()` as a valid empty-store readiness test. It correctly returned false before the first event group because the projection runtime/cursor is created by the first projected append. Readiness now verifies the frozen SFC and control opening hashes when there are zero groups, and requires full replay verification once groups exist. The test no longer asserts replay of an uninitialized runtime; post-commit replay verification remains mandatory.
+
+
+**Exact-head rerun trigger — financial projection readiness:** commit `49b7c24fcc10c1c0b7c6ad4ac968ee90334de931` now verifies frozen opening hashes before the first projected group and full projection replay after groups exist. Run all three CI workflows on the resulting exact HEAD.
