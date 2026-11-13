@@ -112,6 +112,8 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
         return None
     if demand["tenant_id"] != offer["tenant_id"]:
         return None
+    if demand["tenant_id"] != offer["tenant_id"]:
+        return None
     if demand["category"] != offer["category"]:
         return None
     if demand["jurisdiction"] != offer["jurisdiction"]:
