@@ -177,7 +177,7 @@ def main():
                 _sha(name + "-reconciliation"),
             )
         generation1_ref, generation1_digest = _checkpoint(
-            signer, anchor, 6, 1, event_root=root_hash,
+            signer, anchor, 4, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
         )
         _rejects(lambda: governance.publish_generation(
@@ -209,7 +209,7 @@ def main():
         ), "publication accepted an unrelated global reconciliation hash")
 
         generation1_ref, generation1_digest = _checkpoint(
-            signer, anchor, 4, 1, event_root=root_hash,
+            signer, anchor, 6, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
         )
         assert governance.publish_generation(
