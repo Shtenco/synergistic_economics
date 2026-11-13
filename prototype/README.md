@@ -26,6 +26,19 @@ python -m unittest prototype.test_synergy_leagues -v
 
 This is an in-memory domain prototype. Authentication, persistence, API, audit/outbox, dispute handling, and settlement integration are not implemented.
 
+## SYNERGY LEAGUES phase 2 — durable work-order store
+
+- [league_store.py](league_store.py) — tenant-scoped SQLite persistence for work orders, optimistic version checks, idempotent commands, append-only event history, and payload digest verification. It stores contractual work-order state only and does not execute settlement.
+- [test_league_store.py](test_league_store.py) — restart persistence, cross-tenant isolation, stale-version rejection, idempotent replay, changed-payload conflict, and append-only event tests.
+
+Run:
+
+```bash
+python -m unittest prototype.test_league_store -v
+```
+
+The caller must bind security_domain to an authenticated principal. This prototype does not provide authentication, authorization, production KMS, multi-host consensus, or backup/restore certification.
+
 ## Prototype 1 — Seven-Cell Economy
 
 - [seven_cell_economy.py](seven_cell_economy.py) — deterministic seven-cell simulation.
