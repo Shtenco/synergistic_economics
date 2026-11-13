@@ -13,7 +13,7 @@ T = "2026-11-13T05:00:00Z"
 
 
 def allow_test_bootstrap(principal_id, authority_ref, register_name, payload):
-    return (authority_ref.startswith("BOOTSTRAP:")
+    return ((authority_ref == "BOOTSTRAP" or authority_ref.startswith("BOOTSTRAP:"))
             and payload == {"principal_id": principal_id, "permissions": ["*"]})
 
 
