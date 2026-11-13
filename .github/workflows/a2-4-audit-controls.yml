@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - audit/sfc-scce-a2-4-continuation-20261111
+      - integration/economic-core-consolidation-2026-11-13
     paths:
       - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - "prototype/**"
