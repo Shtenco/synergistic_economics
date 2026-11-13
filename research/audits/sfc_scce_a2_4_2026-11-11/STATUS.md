@@ -2198,3 +2198,6 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 ### 13 November continuation — native append/receipt crash retry
 
 Added a deterministic fault-injection test that raises after the PhysicalFlowStore native append commits but before the participant receipt is persisted. A fresh NativeStoreParticipant instance retries the same prepare token, the native flow append remains idempotent, the receipt advances to COMMITTED and the physical flow count remains one. Exact-head CI is pending for this additional test.
+
+
+**Exact-head CI trigger — S3 account isolation and native crash retry:** commit `cee0c58fca43fe373479beee5aa0d68bf86347a0` adds mandatory bucket-owner/application account separation, ExpectedBucketOwner on every S3 call, and a native append-before-receipt recovery test. All three workflows must pass on the resulting exact HEAD; earlier green results do not certify these additions.
