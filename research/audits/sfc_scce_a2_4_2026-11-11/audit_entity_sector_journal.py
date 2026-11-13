@@ -990,9 +990,10 @@ def main():
     else:
         raise AssertionError("duplicate claim-side posting accepted")
 
+    duplicate_event_journal = EntityJournal(registry)
+    duplicate_event_journal.post(e1)
     try:
-        EntityJournal(registry).post(e1)
-        EntityJournal(registry).post(e1)
+        duplicate_event_journal.post(e1)
     except IdentityError:
         pass
     else:
