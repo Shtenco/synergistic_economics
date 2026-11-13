@@ -110,12 +110,28 @@ class EconomicMarketplaceRegistry:
             collection = event["collection"]
             entity_id = event["entity_id"]
             current = candidate[collection].get(entity_id)
-            if event_type.endswith(".registered") and current is not None:
+            duplicate_source = None
+            if (event_type == "marketplace.demand.registered"
+                    and entity.get("source_fingerprint")):
+                duplicate_source = next(
+                    (item for item in candidate["demands"].values()
+                     if item.get("source_fingerprint") == entity["source_fingerprint"]),
+                    None,
+                )
+            if event_type == "marketplace.demand.registered" and duplicate_source is not None:
+                event_type = "marketplace.demand.duplicate_detected"
+                result = {"status": "duplicate", "existing_id": duplicate_source["demand_id"]}
+                payload = {"tenant_id": tenant_id, "duplicate_of": duplicate_source["demand_id"],
+                           "source_fingerprint": entity.get("source_fingerprint")}
+            elif event_type.endswith(".registered") and current is not None:
                 raise RegistryError(f"{collection[:-1]} already exists")
-            if event_type.endswith(".duplicate_detected"):
+            elif event_type.endswith(".duplicate_detected"):
                 # Duplicate source signal is recorded as a non-mutating audit event.
-                result = {"status": "duplicate", "existing_id": current.get("demand_id") or current.get("offer_id")}
-                payload = {"tenant_id": tenant_id, "duplicate_of": current["id"],
+                existing_id = current.get("demand_id") if current else None
+                if existing_id is None:
+                    raise RegistryError("duplicate source target disappeared; retry against current state")
+                result = {"status": "duplicate", "existing_id": existing_id}
+                payload = {"tenant_id": tenant_id, "duplicate_of": existing_id,
                            "source_fingerprint": entity.get("source_fingerprint")}
             else:
                 candidate[collection][entity_id] = entity
