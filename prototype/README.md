@@ -12,6 +12,33 @@ Python 3.10+ research prototypes. Current implementations use the standard libra
 - exact budget-balanced pool allocation;
 - a simple inter-cell cash transfer.
 
+## Prototype L — SYNERGY LEAGUES phase 1
+
+- [synergy_leagues.py](synergy_leagues.py) — evidence-backed participant skills and league membership, verified-skill work-order applications, assignment, delivery evidence, independent acceptance, and deterministic payout-split calculation. The split is only a settlement hand-off; this module never moves money.
+- [test_synergy_leagues.py](test_synergy_leagues.py) — tests for eligibility, membership evidence, stale-version rejection, delivery/review rules, and exact split conservation.
+- [Phase-1 domain contract](../research/SYNERGY_LEAGUES_PHASE_1_DOMAIN_CONTRACT.md) — scope, financial authority boundaries, state machine, explicit non-goals, and staged roadmap.
+
+Run from the repository root:
+
+```bash
+python -m unittest prototype.test_synergy_leagues -v
+```
+
+This is an in-memory domain prototype. Authentication, persistence, API, audit/outbox, dispute handling, and settlement integration are not implemented.
+
+## SYNERGY LEAGUES phase 2 — durable work-order store
+
+- [league_store.py](league_store.py) — tenant-scoped SQLite persistence for work orders, optimistic version checks, idempotent commands, append-only event history, and payload digest verification. It stores contractual work-order state only and does not execute settlement.
+- [test_league_store.py](test_league_store.py) — restart persistence, cross-tenant isolation, stale-version rejection, idempotent replay, changed-payload conflict, and append-only event tests.
+
+Run:
+
+```bash
+python -m unittest prototype.test_league_store -v
+```
+
+The caller must bind security_domain to an authenticated principal. This prototype does not provide authentication, authorization, production KMS, multi-host consensus, or backup/restore certification.
+
 ## Prototype 1 — Seven-Cell Economy
 
 - [seven_cell_economy.py](seven_cell_economy.py) — deterministic seven-cell simulation.
