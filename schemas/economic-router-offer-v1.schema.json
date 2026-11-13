@@ -9,6 +9,7 @@
     "schema_version",
     "offer_id",
     "seller_id",
+    "tenant_id",
     "category",
     "jurisdiction",
     "status",
