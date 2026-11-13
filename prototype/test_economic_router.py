@@ -6,13 +6,15 @@ from economic_router import RouterValidationError, route_demand, score_offer
 
 NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
 DEMAND = {
-    "demand_id": "dem-1", "buyer_id": "buyer-1", "category": "ai_automation",
+    "schema_id": "synergy.economic-router.demand", "schema_version": 1,
+    "demand_id": "dem-1", "buyer_id": "buyer-1", "tenant_id": "tenant-1", "consent_ref": "consent:1", "category": "ai_automation",
     "jurisdiction": "KZ", "status": "open", "requirements": ["crm", "russian"],
     "quantity": 1, "budget": {"amount_minor": 50000000, "currency": "RUB", "scale": 2},
     "expires_at": "2026-12-01T00:00:00Z",
 }
 OFFER = {
-    "offer_id": "off-1", "seller_id": "seller-1", "category": "ai_automation",
+    "schema_id": "synergy.economic-router.offer", "schema_version": 1,
+    "offer_id": "off-1", "seller_id": "seller-1", "tenant_id": "tenant-1", "category": "ai_automation",
     "jurisdiction": "KZ", "status": "active", "seller_verification": "verified",
     "capabilities": ["crm", "russian", "integration"], "capacity": 2,
     "price": {"amount_minor": 25000000, "currency": "RUB", "scale": 2},
@@ -31,6 +33,16 @@ class EconomicRouterTests(unittest.TestCase):
     def test_incompatible_jurisdiction_is_not_matched(self):
         offer = dict(OFFER, jurisdiction="RU")
         self.assertIsNone(score_offer(DEMAND, offer, now=NOW))
+
+    def test_cross_tenant_offer_is_not_matched(self):
+        offer = dict(OFFER, tenant_id="other-tenant")
+        self.assertIsNone(score_offer(DEMAND, offer, now=NOW))
+
+    def test_missing_consent_reference_is_rejected(self):
+        demand = dict(DEMAND)
+        demand.pop("consent_ref")
+        with self.assertRaises(RouterValidationError):
+            score_offer(demand, OFFER, now=NOW)
 
     def test_unverified_seller_fails_closed(self):
         offer = dict(OFFER, seller_verification="unknown")
