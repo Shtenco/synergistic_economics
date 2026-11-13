@@ -53,7 +53,9 @@ def _money(record: Any, key: str) -> tuple[int, str, int]:
 def validate_demand(demand: dict[str, Any]) -> None:
     if not isinstance(demand, dict):
         raise RouterValidationError("demand must be an object")
-    for key in ("demand_id", "buyer_id", "category", "jurisdiction"):
+    if demand.get("schema_id") != "synergy.economic-router.demand" or isinstance(demand.get("schema_version"), bool) or demand.get("schema_version") != 1:
+        raise RouterValidationError("unsupported demand schema")
+    for key in ("demand_id", "buyer_id", "category", "jurisdiction", "tenant_id", "consent_ref"):
         _text(demand, key)
     if demand.get("status") != "open":
         raise RouterValidationError("demand.status must be open")
@@ -70,7 +72,9 @@ def validate_demand(demand: dict[str, Any]) -> None:
 def validate_offer(offer: dict[str, Any]) -> None:
     if not isinstance(offer, dict):
         raise RouterValidationError("offer must be an object")
-    for key in ("offer_id", "seller_id", "category", "jurisdiction"):
+    if offer.get("schema_id") != "synergy.economic-router.offer" or isinstance(offer.get("schema_version"), bool) or offer.get("schema_version") != 1:
+        raise RouterValidationError("unsupported offer schema")
+    for key in ("offer_id", "seller_id", "category", "jurisdiction", "tenant_id"):
         _text(offer, key)
     if offer.get("status") != "active":
         raise RouterValidationError("offer.status must be active")
@@ -100,11 +104,13 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
     validate_demand(demand)
     validate_offer(offer)
     now = now or datetime.now(timezone.utc)
-    if now.tzinfo is None or now.utcoffset() is None:
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise RouterValidationError("now must be timezone-aware")
     if _utc(demand["expires_at"], "demand.expires_at") <= now:
         return None
     if _utc(offer["expires_at"], "offer.expires_at") <= now:
+        return None
+    if demand["tenant_id"] != offer["tenant_id"]:
         return None
     if demand["category"] != offer["category"]:
         return None
@@ -154,6 +160,9 @@ def route_demand(demand: dict[str, Any], offers: Iterable[dict[str, Any]], *,
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise RouterValidationError("limit must be a positive integer")
     validate_demand(demand)
+    now = now or datetime.now(timezone.utc)
+    if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+        raise RouterValidationError("now must be timezone-aware")
     matches = []
     seen_offers = set()
     for offer in offers:
