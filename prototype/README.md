@@ -12,6 +12,20 @@ Python 3.10+ research prototypes. Current implementations use the standard libra
 - exact budget-balanced pool allocation;
 - a simple inter-cell cash transfer.
 
+## Prototype L — SYNERGY LEAGUES phase 1
+
+- [synergy_leagues.py](synergy_leagues.py) — evidence-backed participant skills and league membership, verified-skill work-order applications, assignment, delivery evidence, independent acceptance, and deterministic payout-split calculation. The split is only a settlement hand-off; this module never moves money.
+- [test_synergy_leagues.py](test_synergy_leagues.py) — tests for eligibility, membership evidence, stale-version rejection, delivery/review rules, and exact split conservation.
+- [Phase-1 domain contract](../research/SYNERGY_LEAGUES_PHASE_1_DOMAIN_CONTRACT.md) — scope, financial authority boundaries, state machine, explicit non-goals, and staged roadmap.
+
+Run from the repository root:
+
+```bash
+python -m unittest prototype.test_synergy_leagues -v
+```
+
+This is an in-memory domain prototype. Authentication, persistence, API, audit/outbox, dispute handling, and settlement integration are not implemented.
+
 ## Prototype 1 — Seven-Cell Economy
 
 - [seven_cell_economy.py](seven_cell_economy.py) — deterministic seven-cell simulation.
