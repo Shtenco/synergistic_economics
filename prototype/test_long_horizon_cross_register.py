@@ -278,5 +278,168 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             self.assertEqual(reopened.reconcile_event_stream(tuple(openings),tuple(closings)),reconciled)
             self.assertTrue(verify_projection_replay(reopened_financial_store))
 
+            # Bind period close/reopen governance to replay-verified snapshots of
+            # the six real authoritative SQLite stores, not synthetic receipt fixtures.
+            import hashlib, sqlite3
+            from external_checkpoints import (
+                Ed25519Signer, TrustedKeyRegistry, LocalImmutableAnchor,
+                publish_checkpoint, verify_checkpoint,
+            )
+            from period_governance import PeriodGovernance, REGISTERS
+
+            def canonical(value):
+                return json.dumps(value, sort_keys=True, separators=(",",":"),
+                                  ensure_ascii=False, allow_nan=False)
+
+            def sha(value):
+                return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+            def sqlite_state_hash(database):
+                with sqlite3.connect(database) as con:
+                    table_names=[row[0] for row in con.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+                    inventory=[]
+                    for table in table_names:
+                        quoted='"'+table.replace('"','""')+'"'
+                        columns=con.execute(f"PRAGMA table_info({quoted})").fetchall()
+                        primary=sorted((row[5],row[1]) for row in columns if row[5])
+                        order=[name for _,name in primary] or [row[1] for row in columns]
+                        order_sql=",".join('"'+name.replace('"','""')+'"' for name in order)
+                        rows=con.execute(f"SELECT * FROM {quoted} ORDER BY {order_sql}").fetchall()
+                        inventory.append({"table":table,"rows":[
+                            [value.hex() if isinstance(value,bytes) else value for value in row] for row in rows]})
+                return sha(canonical(inventory))
+
+            database_paths={
+                "physical":root/"physical.sqlite3","capital":root/"capital.sqlite3",
+                "labour":root/"labour.sqlite3","product":root/"product.sqlite3",
+                "legal_rights":root/"rights.sqlite3","financial":root/"financial.sqlite3",
+            }
+            opening_hashes={name:sqlite_state_hash(path) for name,path in database_paths.items()}
+            generation_root=root/"period-2033-generation-1"
+            generation_root.mkdir()
+            generation_paths={}
+            for name,source in database_paths.items():
+                target=generation_root/f"{name}.sqlite3"
+                with sqlite3.connect(source) as src, sqlite3.connect(target) as dst:
+                    src.backup(dst)
+                generation_paths[name]=target
+
+            # Re-open each copied store through its real domain implementation and
+            # force its native replay/integrity verifier before issuing a receipt.
+            generation_stores={
+                "physical":PhysicalFlowStore(generation_paths["physical"]),
+                "capital":CapitalCohortStore(generation_paths["capital"]),
+                "labour":LabourRegister(generation_paths["labour"]),
+                "product":ProductRegister(generation_paths["product"]),
+                "legal_rights":LegalRightsRegister(generation_paths["legal_rights"]),
+                "financial":FinancialEventStore(generation_paths["financial"]),
+            }
+            self.assertTrue(generation_stores["physical"].verify())
+            self.assertTrue(generation_stores["capital"].verify())
+            self.assertTrue(generation_stores["labour"].verify())
+            self.assertTrue(generation_stores["product"].verify())
+            self.assertTrue(generation_stores["legal_rights"].verify())
+            self.assertTrue(generation_stores["financial"].integrity_check())
+            self.assertTrue(verify_projection_replay(generation_stores["financial"]))
+            closing_hashes={name:sqlite_state_hash(path) for name,path in generation_paths.items()}
+            for name in REGISTERS:
+                self.assertEqual(closing_hashes[name],opening_hashes[name] if name not in REGISTERS else
+                    sqlite_state_hash(database_paths[name]))
+
+            event_checkpoint=reopened.latest_event_group_checkpoint()
+            self.assertEqual(event_checkpoint["sequence"],8)
+            source_root=event_checkpoint["group_hash"]
+            event_counts={
+                "physical":8,
+                "capital":8,
+                "labour":generation_stores["labour"].total_event_count,
+                "product":8,
+                "legal_rights":generation_stores["legal_rights"].total_event_count,
+                "financial":generation_stores["financial"].counts()["events"],
+            }
+            signer=Ed25519Signer.generate("synergy-period-test-key")
+            trust=TrustedKeyRegistry({signer.key_id:signer.public_bytes()})
+            anchor=LocalImmutableAnchor(root/"period-checkpoint-anchor.sqlite3")
+
+            def make_checkpoint(generation, sequence, projection_hash):
+                backup_digest=sha(canonical(closing_hashes))
+                manifest={
+                    "manifest_schema_version":1,"service_id":"SYNERGY-LONG-HORIZON-TEST",
+                    "database_schema_version":4,"mapper_version":"gold2a-entity-journal-mapper@1",
+                    "projection_generation":generation,"commit_sequence":8,"event_count":8,
+                    "event_log_root":source_root,
+                    "instrument_opening_hash":sha(canonical(opening_hashes)),
+                    "control_opening_hash":sha("period-2033-control-openings"),
+                    "projection_state_hash":projection_hash,"coverage_count":8,
+                    "applied_through_cursor":8,"period":2033,"period_closed":True,
+                    "backup_sha256":backup_digest,"checkpoint_sequence":sequence,
+                    "created_at_utc":"2026-11-13T13:00:00Z","signer_key_id":signer.key_id,
+                }
+                return publish_checkpoint(manifest,signer,anchor)
+
+            governance=PeriodGovernance(
+                root/"period-governance.sqlite3",
+                lambda ref,digest:verify_checkpoint(ref,digest,trust,anchor,require_latest=False),
+                "SYNERGY-LONG-HORIZON-TEST",
+                lambda approver,role,context,evidence:
+                    context["service_id"]=="SYNERGY-LONG-HORIZON-TEST"
+                    and evidence==f"APPROVAL:{approver}:{role}:{context['request_id']}",
+            )
+            close_ref,close_digest=make_checkpoint(0,1,sha("generation-0-projection"))
+            self.assertTrue(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
+            self.assertFalse(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
+            self.assertEqual(governance.active_generation(2033),0)
+            with self.assertRaisesRegex(ValueError,"governed reopening"):
+                governance.append_correction("CORR-CLOSED-1",2033,"FLOW-1",
+                    "late correction","AUTH:PERIOD","EVIDENCE:CORR-1",{"delta":"-1"})
+
+            scope=list(REGISTERS)
+            self.assertTrue(governance.request_reopen(
+                "REOPEN-LONG-HORIZON-2033",2033,"reconcile late labour and rights evidence",
+                "EVIDENCE:REOPEN-2033",scope,close_ref,close_digest))
+            self.assertTrue(governance.approve_reopen(
+                "REOPEN-LONG-HORIZON-2033","person-A","period_owner",
+                "APPROVAL:person-A:period_owner:REOPEN-LONG-HORIZON-2033"))
+            with self.assertRaisesRegex(ValueError,"two distinct people"):
+                governance.approve_reopen(
+                    "REOPEN-LONG-HORIZON-2033","person-A","independent_controller",
+                    "APPROVAL:person-A:independent_controller:REOPEN-LONG-HORIZON-2033")
+            self.assertTrue(governance.approve_reopen(
+                "REOPEN-LONG-HORIZON-2033","person-B","independent_controller",
+                "APPROVAL:person-B:independent_controller:REOPEN-LONG-HORIZON-2033"))
+
+            for name in REGISTERS:
+                reconciliation=sha(canonical({
+                    "register":name,"source_event_root":source_root,"event_count":event_counts[name],
+                    "opening_state_hash":opening_hashes[name],"closing_state_hash":closing_hashes[name],
+                }))
+                self.assertTrue(governance.record_rebuild(
+                    "REOPEN-LONG-HORIZON-2033",name,source_root,event_counts[name],
+                    opening_hashes[name],closing_hashes[name],reconciliation))
+
+            receipt_commitment=[{
+                "register_name":name,"old_generation":0,"new_generation":1,
+                "source_event_root":source_root,"event_count":event_counts[name],
+                "opening_state_hash":opening_hashes[name],"closing_state_hash":closing_hashes[name],
+                "reconciliation_hash":sha(canonical({
+                    "register":name,"source_event_root":source_root,"event_count":event_counts[name],
+                    "opening_state_hash":opening_hashes[name],"closing_state_hash":closing_hashes[name],
+                })),
+            } for name in sorted(REGISTERS)]
+            global_reconciliation=sha(canonical(receipt_commitment))
+            generation_ref,generation_digest=make_checkpoint(1,2,global_reconciliation)
+            self.assertTrue(governance.publish_generation(
+                "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
+            self.assertFalse(governance.publish_generation(
+                "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
+            self.assertEqual(governance.active_generation(2033),1)
+            with sqlite3.connect(root/"period-governance.sqlite3") as con:
+                history=con.execute(
+                    "SELECT generation,checkpoint_ref FROM generation_history WHERE period=2033 ORDER BY generation"
+                ).fetchall()
+            self.assertEqual(history,[(0,close_ref),(1,generation_ref)])
+            self.assertTrue(all(sqlite_state_hash(generation_paths[name])==closing_hashes[name] for name in REGISTERS))
+
 
 if __name__=="__main__": unittest.main(verbosity=2)
