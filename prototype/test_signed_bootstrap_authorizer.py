@@ -142,15 +142,18 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
                 self.assertTrue(store.verify())
 
     def test_tampered_expired_and_revoked_assertions_fail_closed(self):
-        valid = self.token(jti="tamper")
-        head, payload, signature = valid.split(".")
+        tampered_ref = self.token(jti="tamper")
+        head, payload, signature = self.assertions[tampered_ref].split(".")
         raw = bytearray(base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4)))
         raw[0] ^= 1
-        tampered = head + "." + payload + "." + base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-        expired = self.token(jti="expired", iat=NOW - 500, exp=NOW - 400)
-        revoked = self.token(jti="revoked")
+        self.assertions[tampered_ref] = (
+            head + "." + payload + "." +
+            base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+        )
+        expired_ref = self.token(jti="expired", iat=NOW - 500, exp=NOW - 400)
+        revoked_ref = self.token(jti="revoked")
         self.revoked.add((ISSUER, KID))
-        for index, token in enumerate((tampered, expired, revoked)):
+        for index, evidence_ref in enumerate((tampered_ref, expired_ref, revoked_ref)):
             with self.subTest(index=index):
                 store = LabourRegister(
                     self.root / f"denied-crypto-{index}.sqlite3",
@@ -158,7 +161,7 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
                 )
                 with self.assertRaises(RegisterError):
                     store.bootstrap_admin(
-                        principal_id="root", authority_ref=token, occurred_at=OCCURRED
+                        principal_id="root", authority_ref=evidence_ref, occurred_at=OCCURRED
                     )
                 self.assertEqual(store.total_event_count, 0)
                 self.assertTrue(store.verify())
