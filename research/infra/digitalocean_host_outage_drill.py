@@ -23,6 +23,25 @@ def api(method,path,token,payload=None):
         detail=exc.read().decode("utf-8","replace")
         raise SystemExit(f"DigitalOcean API failed: HTTP {exc.code}: {detail[:500]}")
 
+def ssh_transport_options(ssh_key,known_hosts_file):
+    return ["-i",ssh_key,"-o","BatchMode=yes","-o","IdentitiesOnly=yes",
+        "-o","StrictHostKeyChecking=yes", "-o",f"UserKnownHostsFile={known_hosts_file}",
+        "-o","GlobalKnownHostsFile=/dev/null","-o","ConnectTimeout=10"]
+
+
+def validate_pinned_host_key(host,known_hosts_file):
+    path=Path(known_hosts_file)
+    if not path.is_file() or path.stat().st_size==0:
+        raise SystemExit("pinned SSH known_hosts file is missing or empty")
+    try:
+        result=subprocess.run(["ssh-keygen","-F",host,"-f",str(path)],
+            capture_output=True,text=True,timeout=10)
+    except (OSError,subprocess.TimeoutExpired) as exc:
+        raise SystemExit(f"could not validate pinned SSH host key: {exc}")
+    if result.returncode!=0 or not result.stdout.strip():
+        raise SystemExit(f"no pinned SSH host key found for target {host}; refusing power operation")
+
+
 def wait_status(droplet_id,expected,token,timeout=900):
     deadline=time.time()+timeout
     while time.time()<deadline:
@@ -34,6 +53,7 @@ def wait_status(droplet_id,expected,token,timeout=900):
 def main():
     token=required("DO_API_TOKEN"); droplet_id=required("DR_DROPLET_ID")
     ssh_key=os.path.expanduser(required("DR_SSH_PRIVATE_KEY_PATH")); ssh_user=required("DR_SSH_USER")
+    known_hosts_file=os.path.expanduser(required("DR_SSH_KNOWN_HOSTS_PATH"))
     remote_command=required("DR_REMOTE_VERIFY_COMMAND")
     unavailable_register=required("DR_UNAVAILABLE_REGISTER")
     backup_output=Path(os.path.expanduser(required("DR_BACKUP_OUTPUT_PATH")))
@@ -48,12 +68,14 @@ def main():
     public=[n["ip_address"] for n in networks if n.get("type")=="public"]
     if not public: raise SystemExit("test droplet has no public IPv4")
     ip=public[0]
+    # Verify the exact target host key before any destructive provider action.
+    validate_pinned_host_key(ip,known_hosts_file)
+    transport_options=ssh_transport_options(ssh_key,known_hosts_file)
     api("POST",f"/droplets/{droplet_id}/actions",token,{"type":"power_off"})
     wait_status(droplet_id,"off",token)
     api("POST",f"/droplets/{droplet_id}/actions",token,{"type":"power_on"})
     active=wait_status(droplet_id,"active",token)
-    command=["ssh","-i",ssh_key,"-o","BatchMode=yes","-o","StrictHostKeyChecking=accept-new",
-        "-o","ConnectTimeout=10","-o","ServerAliveInterval=5","-o","ServerAliveCountMax=12",
+    command=["ssh",*transport_options,"-o","ServerAliveInterval=5","-o","ServerAliveCountMax=12",
         f"{ssh_user}@{ip}",f"{remote_command} --unavailable-register {unavailable_register} --verify-after-boot --create-backup"]
     deadline=time.time()+600; last_error=None
     while time.time()<deadline:
@@ -79,8 +101,7 @@ def main():
                     or not re.fullmatch(r"[0-9a-f]{64}",backup_digest)):
                 raise SystemExit("remote verifier omitted a safe /var/tmp backup path or SHA-256")
             backup_output.parent.mkdir(parents=True,exist_ok=True)
-            scp=["scp","-i",ssh_key,"-o","BatchMode=yes","-o","StrictHostKeyChecking=accept-new",
-                "-o","ConnectTimeout=10",f"{ssh_user}@{ip}:{remote_backup}",str(backup_output)]
+            scp=["scp",*transport_options,f"{ssh_user}@{ip}:{remote_backup}",str(backup_output)]
             copied=subprocess.run(scp,capture_output=True,text=True,timeout=600)
             if copied.returncode!=0: raise SystemExit(f"could not retrieve six-register backup: {copied.stderr[-1000:]}")
             local_digest=hashlib.sha256(backup_output.read_bytes()).hexdigest()
