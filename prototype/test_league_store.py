@@ -71,11 +71,10 @@ class SQLiteLeagueStoreTests(unittest.TestCase):
             "tenant-a", applied, expected_version=1,
             event_id="event-2", idempotency_key="apply-1", event_type="WORK_ORDER_APPLIED",
         )
-        assigned = applied.assign("worker-1", expected_version=2)
         with self.assertRaises(LeagueVersionConflict):
             self.store.save(
-                "tenant-a", assigned, expected_version=1,
-                event_id="event-3", idempotency_key="assign-1", event_type="WORK_ORDER_ASSIGNED",
+                "tenant-a", applied, expected_version=1,
+                event_id="event-3", idempotency_key="stale-write", event_type="WORK_ORDER_APPLIED",
             )
         with self.assertRaises(LeagueOrderNotFound):
             self.store.get("tenant-b", "order-1")
