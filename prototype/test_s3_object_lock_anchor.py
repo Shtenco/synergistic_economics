@@ -45,7 +45,8 @@ class S3ObjectLockAnchorTests(unittest.TestCase):
     def setUp(self):
         self.now=datetime(2026,11,13,tzinfo=timezone.utc)
         self.client=FakeS3(self.now)
-        self.anchor=S3ObjectLockAnchor(self.client,"synergy-worm",kms_key_id="arn:aws:kms:region:acct:key/external",
+        self.anchor=S3ObjectLockAnchor(self.client,"synergy-worm",kms_key_id="arn:aws:kms:us-east-1:222222222222:key/external",
+            expected_bucket_owner="333333333333",application_account_id="111111111111",
             retention_days=100,clock=lambda:self.now)
 
     def test_object_lock_immutability_and_monotonic_anchor(self):
@@ -79,17 +80,35 @@ class S3ObjectLockAnchorTests(unittest.TestCase):
         class NoLock(FakeS3):
             def get_object_lock_configuration(self,**kw): return {"ObjectLockConfiguration":{"ObjectLockEnabled":"Disabled"}}
         with self.assertRaises(CheckpointError):
-            S3ObjectLockAnchor(NoLock(self.now),"no-lock",kms_key_id="arn:aws:kms:region:acct:key/id",clock=lambda:self.now)
+            S3ObjectLockAnchor(NoLock(self.now),"no-lock",kms_key_id="arn:aws:kms:us-east-1:222222222222:key/id",
+                expected_bucket_owner="333333333333",application_account_id="111111111111",clock=lambda:self.now)
 
     def test_refuses_bucket_without_versioning(self):
         class BadBucket(FakeS3):
             def get_bucket_versioning(self,**kw): return {"Status":"Suspended"}
         with self.assertRaises(CheckpointError):
-            S3ObjectLockAnchor(BadBucket(self.now),"bad",kms_key_id="arn:aws:kms:region:acct:key/id",clock=lambda:self.now)
+            S3ObjectLockAnchor(BadBucket(self.now),"bad",kms_key_id="arn:aws:kms:us-east-1:222222222222:key/id",
+                expected_bucket_owner="333333333333",application_account_id="111111111111",clock=lambda:self.now)
+
+
+    def test_requires_separate_bucket_and_kms_security_accounts(self):
+        with self.assertRaises(CheckpointError):
+            S3ObjectLockAnchor(self.client,"same-account",
+                kms_key_id="arn:aws:kms:us-east-1:111111111111:key/id",
+                expected_bucket_owner="111111111111",application_account_id="111111111111")
+        with self.assertRaises(CheckpointError):
+            S3ObjectLockAnchor(self.client,"wrong-kms-account",
+                kms_key_id="arn:aws:kms:us-east-1:111111111111:key/id",
+                expected_bucket_owner="333333333333",application_account_id="111111111111")
+        with self.assertRaises(CheckpointError):
+            S3ObjectLockAnchor(self.client,"bad-owner",
+                kms_key_id="arn:aws:kms:us-east-1:222222222222:key/id",
+                expected_bucket_owner="not-an-account",application_account_id="111111111111")
 
     def test_refuses_missing_external_kms_key(self):
         with self.assertRaises(CheckpointError):
-            S3ObjectLockAnchor(self.client,"bucket",kms_key_id="",clock=lambda:self.now)
+            S3ObjectLockAnchor(self.client,"bucket",kms_key_id="",expected_bucket_owner="333333333333",
+                application_account_id="111111111111",clock=lambda:self.now)
 
 
 if __name__ == "__main__": unittest.main(verbosity=2)
