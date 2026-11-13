@@ -12,10 +12,15 @@ class FakeS3Error(Exception):
 
 
 class FakeS3:
-    def __init__(self, now): self.now=now; self.objects={}
-    def get_object_lock_configuration(self,**kw): return {"ObjectLockConfiguration":{"ObjectLockEnabled":"Enabled"}}
-    def get_bucket_versioning(self,**kw): return {"Status":"Enabled"}
+    def __init__(self, now): self.now=now; self.objects={}; self.expected_owners=[]
+    def _owner(self,kw):
+        owner=kw.get("ExpectedBucketOwner")
+        if not owner: raise AssertionError("ExpectedBucketOwner must be pinned on every S3 request")
+        self.expected_owners.append(owner)
+    def get_object_lock_configuration(self,**kw): self._owner(kw); return {"ObjectLockConfiguration":{"ObjectLockEnabled":"Enabled"}}
+    def get_bucket_versioning(self,**kw): self._owner(kw); return {"Status":"Enabled"}
     def put_object(self,**kw):
+        self._owner(kw)
         key=kw["Key"]
         if key in self.objects: raise FakeS3Error("412")
         self.objects[key]={"Body":bytes(kw["Body"]),"Metadata":kw["Metadata"],
@@ -23,11 +28,15 @@ class FakeS3:
             "ServerSideEncryption":kw["ServerSideEncryption"],"SSEKMSKeyId":kw["SSEKMSKeyId"],
             "VersionId":f"v-{len(self.objects)+1}"}
         return {"VersionId":self.objects[key]["VersionId"]}
-    def head_object(self,**kw): return {k:v for k,v in self.objects[kw["Key"]].items() if k!="Body"}
+    def head_object(self,**kw):
+        self._owner(kw)
+        return {k:v for k,v in self.objects[kw["Key"]].items() if k!="Body"}
     def get_object(self,**kw):
+        self._owner(kw)
         row=self.objects[kw["Key"]]
         return {"Body":BytesIO(row["Body"]),"Metadata":row["Metadata"]}
     def list_objects_v2(self,**kw):
+        self._owner(kw)
         prefix=kw["Prefix"]
         return {"Contents":[{"Key":k} for k in sorted(self.objects) if k.startswith(prefix)],"IsTruncated":False}
 
@@ -49,6 +58,7 @@ class S3ObjectLockAnchorTests(unittest.TestCase):
         self.assertFalse(self.anchor.advance_latest("core",0,"checkpoints/core/0.json",digest))
         self.assertEqual(self.anchor.latest("core"),{"checkpoint_sequence":0,"object_key":"checkpoints/core/0.json","object_digest":digest})
         self.assertTrue(self.anchor.is_anchored("core",0,"checkpoints/core/0.json",digest))
+        self.assertEqual(set(self.client.expected_owners),{"333333333333"})
         next_payload=b'{"checkpoint":2}'
         next_digest=sha256_bytes(next_payload)
         self.anchor.put_immutable("checkpoints/core/1.json",next_payload)

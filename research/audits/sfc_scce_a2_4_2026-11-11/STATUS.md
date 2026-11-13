@@ -2193,3 +2193,8 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 
 
 **Exact-head rerun trigger — financial projection readiness:** commit `49b7c24fcc10c1c0b7c6ad4ac968ee90334de931` now verifies frozen opening hashes before the first projected group and full projection replay after groups exist. Run all three CI workflows on the resulting exact HEAD.
+
+
+### 13 November continuation — native append/receipt crash retry
+
+Added a deterministic fault-injection test that raises after the PhysicalFlowStore native append commits but before the participant receipt is persisted. A fresh NativeStoreParticipant instance retries the same prepare token, the native flow append remains idempotent, the receipt advances to COMMITTED and the physical flow count remains one. Exact-head CI is pending for this additional test.

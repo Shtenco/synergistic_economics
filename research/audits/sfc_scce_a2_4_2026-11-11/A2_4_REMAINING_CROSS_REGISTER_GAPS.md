@@ -334,3 +334,8 @@ The financial coordinator participant now uses FinancialEventStore and the valid
 The coordinator commits financial last, after physical, capital, labour, product and legal-rights participant receipts. This ordering prevents an SFC projection from becoming visible before the other five native stores have committed. The coordinator's global visibility barrier is still mandatory. It is a recoverable multi-database protocol, not a single cross-database transaction or distributed consensus system.
 
 All six participants now target native stores. Remaining gaps: full lot/reservation inventory integration; actual T/V/O mappers for capital/product/labour/legal positions and financial control-only events; liability-side SFC mirrors in the common reconciler (the GOLD journal/oracle still validates these); cross-period six-register close/reopen/correction rebuild; and live remote WORM/KMS deployment.
+
+
+## 21. Native append-before-receipt recovery
+
+A deterministic fault-injection test terminates the participant operation after the native physical event append commits but before its receipt is persisted. A newly constructed participant retries the same prepare token; the native append is idempotent, the receipt completes and no duplicate flow is created. This covers the local native append/receipt crash window; full process-kill and multi-participant crash evidence remains in the coordinator crash matrix and exact-head CI.

@@ -113,3 +113,8 @@ The financial participant is now native as well. It requires an active, replay-v
 The coordinator now commits participants in the explicit order physical → capital → labour → product → legal_rights → financial. Financial is last: a visible SFC projection cannot precede durable commits of the other five participants. The global read barrier remains mandatory. This is a recoverable six-database prepare/commit protocol, not one cross-database SQL transaction or cross-host consensus.
 
 All six coordinator participants now use native stores. The physical adapter still binds physical flows, not the complete lot/reservation inventory lifecycle. The current integrated SFC/GOLD movement test covers physical sender/receiver positions and financial instrument asset positions; liability mirrors are separately enforced by GOLD journal/oracle controls, while control-only and full labour/legal/capital/product period mappings remain open.
+
+
+## Native append/receipt crash recovery
+
+The native participant test suite now injects a failure after a physical domain append has committed but before its participant receipt is written. A fresh adapter instance retries the same transaction and completes the receipt without duplicating the physical flow. This directly exercises the recoverable native append/receipt boundary. It is a deterministic fault injection in the test process; the broader subprocess crash matrix remains the evidence for actual process termination.

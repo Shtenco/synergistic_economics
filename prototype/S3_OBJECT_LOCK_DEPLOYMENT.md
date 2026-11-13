@@ -14,3 +14,8 @@ Checkpoint objects and monotonic anchor records are immutable keys. Per-service 
 6. Exercise backup restore into a clean environment, compare signed manifest and state hashes, and document RPO/RTO before production use.
 
 The adapter has mocked contract tests only. No AWS bucket, KMS key, independent account, IAM policy or live restore drill has been configured or verified in this repository. Do not claim external WORM deployment is complete until those controls are provisioned and exercised.
+
+
+The adapter now requires both `expected_bucket_owner` and `application_account_id` as 12-digit AWS account IDs. It rejects a bucket owner equal to the application account and rejects a KMS key ARN whose account is the application account. It pins `ExpectedBucketOwner` on every configuration, put, get, head and list request. The bucket-owner account and KMS-key account may be the same dedicated security account or separate security accounts, but neither may be the application account. This prevents accidental use of an application-owned bucket/key and protects against a bucket-name ownership substitution.
+
+The mocked tests assert that every S3 request includes the expected owner and reject same-account bucket/key configurations. These checks establish adapter policy only; the actual AWS account IDs, cross-account bucket policy, KMS grants and live Object Lock state must still be provisioned and independently verified.

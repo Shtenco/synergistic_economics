@@ -16,20 +16,29 @@ from external_checkpoints import CheckpointError, canonical_json, sha256_bytes
 
 
 class S3ObjectLockAnchor:
-    def __init__(self, client, bucket, *, kms_key_id, retention_days=3650, clock=None):
+    def __init__(self, client, bucket, *, kms_key_id, expected_bucket_owner, application_account_id,
+                 retention_days=3650, clock=None):
         if not isinstance(bucket,str) or not bucket or bucket != bucket.strip():
             raise CheckpointError("S3 bucket must be trimmed non-empty text")
-        if (not isinstance(kms_key_id,str) or not kms_key_id or kms_key_id != kms_key_id.strip()
-                or not kms_key_id.startswith("arn:") or ":kms:" not in kms_key_id):
-            raise CheckpointError("canonical KMS key ARN from the independent security account is required")
+        if (not isinstance(expected_bucket_owner,str) or not re.fullmatch(r"[0-9]{12}",expected_bucket_owner)
+                or not isinstance(application_account_id,str) or not re.fullmatch(r"[0-9]{12}",application_account_id)):
+            raise CheckpointError("12-digit bucket-owner and application AWS account IDs are required")
+        if expected_bucket_owner==application_account_id:
+            raise CheckpointError("Object Lock bucket must be owned by an account separate from the application")
+        if not isinstance(kms_key_id,str) or kms_key_id!=kms_key_id.strip():
+            raise CheckpointError("canonical KMS key ARN from a separate security account is required")
+        match=re.fullmatch(r"arn:(?:aws|aws-cn|aws-us-gov):kms:[a-z0-9-]+:([0-9]{12}):key/[A-Za-z0-9-]+",kms_key_id)
+        if not match or match.group(1)==application_account_id:
+            raise CheckpointError("canonical KMS key ARN must identify a key in an account separate from the application")
         if not isinstance(retention_days,int) or isinstance(retention_days,bool) or retention_days < 1:
             raise CheckpointError("Object Lock retention_days must be a positive integer")
         self.client, self.bucket, self.kms_key_id = client, bucket, kms_key_id
+        self.expected_bucket_owner,self.application_account_id=expected_bucket_owner,application_account_id
         self.retention_days = retention_days
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         try:
-            lock = client.get_object_lock_configuration(Bucket=bucket).get("ObjectLockConfiguration", {})
-            versioning = client.get_bucket_versioning(Bucket=bucket).get("Status")
+            lock = client.get_object_lock_configuration(Bucket=bucket,ExpectedBucketOwner=expected_bucket_owner).get("ObjectLockConfiguration", {})
+            versioning = client.get_bucket_versioning(Bucket=bucket,ExpectedBucketOwner=expected_bucket_owner).get("Status")
         except Exception as exc:
             raise CheckpointError("unable to verify S3 Object Lock bucket configuration") from exc
         if lock.get("ObjectLockEnabled") != "Enabled" or versioning != "Enabled":
@@ -50,7 +59,7 @@ class S3ObjectLockAnchor:
         return now + timedelta(days=self.retention_days)
 
     def _head_verified(self, key, expected_digest, minimum_retain_until=None):
-        head = self.client.head_object(Bucket=self.bucket, Key=key)
+        head = self.client.head_object(Bucket=self.bucket, Key=key,ExpectedBucketOwner=self.expected_bucket_owner)
         metadata = head.get("Metadata", {})
         if metadata.get("sha256") != expected_digest:
             raise CheckpointError("S3 checkpoint object metadata digest mismatch")
@@ -74,7 +83,7 @@ class S3ObjectLockAnchor:
         digest = sha256_bytes(body)
         retain_until = self._retention_until()
         try:
-            self.client.put_object(Bucket=self.bucket,Key=key,Body=body,
+            self.client.put_object(Bucket=self.bucket,Key=key,ExpectedBucketOwner=self.expected_bucket_owner,Body=body,
                 ContentType="application/json",IfNoneMatch="*",
                 ChecksumSHA256=base64.b64encode(hashlib.sha256(body).digest()).decode("ascii"),
                 Metadata={"sha256":digest},ObjectLockMode="COMPLIANCE",
@@ -96,7 +105,7 @@ class S3ObjectLockAnchor:
     def get(self, object_key):
         key = self._key(object_key)
         try:
-            response = self.client.get_object(Bucket=self.bucket,Key=key)
+            response = self.client.get_object(Bucket=self.bucket,Key=key,ExpectedBucketOwner=self.expected_bucket_owner)
             body = response["Body"].read()
             digest = sha256_bytes(body)
             self._head_verified(key,digest)
@@ -119,7 +128,7 @@ class S3ObjectLockAnchor:
         prefix = f"anchors/{service_id}/"
         keys=[]; token=None
         while True:
-            args={"Bucket":self.bucket,"Prefix":prefix}
+            args={"Bucket":self.bucket,"Prefix":prefix,"ExpectedBucketOwner":self.expected_bucket_owner}
             if token: args["ContinuationToken"]=token
             try:
                 page=self.client.list_objects_v2(**args)

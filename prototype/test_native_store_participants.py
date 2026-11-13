@@ -16,7 +16,7 @@ from sfc_projection_registry import activate_sfc_projection
 from sfc_projection_store import activate_control_openings, verify_projection_replay
 from labour_register import LabourRegister
 from legal_rights_register import LegalRightsRegister
-from cross_register_coordinator import CrossRegisterCoordinator, SQLiteParticipant, PARTICIPANTS
+from cross_register_coordinator import CrossRegisterCoordinator, PARTICIPANTS
 from native_store_participants import (make_physical_participant, make_capital_participant,
     make_product_participant, make_financial_participant, financial_stock_flow_movement_specs)
 from economic_stock_flow_reconciliation import PositionIdentity,OpeningPosition,ClosingPosition,reconcile_periods,movements_from_event_groups
@@ -44,7 +44,7 @@ def envelope(event_type,payload,idempotency):
 
 
 class NativeStoreParticipantTests(unittest.TestCase):
-    def test_five_native_registers_commit_as_one_six_participant_event_group(self):
+    def test_six_native_registers_commit_as_one_six_participant_event_group(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
             physical=PhysicalFlowStore(root/"physical.sqlite3")
@@ -142,6 +142,32 @@ class NativeStoreParticipantTests(unittest.TestCase):
             self.assertTrue(verify_projection_replay(financial_store))
             self.assertEqual(financial_store.counts()["groups"],1)
             self.assertEqual(reconciled.mirror_group_count,1)
+
+    def test_native_append_before_receipt_is_recovered_idempotently(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=PhysicalFlowStore(Path(tmp)/"physical.sqlite3")
+            participant=make_physical_participant(store,AUTH)
+            outflow,inflow=flow_pair("FLOW-CRASH")
+            outdict=asdict(outflow); outdict["quantity"]=str(outdict["quantity"]); outdict["uncertainty"]=str(outdict["uncertainty"])
+            indict=asdict(inflow); indict["quantity"]=str(indict["quantity"]); indict["uncertainty"]=str(indict["uncertainty"])
+            operation={"stream_id":"physical","native_event_id":"FLOW-CRASH","expected_revision":0,
+                "payload":envelope("physical.flow_recorded",{"outflow":outdict,"inflow":indict},"FLOW-CRASH")}
+            token=participant.prepare("TX-CRASH-AFTER-APPEND",operation)
+            native_append=participant.applier
+            def crash_after_native_append(native_id,event_envelope,txid):
+                native_append(native_id,event_envelope,txid)
+                raise RuntimeError("simulated process loss after native append and before receipt")
+            participant.applier=crash_after_native_append
+            with self.assertRaisesRegex(RuntimeError,"before receipt"):
+                participant.commit("TX-CRASH-AFTER-APPEND",token)
+            self.assertEqual(store.flow_count(),1)
+            self.assertEqual(participant.status("TX-CRASH-AFTER-APPEND")["state"],"PREPARED")
+            restarted=make_physical_participant(store,AUTH)
+            receipt=restarted.commit("TX-CRASH-AFTER-APPEND",token)
+            self.assertEqual(restarted.status("TX-CRASH-AFTER-APPEND")["state"],"COMMITTED")
+            self.assertEqual(restarted.event_count("TX-CRASH-AFTER-APPEND"),1)
+            self.assertEqual(store.flow_count(),1)
+            self.assertEqual(receipt["native_event_id"],"FLOW-CRASH")
 
     def test_prepared_capital_stream_blocks_direct_period_append_until_abort(self):
         with tempfile.TemporaryDirectory() as tmp:
