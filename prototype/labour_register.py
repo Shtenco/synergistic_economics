@@ -48,7 +48,7 @@ class LabourRegister(DurableEventRegister):
                 "engagement.delivered":{"STARTED"}, "engagement.stopped":{"STARTED"},
                 "engagement.verified":{"DELIVERED","STOPPED","DISPUTED"},
                 "engagement.disputed":{"DELIVERED","VERIFIED"},
-                "engagement.cancelled":{"OFFERED","ACCEPTED","SCHEDULED","STARTED"},
+                "engagement.cancelled":{"OFFERED","ACCEPTED","SCHEDULED"},
                 "engagement.settled":{"VERIFIED"},
             }
             status = state["status"]
@@ -60,6 +60,16 @@ class LabourRegister(DurableEventRegister):
                 delta = finite_decimal(p.get("delta_hours"), "delta_hours")
                 if target != state.get("delivery_event_id"):
                     raise LabourRegisterError("hours correction must reference the immutable delivery event")
+                if status == "SETTLED":
+                    adjustment_ref = required_text(p.get("settlement_adjustment_ref"), "settlement_adjustment_ref")
+                    if adjustment_ref in state.get("settlement_adjustment_refs", []):
+                        raise LabourRegisterError("settlement adjustment reference already used")
+                    state["settlement_adjustment_refs"] = list(state.get("settlement_adjustment_refs", [])) + [adjustment_ref]
+                    state["last_settlement_adjustment_ref"] = adjustment_ref
+                    adjusted_settlement = Decimal(state["settled_hours"]) + delta
+                    if adjusted_settlement < 0:
+                        raise LabourRegisterError("settlement adjustment would make settled hours negative")
+                    state["settled_hours"] = str(adjusted_settlement)
                 corrected = Decimal(state["delivered_hours"]) + delta
                 if corrected < 0 or corrected > Decimal(state["scheduled_hours"]):
                     raise LabourRegisterError("corrected delivered hours exceed scheduled bounds")
@@ -113,8 +123,13 @@ class LabourRegister(DurableEventRegister):
                 state["status"] = "CANCELLED"
                 state["cancellation_reason"] = required_text(p.get("reason"), "reason")
             elif typ == "engagement.settled":
+                settled_hours = finite_decimal(p.get("settled_hours"), "settled_hours", minimum=Decimal("0"))
+                if settled_hours != Decimal(state["delivered_hours"]):
+                    raise LabourRegisterError("settled hours must equal verified delivered hours")
                 state["status"] = "SETTLED"
+                state["settled_hours"] = str(settled_hours)
                 state["settlement_ref"] = required_text(p.get("settlement_ref"), "settlement_ref")
+                state["settlement_adjustment_refs"] = []
             return state
         if typ == "capability.assessed":
             if old is not None and state.get("person_ref") != p.get("person_ref"):

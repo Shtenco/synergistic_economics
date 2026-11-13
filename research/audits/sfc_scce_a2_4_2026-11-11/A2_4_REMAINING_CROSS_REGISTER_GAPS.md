@@ -307,3 +307,14 @@ Labour preserves offered/accepted/scheduled/started/delivered/verified/disputed/
 A coordinator integration test uses these two native stores plus four existing SQLite protocol participants. Therefore only Labour and Legal Rights are now native participants. Physical, capital, product and financial adapters must still be bound to their authoritative stores before the six-register command can be certified.
 
 The next acceptance gate is exact-HEAD CI for the new tests, followed by native adapters for the remaining four stores and a six-native-participant crash/restart matrix. The shared multi-period reconciliation kernel and remote WORM/KMS deployment are separate gates, not implied by these stores.
+
+
+## 16. Common event group and period-reconciliation kernel
+
+The coordinator now returns a canonical committed event group only after its six-participant visibility barrier. Each participant event carries the same common_event_id (the coordinator transaction ID), native event identity, aggregate version, payload digest and domain payload. Labour and Legal Rights persist the common ID in their own event-chain metadata; four other participants remain protocol conformance stores pending native adapters.
+
+The new Decimal reconciliation kernel requires every participant to declare either explicit stock_flow_movements or a reasoned no_stock_flow_effect. It enforces position identity across register/position/measure/unit/currency/valuation-basis/holder/issuer/instrument, the T/V/O identity and adjacent-period carry-forward, plus equal holder/issuer or opposite sender/receiver mirrors. It is an executable contract, not yet wired to all actual source schemas. A missing physical, capital, product or financial mapper must fail closed rather than be replaced by synthetic values.
+
+## 17. S3 Object Lock anchor adapter
+
+The new S3 adapter requires bucket Object Lock and versioning, uses COMPLIANCE retention, conditional immutable object creation and a canonical external KMS key ARN, and verifies object version, retention, digest and encryption on reads. Per-service anchor records form a contiguous immutable hash chain. Tests use a mocked S3 client only. No live AWS bucket, IAM separation, KMS custody or disaster-recovery restore drill is available; deployment remains an explicit release gate.

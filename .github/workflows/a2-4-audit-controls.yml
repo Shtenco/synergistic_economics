@@ -98,5 +98,9 @@ jobs:
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
       - name: A2.4.5/7 native Labour and Legal Rights register and coordinator tests
         run: python -m unittest discover -s prototype -p 'test_durable_labour_legal_registers.py' -v
+      - name: A2.4.7 canonical six-register event group and T/V/O period reconciliation
+        run: python -m unittest discover -s prototype -p 'test_economic_stock_flow_reconciliation.py' -v
+      - name: A2.4.7 S3 Object Lock checkpoint anchor contract
+        run: python -m unittest discover -s prototype -p 'test_s3_object_lock_anchor.py' -v
       - name: A2.4.7 unified synthetic cross-register integration
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_unified_cross_register.py

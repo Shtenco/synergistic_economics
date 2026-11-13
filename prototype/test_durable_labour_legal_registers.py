@@ -62,6 +62,27 @@ class DurableLabourRegisterTests(unittest.TestCase):
         with self.assertRaises(RegisterError):
             self.append("E2","engagement.accepted",payload={"accepted_hours":"1","consent_ref":"CONSENT-1"},version=0)
 
+    def test_stopped_work_preserves_hours_and_settlement_correction_requires_adjustment(self):
+        self.append("S1","engagement.offered",payload={"person_ref":"PSEUDO-2","activity_id":"repair",
+            "period":"2026-W46","classification":"paid","consent_basis":"CONTRACT-2","planned_hours":"4"})
+        self.append("S2","engagement.accepted",payload={"accepted_hours":"4","consent_ref":"CONSENT-2"},version=1)
+        self.append("S3","engagement.scheduled",payload={"scheduled_hours":"4"},version=2)
+        self.append("S4","engagement.started",version=3)
+        with self.assertRaises(LabourRegisterError):
+            self.append("S5-BAD","engagement.cancelled",payload={"reason":"unsafe"},version=4)
+        self.append("S5","engagement.stopped",payload={"delivered_hours":"1.5","reason":"safety stop",
+            "evidence_ref":"STOP-REPORT-2"},version=4)
+        self.append("S6","engagement.verified",payload={"verification_ref":"VERIFY-2"},version=5)
+        self.append("S7","engagement.settled",payload={"settled_hours":"1.5","settlement_ref":"PAYMENT-2"},version=6)
+        with self.assertRaises(RegisterError):
+            self.append("S8-BAD","hours.corrected",payload={"corrects_event_id":"S5","delta_hours":"-0.5",
+                "reason":"settlement adjustment missing"},version=7)
+        self.append("S8","hours.corrected",payload={"corrects_event_id":"S5","delta_hours":"-0.5",
+            "reason":"duplicate time entry","settlement_adjustment_ref":"ADJUSTMENT-2"},version=7)
+        state,version=self.store.state("ENG-1",principal_id="auditor")
+        self.assertEqual((state["status"],state["delivered_hours"],state["settled_hours"],version),
+                         ("SETTLED","1.0","1.0",8))
+
     def test_capability_history_is_person_skill_scoped(self):
         self.store.append_event(event_id="CAP1",idempotency_key="CAP1",aggregate_id="capability:PSEUDO-1:welder",
             event_type="capability.assessed",effective_at=T,recorded_at=T,actor_id="assessor",
@@ -220,6 +241,10 @@ class NativeRegisterCoordinatorTests(unittest.TestCase):
             self.assertTrue(coordinator.submit("TX-NATIVE-1","SCENARIO-1","CAUSE-1",operations))
             self.assertEqual(coordinator.execute("TX-NATIVE-1"),"COMMITTED")
             self.assertTrue(coordinator.is_visible("TX-NATIVE-1"))
+            event_group=coordinator.committed_event_group("TX-NATIVE-1")
+            self.assertEqual(event_group["common_event_id"],"TX-NATIVE-1")
+            self.assertEqual({x["register_id"] for x in event_group["events"]},set(PARTICIPANTS))
+            self.assertTrue(all(x["common_event_id"] == "TX-NATIVE-1" for x in event_group["events"]))
             labour_state,labour_version=labour.state("stream:labour",principal_id="coordinator")
             rights_state,rights_version=rights.state("stream:legal_rights",principal_id="coordinator")
             self.assertEqual((labour_state["status"],labour_version),("OFFERED",1))

@@ -289,3 +289,10 @@ See [repository integration and consolidation record](../research/INTEGRATION_CO
 ## Durable Labour and Legal Rights registers
 
 The independent Labour and Legal Rights implementation contract (DURABLE_LABOUR_LEGAL_REGISTERS.md) documents the event-sourced SQLite registers, append-only ACL, aggregate versions, correction lineage and native coordinator participant protocol. The SFC/GOLD period reconciliation kernel (SFC_CROSS_REGISTER_PERIOD_RECONCILIATION.md) defines full-key Decimal T/V/O and adjacent-period carry-forward checks. These are partial native integrations: physical, capital, product and financial still need native participant adapters; common-stream production reconciliation remains open.
+
+
+## Common event groups, SFC/GOLD reconciliation and remote checkpoint adapter
+
+The coordinator exposes a committed six-participant event group under one common transaction ID after its visibility barrier. Native Labour and Legal Rights event rows persist that common_event_id; other four participants remain protocol-conformance stores until native adapters are complete. The typed Decimal stock-flow kernel maps explicit participant movement declarations and checks T/V/O, mirror identities and period carry-forward. See SFC_CROSS_REGISTER_PERIOD_RECONCILIATION.md.
+
+S3ObjectLockAnchor implements the remote CheckpointAnchor interface with COMPLIANCE retention, versioning, SSE-KMS and append-only anchor sequence records. Deployment requirements and the current no-live-AWS boundary are documented in S3_OBJECT_LOCK_DEPLOYMENT.md.

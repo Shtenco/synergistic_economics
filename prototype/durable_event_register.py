@@ -61,7 +61,7 @@ def finite_decimal(value, field, *, minimum=None):
 
 class DurableEventRegister:
     """Hash-chained event log with append-only ACL and replay-derived state."""
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
     REGISTER_NAME = "abstract"
 
     def __init__(self, database_path):
@@ -81,6 +81,7 @@ class DurableEventRegister:
                     commit_sequence INTEGER PRIMARY KEY CHECK(commit_sequence>0),
                     event_id TEXT NOT NULL UNIQUE,
                     idempotency_key TEXT NOT NULL UNIQUE,
+                    common_event_id TEXT NOT NULL,
                     aggregate_id TEXT NOT NULL,
                     aggregate_version INTEGER NOT NULL CHECK(aggregate_version>=0),
                     event_type TEXT NOT NULL,
@@ -135,7 +136,8 @@ class DurableEventRegister:
     @staticmethod
     def _chain(sequence, event, digest, previous):
         body = {"sequence":sequence,"event_id":event["event_id"],
-                "idempotency_key":event["idempotency_key"],"aggregate_id":event["aggregate_id"],
+                "idempotency_key":event["idempotency_key"],"common_event_id":event["common_event_id"],
+                "aggregate_id":event["aggregate_id"],
                 "aggregate_version":event["aggregate_version"],"event_type":event["event_type"],
                 "effective_at":event["effective_at"],"recorded_at":event["recorded_at"],
                 "actor_id":event["actor_id"],"authority_ref":event["authority_ref"],
@@ -204,7 +206,7 @@ class DurableEventRegister:
 
     def _append(self, *, event_id, idempotency_key, aggregate_id, event_type,
                 effective_at, recorded_at, actor_id, authority_ref, payload,
-                expected_version=None, permission=None, bootstrap=False,
+                common_event_id=None, expected_version=None, permission=None, bootstrap=False,
                 allow_prepared_txid=None):
         for value, field in ((event_id,"event_id"),(idempotency_key,"idempotency_key"),
                              (aggregate_id,"aggregate_id"),(event_type,"event_type"),
@@ -213,6 +215,7 @@ class DurableEventRegister:
             required_text(value, field)
         utc_timestamp(effective_at,"effective_at")
         utc_timestamp(recorded_at,"recorded_at")
+        common_event_id = required_text(common_event_id or event_id,"common_event_id")
         if not isinstance(payload, Mapping):
             raise RegisterError("payload must be a JSON object")
         payload_json = canonical_json(dict(payload))
@@ -224,10 +227,10 @@ class DurableEventRegister:
                 old = con.execute("SELECT * FROM register_events WHERE event_id=? OR idempotency_key=?",
                                   (event_id, idempotency_key)).fetchone()
                 if old:
-                    if (old["event_id"], old["idempotency_key"], old["aggregate_id"],
+                    if (old["event_id"], old["idempotency_key"], old["common_event_id"], old["aggregate_id"],
                         old["event_type"], old["payload_sha256"], old["effective_at"],
                         old["recorded_at"], old["actor_id"], old["authority_ref"]) != (
-                        event_id, idempotency_key, aggregate_id, event_type, digest,
+                        event_id, idempotency_key, common_event_id, aggregate_id, event_type, digest,
                         effective_at, recorded_at, actor_id, authority_ref):
                         raise RegisterError("event/idempotency identity reused with changed immutable content")
                     con.execute("COMMIT")
@@ -279,12 +282,12 @@ class DurableEventRegister:
                 sequence = meta["event_count"] + 1
                 aggregate_version = 0 if event_type.startswith("acl.") else versions.get(aggregate_id, 0) + 1
                 chain_event = {"event_id":event_id,"idempotency_key":idempotency_key,
-                    "aggregate_id":aggregate_id,"aggregate_version":aggregate_version,"event_type":event_type,
+                    "common_event_id":common_event_id,"aggregate_id":aggregate_id,"aggregate_version":aggregate_version,"event_type":event_type,
                     "effective_at":effective_at,"recorded_at":recorded_at,"actor_id":actor_id,
                     "authority_ref":authority_ref}
                 chain = self._chain(sequence, chain_event, digest, meta["tail_hash"])
-                con.execute("""INSERT INTO register_events VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                    (sequence,event_id,idempotency_key,aggregate_id,aggregate_version,event_type,
+                con.execute("""INSERT INTO register_events VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (sequence,event_id,idempotency_key,common_event_id,aggregate_id,aggregate_version,event_type,
                      effective_at,recorded_at,actor_id,authority_ref,payload_json,digest,meta["tail_hash"],chain))
                 con.execute("UPDATE register_meta SET event_count=?,tail_hash=? WHERE singleton_id=1",
                             (sequence,chain))
@@ -420,7 +423,7 @@ class DurableEventRegister:
             aggregate_id=row["stream_id"],event_type=envelope["event_type"],
             effective_at=envelope["effective_at"],recorded_at=envelope["recorded_at"],
             actor_id=envelope["actor_id"],authority_ref=envelope["authority_ref"],
-            payload=envelope["payload"],expected_version=row["expected_revision"],
+            payload=envelope["payload"],common_event_id=txid,expected_version=row["expected_revision"],
             allow_prepared_txid=txid)
         receipt = {"participant":self.name,"transaction_id":txid,
                    "native_event_id":row["native_event_id"],"payload_digest":row["payload_digest"],
@@ -459,6 +462,21 @@ class DurableEventRegister:
             row=con.execute("SELECT state,prepare_token,receipt_json,native_event_id,payload_digest FROM native_participant_inbox WHERE transaction_id=?",(txid,)).fetchone()
             return dict(row) if row else None
 
+    def events_for_common_event(self, common_event_id, *, principal_id):
+        required_text(common_event_id,"common_event_id")
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            _, _, acl, rows = self._load(con)
+            if not self._authorized(acl,principal_id,self.read_permission):
+                raise RegisterError("actor is not authorized to read this register")
+            result=[]
+            for row in rows:
+                if row["common_event_id"] == common_event_id:
+                    item=dict(row)
+                    item["payload"]=json.loads(item.pop("payload_json"))
+                    result.append(item)
+            return tuple(result)
+
     def event_count(self, txid):
         with closing(self._connect()) as con:
             row=con.execute("SELECT i.state,COUNT(e.event_id) AS n FROM native_participant_inbox i LEFT JOIN register_events e ON e.event_id=i.native_event_id WHERE i.transaction_id=? GROUP BY i.transaction_id",(txid,)).fetchone()
@@ -466,13 +484,13 @@ class DurableEventRegister:
 
     def committed_event(self, txid):
         with closing(self._connect()) as con:
-            row=con.execute("""SELECT i.native_event_id,i.stream_id,i.expected_revision,i.payload_digest,i.payload_json,i.state,e.event_id
+            row=con.execute("""SELECT i.native_event_id,i.stream_id,i.expected_revision,i.payload_digest,i.payload_json,i.state,e.event_id,e.common_event_id
                 FROM native_participant_inbox i LEFT JOIN register_events e ON e.event_id=i.native_event_id
                 WHERE i.transaction_id=?""",(txid,)).fetchone()
             if row is None or row["state"] != "COMMITTED" or row["event_id"] is None: return None
             return {"native_event_id":row["native_event_id"],"stream_id":row["stream_id"],
                     "revision":row["expected_revision"]+1,"payload_digest":row["payload_digest"],
-                    "payload_json":row["payload_json"]}
+                    "payload_json":row["payload_json"],"common_event_id":row["common_event_id"]}
 
     def verify(self):
         try:

@@ -2137,3 +2137,14 @@ Still OPEN: common canonical event stream across all six stores; production priv
 
 
 **Exact-head validation trigger — Labour/Legal native stores:** this marker follows commit `ec152a2fda0ad3aa0cfa26b12176dcefb0eb326e`. Prototype, SCCE Stage-C2 and A2.4 workflows must complete against the resulting exact branch HEAD before these new native-store tests are marked CI-verified.
+
+
+### 13 November continuation — common event identity, SFC period kernel and S3 Object Lock adapter
+
+Added the common_event_id to the durable domain event envelope and hash chain (schema version 2). Native Labour/Legal commits bind their event rows to the coordinator transaction ID. The coordinator now exposes committed_event_group(txid), assembling all six participant payloads only after the global read barrier. The current coordinator integration fixture verifies the same common ID across all six participants; four of those participants are still protocol-conformance stores.
+
+Added economic_stock_flow_reconciliation.py and adversarial tests. The kernel maps declared movements from committed six-register groups and verifies native-unit position identities, T/V/O, holder/issuer or sender/receiver mirrors, duplicate rejection, period continuity and opening(t+1)=closing(t). Actual source-schema adapters from all six domain stores are still required before this becomes live SFC/GOLD reconciliation.
+
+Added s3_object_lock_anchor.py with S3 versioning, conditional immutable writes, COMPLIANCE retention, SSE-KMS ARN checks and monotonic hash-chained anchor records. Mocked contract tests pass locally; no live AWS resource or restore drill exists. External WORM deployment remains OPEN.
+
+**CI status for these additions:** pending until the next exact-HEAD Prototype, SCCE Stage-C2 and A2.4 workflows complete. Do not reuse the preceding exact-head PASS as evidence for this newer code.

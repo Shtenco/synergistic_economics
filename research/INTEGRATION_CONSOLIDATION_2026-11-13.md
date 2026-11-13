@@ -86,3 +86,12 @@ This consolidation record does not certify production readiness, legal validity 
 The integration branch now adds durable_event_register.py, labour_register.py and legal_rights_register.py. Labour and Legal Rights implement the coordinator participant interface against their own authoritative event database; their participant inbox and event append are colocated. Prepared aggregates are reserved, authorization is checked before prepare, ACL mutations are serialized behind outstanding prepares, and commit retry repairs the event/receipt boundary idempotently. The event hash chain binds event identity, aggregate version, timestamps, actor, authority and payload digest.
 
 A coordinator integration test composes these two native stores with four existing protocol conformance participants. This proves only the two native adapters; it does not complete the physical, capital, product and financial native adapters or certify six-register production atomicity. See prototype/DURABLE_LABOUR_LEGAL_REGISTERS.md.
+
+
+## Implementation continuation — common event groups and checkpoint deployment adapter
+
+The coordinator now exposes committed_event_group(txid), which assembles the six participant receipts only after the global visibility barrier and assigns one common_event_id. Labour and Legal Rights persist this identifier natively in their hash-chained event rows. The other four participant implementations still expose protocol receipts rather than native event rows with this metadata.
+
+A typed Decimal SFC/GOLD stock-flow kernel now maps explicit movement declarations from committed six-register groups. It rejects silent participant omissions, missing native-unit identity, duplicate movements, T/V/O imbalance, mirror mismatch and broken opening(t+1)=closing(t) carry-forward. This is a tested integration contract, not yet a mapper from every existing production register schema; actual physical/capital/product/financial event mappings remain OPEN.
+
+S3ObjectLockAnchor now implements the remote checkpoint anchor contract with conditional immutable writes, S3 versioning, COMPLIANCE retention, SSE-KMS key identity checks and a hash-chained contiguous per-service anchor history. Only mocked S3 contract tests are available. No AWS bucket, independent account, KMS key, IAM policy or live restore drill is configured, so external WORM deployment remains OPEN.

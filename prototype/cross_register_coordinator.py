@@ -696,3 +696,53 @@ class CrossRegisterCoordinator:
             if actual_digest != row["payload_digest"]:
                 return False
         return True
+    def committed_event_group(self, txid):
+        """Return the six participant events under one verified common transaction ID."""
+        if not self.is_visible(txid):
+            raise CoordinatorError("transaction is not globally visible")
+        with closing(_connect(self.database_path)) as con:
+            row = con.execute(
+                "SELECT envelope_json FROM coordinator_transactions WHERE transaction_id=?",
+                (txid,)
+            ).fetchone()
+        if row is None:
+            raise CoordinatorError("unknown coordinator transaction")
+        envelope = json.loads(row["envelope_json"])
+        events = []
+        for operation in self._operations(txid):
+            name = operation["participant"]
+            native = self.participants[name].committed_event(txid)
+            if native is None or native.get("common_event_id", txid) != txid:
+                raise CoordinatorError("participant event is not bound to the common transaction ID")
+            try:
+                participant_payload = json.loads(native["payload_json"])
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise CoordinatorError("participant event payload is not valid JSON") from exc
+            if not isinstance(participant_payload, dict):
+                raise CoordinatorError("participant event payload must be a JSON object")
+            if isinstance(participant_payload.get("payload"), dict) and isinstance(participant_payload.get("event_type"), str):
+                event_type = participant_payload["event_type"]
+                domain_payload = participant_payload["payload"]
+            else:
+                event_type = participant_payload.get("event_type", "participant.command")
+                domain_payload = participant_payload
+            events.append({
+                "register_id": name,
+                "common_event_id": txid,
+                "native_event_id": operation["native_event_id"],
+                "aggregate_id": operation["stream_id"],
+                "aggregate_version": operation["expected_revision"] + 1,
+                "payload_digest": operation["payload_digest"],
+                "event_type": event_type,
+                "payload": domain_payload,
+            })
+        if {event["register_id"] for event in events} != set(PARTICIPANTS) or len(events) != len(PARTICIPANTS):
+            raise CoordinatorError("committed event group does not contain exactly six registers")
+        return {
+            "schema_version": 1,
+            "transaction_id": txid,
+            "common_event_id": txid,
+            "scenario_id": envelope["scenario_id"],
+            "causation_id": envelope["causation_id"],
+            "events": tuple(events),
+        }

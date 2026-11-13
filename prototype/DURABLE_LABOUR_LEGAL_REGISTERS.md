@@ -40,3 +40,12 @@ This is a partial six-register integration. Physical, capital, product and finan
 ## Security and recovery limitations
 
 Hash chains and SQLite immutability triggers detect accidental/tamper corruption but do not authenticate a privileged database administrator who can rewrite the whole database and recompute the chain. Production deployments still need independent signing, externally administered trust roots, encrypted backups, remote immutable checkpoints, access review, retention and restore drills.
+
+
+## Shared transaction identity and schema evolution
+
+The event-store schema is version 2. Each native event row includes common_event_id in its full-envelope hash chain. Direct single-register commands default this value to their native event ID; coordinator commits bind it to the shared transaction ID. events_for_common_event() provides an ACL-protected lookup for the native events belonging to one globally committed coordinator transaction.
+
+The coordinator's committed_event_group() read model is available only after all six participant receipts pass the visibility barrier. It returns the six native participant identities, aggregate versions, payload digests and domain payloads under one common_event_id. This is an assembled immutable read view, not a separate authoritative log. Four participants still use protocol-conformance stores and must be replaced with native adapters before full six-register durability is claimed.
+
+Schema version 2 is not an automatic in-place migration from earlier experimental database files. Older schema versions fail closed and require an explicit migration/backup procedure before reuse.
