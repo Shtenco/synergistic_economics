@@ -9,6 +9,8 @@
     "schema_version",
     "demand_id",
     "buyer_id",
+    "tenant_id",
+    "consent_ref",
     "category",
     "jurisdiction",
     "status",
