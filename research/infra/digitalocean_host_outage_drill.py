@@ -4,6 +4,7 @@ This proves VM interruption and recovery, not physical data-centre host failure.
 """
 from __future__ import annotations
 import hashlib, json, os, re, subprocess, time, urllib.error, urllib.request
+from pathlib import Path
 API="https://api.digitalocean.com/v2"
 
 def required(name):
