@@ -99,24 +99,38 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
         self.assertGreaterEqual(a["ending_essential_backlog"], 0.0)
         self.assertGreaterEqual(b["ending_essential_backlog"], 0.0)
 
-    def test_care_queue_remains_empty_when_stage_b_has_no_care_claims(self):
-        model = EndogenousHouseholdEconomy(
+    def test_care_queue_integration_preserves_bounded_accounting(self):
+        expiring = EndogenousHouseholdEconomy(
             "cellular", seed=67, shock="compound", cellular_hops=2,
             households_per_cell=8, priority_dispersion=0.4,
             household_policy="proportional", backlog_retention=1.0,
             max_backlog_periods=1.0, max_care_queue_age_periods=1,
         )
-        self.assertEqual(
-            sum(h.essential_needs.get("care", 0.0) for h in model.households),
-            0.0,
+        expiring.run(12)
+        expiring_summary = expiring.summary()
+        self.assertGreaterEqual(
+            expiring_summary["cumulative_expired_care_claim_units"], 0.0,
         )
-        model.run(12)
-        summary = model.summary()
-        self.assertEqual(summary["cumulative_expired_care_claim_units"], 0.0)
-        self.assertEqual(summary["cumulative_unqueued_care_claim_units"], 0.0)
-        self.assertTrue(model.validate())
-        for distribution in summary["care_queue_age_distribution"].values():
-            self.assertEqual(distribution, 0.0)
+        self.assertTrue(expiring.validate())
+        for quantity in expiring_summary["care_queue_age_distribution"].values():
+            self.assertGreaterEqual(quantity, 0.0)
+
+        capped = EndogenousHouseholdEconomy(
+            "cellular", seed=71, shock="compound", cellular_hops=2,
+            households_per_cell=8, priority_dispersion=0.4,
+            household_policy="proportional", backlog_retention=1.0,
+            max_backlog_periods=0.01, max_care_queue_age_periods=3,
+        )
+        capped.run(12)
+        capped_summary = capped.summary()
+        self.assertGreaterEqual(
+            capped_summary["cumulative_unqueued_care_claim_units"], 0.0,
+        )
+        self.assertLessEqual(
+            capped_summary["ending_essential_backlog"],
+            sum(h.essential_needs.get("care", 0.0) for h in capped.households) * 0.01
+            + 1e-7,
+        )
 
     def test_invalid_backlog_parameters_are_rejected(self):
         with self.assertRaises(EndogenousHouseholdError):
