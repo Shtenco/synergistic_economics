@@ -202,9 +202,10 @@ def route_demand(demand: dict[str, Any], offers: Iterable[dict[str, Any]], *,
     seen_offers = set()
     for offer in offers:
         validate_offer(offer)
-        if offer["offer_id"] in seen_offers:
+        offer_identity = (offer["tenant_id"], offer["offer_id"])
+        if offer_identity in seen_offers:
             continue
-        seen_offers.add(offer["offer_id"])
+        seen_offers.add(offer_identity)
         match = score_offer(demand, offer, now=now)
         if match is not None:
             matches.append(match)
