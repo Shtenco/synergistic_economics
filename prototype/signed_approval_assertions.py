@@ -191,6 +191,9 @@ class SignedApprovalVerifier:
         for claim, value in expected.items():
             if payload[claim] != value:
                 raise ApprovalAssertionError(f"approval assertion {claim} does not match the request")
+        assertion_evidence_ref = request_context.get("assertion_evidence_ref")
+        if assertion_evidence_ref is not None and payload["evidence_ref"] != assertion_evidence_ref:
+            raise ApprovalAssertionError("approval assertion evidence reference does not match the request")
         with closing(sqlite3.connect(self.database_path, timeout=30)) as con:
             con.execute("PRAGMA synchronous=FULL")
             con.execute("BEGIN IMMEDIATE")
@@ -233,19 +236,22 @@ class SignedBootstrapAuthorizer:
     identity, role and canonical bootstrap payload digest.
     """
 
-    def __init__(self, verifier: SignedApprovalVerifier):
-        if not callable(verifier):
-            raise ApprovalAssertionError("a signed approval verifier is mandatory")
+    def __init__(self, verifier: SignedApprovalVerifier, assertion_resolver: Callable[[str], str]):
+        if not callable(verifier) or not callable(assertion_resolver):
+            raise ApprovalAssertionError("signed verifier and independent assertion resolver are mandatory")
         self.verifier = verifier
+        self.assertion_resolver = assertion_resolver
 
     @staticmethod
-    def request_context(principal_id, register_name, payload):
+    def request_context(principal_id, register_name, payload, authority_ref):
         for value, field in ((principal_id, "principal_id"), (register_name, "register_name")):
             if not isinstance(value, str) or not value or value != value.strip():
                 raise ApprovalAssertionError(f"{field} must be trimmed non-empty text")
         if (not isinstance(payload, dict)
                 or payload != {"principal_id": principal_id, "permissions": ["*"]}):
             raise ApprovalAssertionError("bootstrap payload must grant only the first administrator")
+        if not isinstance(authority_ref, str) or not authority_ref or authority_ref != authority_ref.strip():
+            raise ApprovalAssertionError("authority_ref must be a stable evidence reference")
         request_id = f"{register_name}:ACL:BOOTSTRAP:{principal_id}"
         material = {
             "service_id": register_name,
@@ -253,16 +259,24 @@ class SignedBootstrapAuthorizer:
             "subject": principal_id,
             "role": "bootstrap_admin",
             "event_type": "acl.granted",
+            "authority_ref": authority_ref,
             "payload": payload,
         }
         return {
             "service_id": register_name,
             "request_id": request_id,
             "request_digest": hashlib.sha256(_canonical(material)).hexdigest(),
+            "assertion_evidence_ref": authority_ref,
         }
 
     def __call__(self, principal_id, authority_ref, register_name, payload):
-        context = self.request_context(principal_id, register_name, payload)
+        context = self.request_context(principal_id, register_name, payload, authority_ref)
+        try:
+            assertion = self.assertion_resolver(authority_ref)
+        except Exception as exc:
+            raise ApprovalAssertionError("bootstrap assertion evidence lookup failed") from exc
+        if not isinstance(assertion, str) or not assertion:
+            raise ApprovalAssertionError("bootstrap assertion evidence is unavailable")
         return self.verifier(
-            principal_id, "bootstrap_admin", context, authority_ref
+            principal_id, "bootstrap_admin", context, assertion
         )

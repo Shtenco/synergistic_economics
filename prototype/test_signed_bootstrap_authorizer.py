@@ -49,8 +49,9 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
             format=serialization.PublicFormat.Raw,
         )
         self.revoked = set()
+        self.assertions = {}
         self.verifier = self.make_verifier()
-        self.authorizer = SignedBootstrapAuthorizer(self.verifier)
+        self.authorizer = SignedBootstrapAuthorizer(self.verifier, self.assertions.__getitem__)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -74,7 +75,10 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
     def token(self, principal="root", register="labour", *, jti="bootstrap-1",
               role="bootstrap_admin", iat=NOW - 5, exp=NOW + 120):
         payload = {"principal_id": principal, "permissions": ["*"]}
-        context = SignedBootstrapAuthorizer.request_context(principal, register, payload)
+        evidence_ref = "authority://bootstrap/" + jti
+        context = SignedBootstrapAuthorizer.request_context(
+            principal, register, payload, evidence_ref
+        )
         claims = {
             "iss": ISSUER,
             "sub": principal,
@@ -83,12 +87,13 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
             "request_id": context["request_id"],
             "request_digest": context["request_digest"],
             "role": role,
-            "evidence_ref": "authority://bootstrap/" + jti,
+            "evidence_ref": evidence_ref,
             "jti": jti,
             "iat": iat,
             "exp": exp,
         }
-        return sign_assertion(claims, self.private)
+        self.assertions[evidence_ref] = sign_assertion(claims, self.private)
+        return evidence_ref
 
     def test_signed_assertion_bootstraps_first_admin_and_survives_reopen(self):
         token = self.token()
@@ -103,7 +108,9 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
 
         # Exact assertion retry is safe and idempotent across verifier instances.
         reopened_verifier = self.make_verifier()
-        reopened_authorizer = SignedBootstrapAuthorizer(reopened_verifier)
+        reopened_authorizer = SignedBootstrapAuthorizer(
+            reopened_verifier, self.assertions.__getitem__
+        )
         reopened = LabourRegister(
             self.root / "labour.sqlite3", bootstrap_authorizer=reopened_authorizer
         )
