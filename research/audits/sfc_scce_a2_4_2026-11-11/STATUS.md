@@ -2184,3 +2184,6 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 
 
 **CI correction record — financial adapter test import:** the initial all-six participant run failed before executing the integration test because `activate_control_openings` is exported by `sfc_projection_store.py`, not `sfc_projection_registry.py`. The test import is corrected; no implementation or assertion was weakened. A fresh exact-HEAD run is required.
+
+
+**Exact-head CI rerun trigger:** the financial participant test now imports `activate_control_openings` from its actual module. Commit `fb746b2074ac6a6e4cc6903f6c5bec4b98599390` contains the correction. Re-run Prototype, SCCE Stage-C2 and A2.4 on the resulting branch HEAD.
