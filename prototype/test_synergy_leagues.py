@@ -82,7 +82,7 @@ class LeagueContractTests(unittest.TestCase):
     def test_assignee_cannot_self_accept(self):
         current = order().apply(profile(), expected_version=1).assign("worker-1", expected_version=2)
         current = current.submit("worker-1", ("delivery:1",), expected_version=3)
-        with self.assertRaisesRegex(LeagueError, "independent"):
+        with self.assertRaisesRegex(LeagueError, "own delivery"):
             current.accept("worker-1", expected_version=4)
 
     def test_unaccepted_work_cannot_be_settled(self):
