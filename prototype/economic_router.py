@@ -45,7 +45,7 @@ def _money(record: Any, key: str) -> tuple[int, str, int]:
         raise RouterValidationError(f"{key}.amount_minor must be a non-negative integer")
     if isinstance(scale, bool) or not isinstance(scale, int) or not 0 <= scale <= 6:
         raise RouterValidationError(f"{key}.scale must be an integer from 0 to 6")
-    if not isinstance(currency, str) or len(currency) != 3 or not currency.isalpha() or currency.upper() != currency:
+    if not isinstance(currency, str) or len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency.upper() != currency:
         raise RouterValidationError(f"{key}.currency must be a three-letter uppercase code")
     return amount, currency, scale
 
