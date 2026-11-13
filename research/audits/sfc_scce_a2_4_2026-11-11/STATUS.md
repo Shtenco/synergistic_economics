@@ -2105,3 +2105,16 @@ Period governance requires a verified manifest for the configured service identi
 
 
 External checkpoint sequence advancement additionally requires the next contiguous sequence number after the first anchor; rollback, duplicate-sequence content conflicts and unexplained gaps are rejected. The audit covers same-sequence idempotent publication, historical verification, rollback, gap rejection, immutable history, revoked keys and backup digest mismatch. This remains tested only against the local conformance anchor until the remote WORM adapter is implemented.
+
+
+### Consolidated integration CI evidence — 13 November 2026
+
+The A2.4/SFC-SCCE, Prototype 6 and UEB source lines are now represented together in draft PR #6 (`integration/economic-core-consolidation-2026-11-13`). The first integration CI wave produced:
+
+- Prototype validation run `43371700879`: **success** on merge commit `d751196dfbd4754361b0dbfaa91e9b65cc84d916`. The full unit suite and configured baseline, crisis, Monte Carlo, labour-sensitivity, Stage-C1 and Stage-C2-A2 steps completed successfully.
+- SCCE Stage-C2 run `43371700951`: **success** on the same merge commit, including household feedback, zero-backlog control and backlog sensitivity experiments.
+- A2.4 audit control fixtures run `43371741952`: **success** on PR #6 HEAD `23657a0b1d6865dc0ed45336c3b3244d3f7e5636`.
+
+The first two runs predate the workflow-only branch-filter commit and therefore are not exact-HEAD evidence for PR #6. The A2.4 run is exact-HEAD evidence. This status update is intentionally placed under the audit path so Prototype, Stage-C2 and A2.4 workflows rerun against one identical commit. Their new run IDs and final conclusions must be recorded after completion; do not infer success from the earlier runs.
+
+**Scope remains unchanged:** CI success does not close the production integration gaps. The single atomic six-register command boundary, authoritative durable Labour and Legal Rights registers, common-stream multi-period SFC/GOLD reconciliation, and remote WORM plus independent KMS/HSM custody remain OPEN until their specific implementation and recovery evidence exists.
