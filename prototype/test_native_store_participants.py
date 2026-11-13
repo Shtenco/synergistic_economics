@@ -3,7 +3,7 @@ from dataclasses import asdict
 from decimal import Decimal as D
 import tempfile
 import unittest
-import sys, json
+import sys, json, subprocess
 from pathlib import Path
 
 from physical_flow_store import FlowPosting, PhysicalFlowStore, PhysicalFlowError
@@ -235,6 +235,53 @@ class NativeStoreParticipantTests(unittest.TestCase):
             participant.abort("TX-RESERVED")
             self.assertEqual(store.flow_count(),0)
             self.assertIsNotNone(token)
+
+
+    def test_native_append_survives_real_process_death_before_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            database=Path(tmp)/"physical.sqlite3"
+            store=PhysicalFlowStore(database)
+            participant=make_physical_participant(store,AUTH)
+            outflow,inflow=flow_pair("FLOW-PROCESS-CRASH")
+            outdict=asdict(outflow); outdict["quantity"]=str(outdict["quantity"]); outdict["uncertainty"]=str(outdict["uncertainty"])
+            indict=asdict(inflow); indict["quantity"]=str(indict["quantity"]); indict["uncertainty"]=str(indict["uncertainty"])
+            operation={"stream_id":"physical","native_event_id":"FLOW-PROCESS-CRASH","expected_revision":0,
+                "payload":envelope("physical.flow_recorded",{"outflow":outdict,"inflow":indict},"FLOW-PROCESS-CRASH")}
+            token=participant.prepare("TX-PROCESS-CRASH",operation)
+
+            child = """
+import os, sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd() / "prototype"))
+from physical_flow_store import PhysicalFlowStore
+from native_store_participants import make_physical_participant
+store = PhysicalFlowStore(sys.argv[1])
+participant = make_physical_participant(store, lambda *args: True)
+apply_native = participant.applier
+def crash_after_native_append(native_id, event_envelope, txid):
+    apply_native(native_id, event_envelope, txid)
+    os._exit(73)
+participant.applier = crash_after_native_append
+participant.commit("TX-PROCESS-CRASH", sys.argv[2])
+raise SystemExit(74)
+"""
+            result=subprocess.run([sys.executable,"-c",child,str(database),token],
+                cwd=ROOT,capture_output=True,text=True,timeout=30)
+            self.assertEqual(result.returncode,73,msg=result.stderr or result.stdout)
+
+            # A new OS process must observe the native append but the old PREPARED inbox.
+            restarted=make_physical_participant(PhysicalFlowStore(database),AUTH)
+            self.assertEqual(restarted.status("TX-PROCESS-CRASH")["state"],"PREPARED")
+            self.assertEqual(restarted.event_count("TX-PROCESS-CRASH"),0)
+            self.assertEqual(restarted.store.flow_count(),1)
+
+            # Retrying commit must reconcile the already-durable domain event, not duplicate it.
+            receipt=restarted.commit("TX-PROCESS-CRASH",token)
+            self.assertEqual(restarted.status("TX-PROCESS-CRASH")["state"],"COMMITTED")
+            self.assertEqual(restarted.event_count("TX-PROCESS-CRASH"),1)
+            self.assertEqual(restarted.store.flow_count(),1)
+            self.assertEqual(receipt["native_event_id"],"FLOW-PROCESS-CRASH")
+            self.assertTrue(restarted.store.verify())
 
 
 if __name__=="__main__": unittest.main(verbosity=2)
