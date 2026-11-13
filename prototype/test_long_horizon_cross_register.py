@@ -347,7 +347,7 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             # the six real authoritative SQLite stores, not synthetic receipt fixtures.
             from external_checkpoints import (
                 Ed25519Signer, TrustedKeyRegistry, LocalImmutableAnchor,
-                publish_checkpoint, verify_checkpoint, verify_backup_bytes,
+                publish_checkpoint, verify_checkpoint, verify_backup_bytes, CheckpointError,
             )
             from period_governance import PeriodGovernance, REGISTERS
 
@@ -448,10 +448,13 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             close_ref,close_digest=make_checkpoint(
                 0,0,sha("generation-0-projection"),closed_source_root,closed_hashes,8,8)
             close_manifest=verify_checkpoint(close_ref,close_digest,trust,anchor,require_latest=True)
-            self.assertTrue(verify_backup_bytes(close_manifest,canonical({
+            close_backup_artifact=canonical({
                 name:base64.b64encode(path.read_bytes()).decode("ascii")
                 for name,path in sorted(generation_paths.items())
-            }).encode("utf-8")))
+            }).encode("utf-8")
+            self.assertTrue(verify_backup_bytes(close_manifest,close_backup_artifact))
+            with self.assertRaises(CheckpointError):
+                verify_backup_bytes(close_manifest,close_backup_artifact+b"tampered")
             self.assertTrue(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertFalse(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertEqual(governance.active_generation(2033),0)
@@ -645,10 +648,13 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
             generation_manifest=verify_checkpoint(
                 generation_ref,generation_digest,trust,anchor,require_latest=True)
-            self.assertTrue(verify_backup_bytes(generation_manifest,canonical({
+            generation_backup_artifact=canonical({
                 name:base64.b64encode(path.read_bytes()).decode("ascii")
                 for name,path in sorted(generation_paths.items())
-            }).encode("utf-8")))
+            }).encode("utf-8")
+            self.assertTrue(verify_backup_bytes(generation_manifest,generation_backup_artifact))
+            with self.assertRaises(CheckpointError):
+                verify_backup_bytes(generation_manifest,generation_backup_artifact+b"tampered")
             self.assertFalse(governance.publish_generation(
                 "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
             self.assertEqual(governance.active_generation(2033),1)
