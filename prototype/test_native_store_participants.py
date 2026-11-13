@@ -72,8 +72,8 @@ class NativeStoreParticipantTests(unittest.TestCase):
             operations={
                 "physical":{"stream_id":"physical","native_event_id":"FLOW-1","expected_revision":0,
                     "payload":envelope("physical.flow_recorded",{"outflow":outdict,"inflow":indict},"FLOW-1") | {"stock_flow_movements":movements}},
-                "capital":{"stream_id":"capital","native_event_id":"CAPITAL-PERIOD:1","expected_revision":0,
-                    "payload":envelope("capital.period_appended",{"period":1,"events":[],"additions":[]},"CAPITAL-PERIOD:1") | {"no_stock_flow_effect":"empty cohort period batch"}},
+                "capital":{"stream_id":"capital","native_event_id":"CAPITAL-PERIOD:2026","expected_revision":0,
+                    "payload":envelope("capital.period_appended",{"period":2026,"events":[],"additions":[]},"CAPITAL-PERIOD:2026") | {"no_stock_flow_effect":"empty cohort period batch"}},
                 "product":{"stream_id":"product","native_event_id":"SPEC:steel:S235","expected_revision":0,
                     "payload":envelope("product_spec",{"product_id":"steel","grade_id":"S235","dimension":"mass",
                         "native_unit":"t","stockability":"stockable","time_basis":"period_flow","evidence_ref":"SPEC-1"},
@@ -94,8 +94,8 @@ class NativeStoreParticipantTests(unittest.TestCase):
             physical_status=participants["physical"].status("TX-NATIVE-5")
             self.assertEqual(participants["physical"].commit("TX-NATIVE-5",physical_status["prepare_token"]),
                              __import__("json").loads(physical_status["receipt_json"]))
-            self.assertEqual(physical.flow_count,1); self.assertTrue(physical.verify())
-            self.assertEqual(capital.current_state().last_processed_period,1); self.assertTrue(capital.verify())
+            self.assertEqual(physical.flow_count(),1); self.assertTrue(physical.verify())
+            self.assertEqual(capital.current_state().last_processed_period,2026); self.assertTrue(capital.verify())
             self.assertTrue(product.verify())
             group=coordinator.committed_event_group("TX-NATIVE-5")
             self.assertEqual({x["register_id"] for x in group["events"]},set(PARTICIPANTS))
@@ -111,11 +111,11 @@ class NativeStoreParticipantTests(unittest.TestCase):
             store=CapitalCohortStore(Path(tmp)/"capital.sqlite3")
             store.initialize((CapitalCohort("C1","cell-1","machine",2026,0,1,1,"operating",1,1,1),))
             participant=make_capital_participant(store,AUTH)
-            op={"stream_id":"capital","native_event_id":"CAPITAL-PERIOD:1","expected_revision":0,
-                "payload":envelope("capital.period_appended",{"period":1,"events":[],"additions":[]},"CAPITAL-PERIOD:1")}
+            op={"stream_id":"capital","native_event_id":"CAPITAL-PERIOD:2026","expected_revision":0,
+                "payload":envelope("capital.period_appended",{"period":2026,"events":[],"additions":[]},"CAPITAL-PERIOD:2026")}
             participant.prepare("TX-CAPITAL-RESERVED",op)
             from capital_cohort_store import CapitalCohortStoreError
-            with self.assertRaises(CapitalCohortStoreError): store.append_period(1,(),())
+            with self.assertRaises(CapitalCohortStoreError): store.append_period(2026,(),())
             participant.abort("TX-CAPITAL-RESERVED")
             self.assertIsNone(store.current_state().last_processed_period)
 
@@ -131,7 +131,7 @@ class NativeStoreParticipantTests(unittest.TestCase):
             token=participant.prepare("TX-RESERVED",op)
             with self.assertRaises(PhysicalFlowError): store.append(outflow,inflow)
             participant.abort("TX-RESERVED")
-            self.assertEqual(store.flow_count,0)
+            self.assertEqual(store.flow_count(),0)
             self.assertIsNotNone(token)
 
 

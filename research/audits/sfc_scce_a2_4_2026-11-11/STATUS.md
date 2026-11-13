@@ -2163,3 +2163,6 @@ The coordinator now has native adapters for PhysicalFlowStore (physical flows), 
 
 
 **Exact-head CI trigger — five native participants:** the physical-flow, capital-cohort and product adapters, reservation guards and six-participant event-group test follow commit `21a2757cb0ba4f0e133e7ff426a5f749ab627340`. Financial remains a conformance participant. Exact-head Prototype, SCCE Stage-C2 and A2.4 results are required before these adapters are marked verified.
+
+
+**CI correction record:** the first native-adapter test run exposed two test-fixture defects, not weakened domain invariants: the synthetic capital cohort vintage was 2026 while the test tried to advance period 1, and PhysicalFlowStore.flow_count is a method rather than a property. The fixture now advances period 2026 and calls flow_count(). The original failed run is retained as evidence; the corrected code requires a fresh exact-HEAD run.
