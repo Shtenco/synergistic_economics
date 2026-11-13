@@ -380,17 +380,35 @@ class DurableEventRegister:
         utc_timestamp(envelope["effective_at"],"effective_at")
         utc_timestamp(envelope["recorded_at"],"recorded_at")
         payload_json = canonical_json(envelope)
-        token, digest = self._participant_token(txid, {"stream_id":stream,"native_event_id":native_id,
-                                                        "expected_revision":revision,"payload":envelope})
+        operation = {"stream_id":stream,"native_event_id":native_id,
+                     "expected_revision":revision,"payload":envelope}
+        token, digest = self._participant_token(txid, operation)
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
                 old = con.execute("SELECT * FROM native_participant_inbox WHERE transaction_id=?",(txid,)).fetchone()
                 if old:
-                    if (old["stream_id"],old["native_event_id"],old["payload_digest"],old["payload_json"],old["expected_revision"],old["prepare_token"]) != (stream,native_id,digest,payload_json,revision,token):
+                    old_raw = old["payload_json"]
+                    try:
+                        old_envelope = json.loads(old_raw)
+                    except (TypeError, json.JSONDecodeError) as exc:
+                        raise RegisterError("stored native prepare payload is invalid JSON") from exc
+                    old_operation = {"stream_id":old["stream_id"],"native_event_id":old["native_event_id"],
+                                     "expected_revision":old["expected_revision"],"payload":old_envelope}
+                    old_token, old_digest = self._participant_token(txid, old_operation)
+                    if (canonical_json(old_envelope) != old_raw or old_digest != old["payload_digest"]
+                            or old_token != old["prepare_token"]):
+                        raise RegisterError("stored native prepare payload, digest or token is corrupt")
+                    from register_event_contract import equivalent_event_envelopes
+                    same_payload = (old_raw == canonical_json(dict(payload))
+                                    or equivalent_event_envelopes(self.REGISTER_NAME, old_envelope, envelope))
+                    same_identity = (old["stream_id"],old["native_event_id"],old["expected_revision"]) == (
+                        stream,native_id,revision)
+                    if not same_identity or not same_payload:
                         raise RegisterError("native participant transaction ID reused with changed content")
                     if old["state"] == "ABORTED": raise RegisterError("aborted native transaction cannot be prepared again")
-                    con.execute("COMMIT"); return token
+                    # Return the historical token; never rewrite v0 bytes, digest or receipt.
+                    con.execute("COMMIT"); return old["prepare_token"]
                 states, versions, acl, _ = self._load(con)
                 if versions.get(stream,0) != revision:
                     raise RegisterError("native register expected revision conflict")
