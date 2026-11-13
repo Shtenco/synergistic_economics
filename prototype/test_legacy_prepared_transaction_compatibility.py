@@ -107,6 +107,7 @@ class LegacyPreparedCompatibilityTests(unittest.TestCase):
     def test_v0_preparing_transaction_recovers_through_all_six_real_native_registers(self):
         from dataclasses import asdict
         from decimal import Decimal as D
+        import sqlite3
         import sys
         from physical_flow_store import PhysicalFlowStore
         from capital_cohort_bridge import CapitalCohort
@@ -235,7 +236,7 @@ class LegacyPreparedCompatibilityTests(unittest.TestCase):
 
             old_json = _canonical(old_envelope)
             old_digest = hashlib.sha256(old_json.encode()).hexdigest()
-            with coordinator._connect() as con:
+            with sqlite3.connect(root / "coordinator.sqlite3") as con:
                 con.execute("INSERT INTO coordinator_transactions VALUES(?,?,?,'PREPARING')",
                     (txid,old_json,old_digest))
                 con.execute("INSERT INTO coordinator_transitions(transaction_id,from_state,to_state,reason) "
