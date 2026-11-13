@@ -31,6 +31,30 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
     def test_eight_native_transactions_include_compensations_corrections_and_full_replay(self):
         with tempfile.TemporaryDirectory() as directory:
             root=Path(directory)
+            import hashlib, sqlite3
+
+            def canonical(value):
+                return json.dumps(value, sort_keys=True, separators=(",",":"),
+                                  ensure_ascii=False, allow_nan=False)
+
+            def sha(value):
+                return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+            def sqlite_state_hash(database):
+                with sqlite3.connect(database) as con:
+                    table_names=[row[0] for row in con.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+                    inventory=[]
+                    for table in table_names:
+                        quoted='"'+table.replace('"','""')+'"'
+                        columns=con.execute(f"PRAGMA table_info({quoted})").fetchall()
+                        primary=sorted((row[5],row[1]) for row in columns if row[5])
+                        order=[name for _,name in primary] or [row[1] for row in columns]
+                        order_sql=",".join('"'+name.replace('"','""')+'"' for name in order)
+                        rows=con.execute(f"SELECT * FROM {quoted} ORDER BY {order_sql}").fetchall()
+                        inventory.append({"table":table,"rows":[
+                            [value.hex() if isinstance(value,bytes) else value for value in row] for row in rows]})
+                return sha(canonical(inventory))
             physical=PhysicalFlowStore(root/"physical.sqlite3")
             capital=CapitalCohortStore(root/"capital.sqlite3")
             capital.initialize((CapitalCohort("C1","cell-1","machine",2026,0,1,1,"operating",1,1,1),))
@@ -71,6 +95,14 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             }
             coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",participants,
                 require_authoritative_adapters=True)
+            database_paths={
+                "physical":root/"physical.sqlite3","capital":root/"capital.sqlite3",
+                "labour":root/"labour.sqlite3","product":root/"product.sqlite3",
+                "legal_rights":root/"rights.sqlite3","financial":root/"financial.sqlite3",
+            }
+            # Capture the true period opening state before any of the eight
+            # coordinated native transactions are submitted.
+            opening_hashes={name:sqlite_state_hash(path) for name,path in database_paths.items()}
 
             mine_identity={"register_id":"physical","position_id":"mine:steel:S235","measure":"mass","unit":"t",
                 "currency":"NA","valuation_basis":"PHYSICAL","holder_id":"mine","issuer_id":"mill","instrument_id":"steel:S235"}
@@ -280,42 +312,12 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
 
             # Bind period close/reopen governance to replay-verified snapshots of
             # the six real authoritative SQLite stores, not synthetic receipt fixtures.
-            import hashlib, sqlite3
             from external_checkpoints import (
                 Ed25519Signer, TrustedKeyRegistry, LocalImmutableAnchor,
                 publish_checkpoint, verify_checkpoint,
             )
             from period_governance import PeriodGovernance, REGISTERS
 
-            def canonical(value):
-                return json.dumps(value, sort_keys=True, separators=(",",":"),
-                                  ensure_ascii=False, allow_nan=False)
-
-            def sha(value):
-                return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-            def sqlite_state_hash(database):
-                with sqlite3.connect(database) as con:
-                    table_names=[row[0] for row in con.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
-                    inventory=[]
-                    for table in table_names:
-                        quoted='"'+table.replace('"','""')+'"'
-                        columns=con.execute(f"PRAGMA table_info({quoted})").fetchall()
-                        primary=sorted((row[5],row[1]) for row in columns if row[5])
-                        order=[name for _,name in primary] or [row[1] for row in columns]
-                        order_sql=",".join('"'+name.replace('"','""')+'"' for name in order)
-                        rows=con.execute(f"SELECT * FROM {quoted} ORDER BY {order_sql}").fetchall()
-                        inventory.append({"table":table,"rows":[
-                            [value.hex() if isinstance(value,bytes) else value for value in row] for row in rows]})
-                return sha(canonical(inventory))
-
-            database_paths={
-                "physical":root/"physical.sqlite3","capital":root/"capital.sqlite3",
-                "labour":root/"labour.sqlite3","product":root/"product.sqlite3",
-                "legal_rights":root/"rights.sqlite3","financial":root/"financial.sqlite3",
-            }
-            opening_hashes={name:sqlite_state_hash(path) for name,path in database_paths.items()}
             generation_root=root/"period-2033-generation-1"
             generation_root.mkdir()
             generation_paths={}
@@ -344,8 +346,8 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             self.assertTrue(verify_projection_replay(generation_stores["financial"]))
             closing_hashes={name:sqlite_state_hash(path) for name,path in generation_paths.items()}
             for name in REGISTERS:
-                self.assertEqual(closing_hashes[name],opening_hashes[name] if name not in REGISTERS else
-                    sqlite_state_hash(database_paths[name]))
+                self.assertEqual(closing_hashes[name],sqlite_state_hash(database_paths[name]))
+                self.assertNotEqual(opening_hashes[name],closing_hashes[name])
 
             event_checkpoint=reopened.latest_event_group_checkpoint()
             self.assertEqual(event_checkpoint["sequence"],8)
