@@ -1,0 +1,42 @@
+name: Live AWS Object Lock and KMS disaster-recovery drill
+on:
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: Compliance-mode retention for immutable test objects (minimum 30 days)
+        required: true
+        default: "30"
+        type: string
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: synergy-aws-live-dr
+  cancel-in-progress: false
+jobs:
+  live-object-lock-drill:
+    runs-on: ubuntu-latest
+    environment: aws-live-dr
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install live AWS client
+        run: python -m pip install "boto3>=1.35,<2" "cryptography>=44,<47"
+      - name: Obtain short-lived credentials through GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.SYNERGY_AWS_DR_ROLE_ARN }}
+          aws-region: ${{ secrets.SYNERGY_AWS_DR_REGION }}
+          role-session-name: synergy-live-dr-${{ github.run_id }}
+      - name: Verify independent account topology and run live S3 Object Lock/KMS drill
+        env:
+          AWS_REGION: ${{ secrets.SYNERGY_AWS_DR_REGION }}
+          SYNERGY_DR_BUCKET: ${{ secrets.SYNERGY_AWS_DR_BUCKET }}
+          SYNERGY_DR_BUCKET_OWNER_ACCOUNT: ${{ secrets.SYNERGY_AWS_DR_BUCKET_OWNER_ACCOUNT }}
+          SYNERGY_DR_APP_ACCOUNT: ${{ secrets.SYNERGY_AWS_DR_APP_ACCOUNT }}
+          SYNERGY_DR_KMS_KEY_ARN: ${{ secrets.SYNERGY_AWS_DR_KMS_KEY_ARN }}
+          SYNERGY_DR_RETENTION_DAYS: ${{ inputs.retention_days }}
+        run: python research/infra/live_s3_object_lock_drill.py
