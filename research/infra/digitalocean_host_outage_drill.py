@@ -72,8 +72,12 @@ def main():
                 raise SystemExit("remote verifier did not prove selected-store outage, blocked visibility and recovery")
             remote_backup=evidence.get("backup_path","")
             backup_digest=evidence.get("backup_sha256","")
-            if not re.fullmatch(r"/var/tmp/[A-Za-z0-9._/-]+",remote_backup) or not re.fullmatch(r"[0-9a-f]{64}",backup_digest):
-                raise SystemExit("remote verifier omitted a safe backup path or SHA-256")
+            # Keep the SCP source to one direct child of /var/tmp. A broad
+            # slash-accepting pattern would also admit /var/tmp/../../ paths.
+            if (not re.fullmatch(r"/var/tmp/[A-Za-z0-9._-]+",remote_backup)
+                    or Path(remote_backup).name in {".",".."}
+                    or not re.fullmatch(r"[0-9a-f]{64}",backup_digest)):
+                raise SystemExit("remote verifier omitted a safe /var/tmp backup path or SHA-256")
             backup_output.parent.mkdir(parents=True,exist_ok=True)
             scp=["scp","-i",ssh_key,"-o","BatchMode=yes","-o","StrictHostKeyChecking=accept-new",
                 "-o","ConnectTimeout=10",f"{ssh_user}@{ip}:{remote_backup}",str(backup_output)]
