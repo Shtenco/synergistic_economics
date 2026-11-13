@@ -84,11 +84,11 @@ class EconomicRegistryTests(unittest.TestCase):
         self.assertEqual(self.registry.tenant_version("tenant-a"), 1)
 
     def test_duplicate_source_fingerprint_is_audited_not_reinserted(self):
-        first = dict(DEMAND, source_fingerprint="fingerprint-1")
+        first = dict(DEMAND, source_system="lead-radar", source_ref="source:1", source_fingerprint="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         self.registry.register_demand(first, command_id="cmd-1", idempotency_key="key-1",
                                       actor_id="actor-1", authority_ref="mandate:1",
                                       correlation_id="corr:1", occurred_at=NOW)
-        second = dict(DEMAND, demand_id="d-2", source_fingerprint="fingerprint-1")
+        second = dict(DEMAND, demand_id="d-2", source_system="lead-radar", source_ref="source:2", source_fingerprint="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
         receipt = self.registry.register_demand(second, command_id="cmd-2", idempotency_key="key-2",
                                                 actor_id="actor-1", authority_ref="mandate:1",
                                                 correlation_id="corr:2", occurred_at=NOW)
