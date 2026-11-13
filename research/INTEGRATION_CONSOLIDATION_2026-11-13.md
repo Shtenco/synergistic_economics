@@ -104,3 +104,12 @@ The integration branch now adapts the existing PhysicalFlowStore, CapitalCohortS
 Together with the native LabourRegister and LegalRightsRegister, five of six coordinator participants now target authoritative domain stores. The financial participant is still a protocol-conformance store: its adapter must use the validated EntityJournal plus the projection-aware FinancialEventStore transaction, not a raw event append. The physical adapter currently binds the physical-flow store, not the full P6 lot-inventory lifecycle. Thus six-register production atomicity remains OPEN.
 
 The six-participant test commits physical flow, capital period, product specification, labour offer and legal claim in one coordinator transaction, with a conformance financial participant, then assembles the common event group and reconciles the physical sender/receiver stock positions. This proves the new native adapters and physical mirror path only; it does not prove a complete financial GOLD or all-domain SFC period close.
+
+
+## Implementation continuation — six native coordinator participants
+
+The financial participant is now native as well. It requires an active, replay-verified SFC opening snapshot; validates canonical JournalEvent values against an EntityRegistry; derives financial instrument T/V/O movements through the same mapper used by SFC; and commits through append_projected_group. The financial database transaction includes event group, postings, instrument/control projections, coverage and cursor. Its prepare reservation is enforced at the projection-aware append boundary.
+
+The coordinator now commits participants in the explicit order physical → capital → labour → product → legal_rights → financial. Financial is last: a visible SFC projection cannot precede durable commits of the other five participants. The global read barrier remains mandatory. This is a recoverable six-database prepare/commit protocol, not one cross-database SQL transaction or cross-host consensus.
+
+All six coordinator participants now use native stores. The physical adapter still binds physical flows, not the complete lot/reservation inventory lifecycle. The current integrated SFC/GOLD movement test covers physical sender/receiver positions and financial instrument asset positions; liability mirrors are separately enforced by GOLD journal/oracle controls, while control-only and full labour/legal/capital/product period mappings remain open.

@@ -237,3 +237,86 @@ def make_product_participant(store,authorizer):
     def apply(native_id,envelope,txid): store._append(native_id,envelope["event_type"],envelope["payload"],allow_prepared_txid=txid)
     def exists(con,native_id,envelope): return con.execute("SELECT 1 FROM product_events WHERE event_id=?",(native_id,)).fetchone() is not None
     return NativeStoreParticipant("product",store,"product",revision,validate,apply,exists,authorizer)
+
+def _decode_journal_event(raw):
+    from entity_journal import JournalEvent,JournalLine,LegalEvidence
+    if not isinstance(raw,dict): raise NativeStoreParticipantError("financial event must be an object")
+    lines=[]
+    for posting in raw.get("postings",[]):
+        if not isinstance(posting,dict): raise NativeStoreParticipantError("financial posting must be an object")
+        values=dict(posting); values["amount"]=Decimal(values["amount"])
+        lines.append(JournalLine(**values))
+    evidence_raw=raw.get("legal_evidence")
+    evidence=None
+    if evidence_raw is not None:
+        if not isinstance(evidence_raw,dict): raise NativeStoreParticipantError("legal evidence must be an object")
+        evidence=LegalEvidence(evidence_raw["evidence_ref"],evidence_raw["authority"],
+            evidence_raw["effective_at"],evidence_raw["scope"],tuple(evidence_raw["parties"]))
+    return JournalEvent(event_id=raw["event_id"],event_type=raw["event_type"],
+        effective_period=raw["effective_period"],lines=tuple(lines),component=raw["component"],
+        legal_effect=raw["legal_effect"],
+        writeoff_claim_delta=None if raw.get("writeoff_claim_delta") is None else Decimal(raw["writeoff_claim_delta"]),
+        forgiven_principal=None if raw.get("forgiven_principal") is None else Decimal(raw["forgiven_principal"]),
+        legal_evidence=evidence)
+
+
+def financial_stock_flow_movement_specs(events):
+    """Derive financial instrument movements using the same mapper as SFC projection."""
+    from sfc_projection_store import _map_event
+    specs=[]
+    for event in events:
+        instrument_deltas,_controls=_map_event(event)
+        for index,(identity,component,amount) in enumerate(instrument_deltas):
+            specs.append({
+                "movement_id":f"{event.event_id}:SFC:{index}",
+                "identity":{
+                    "register_id":"financial",
+                    "position_id":f"{identity.instrument_id}:{identity.holder_entity_id}:{identity.issuer_entity_id}",
+                    "measure":"monetary","unit":identity.currency,"currency":identity.currency,
+                    "valuation_basis":identity.valuation_basis,"holder_id":identity.holder_entity_id,
+                    "issuer_id":identity.issuer_entity_id,"instrument_id":identity.instrument_id,
+                },
+                "period_index":event.effective_period,"movement_class":component,
+                "amount":str(amount),"evidence_ref":event.legal_evidence.evidence_ref if event.legal_evidence else event.event_id,
+            })
+    return specs
+
+
+def make_financial_participant(store,journal,authorizer):
+    from entity_journal import EntityJournal
+    from sfc_projection_store import append_projected_group,verify_projection_replay
+    if not isinstance(journal,EntityJournal):
+        raise NativeStoreParticipantError("canonical EntityJournal instance is required")
+    if not verify_projection_replay(store):
+        raise NativeStoreParticipantError("financial/SFC projection must be activated and replay-verified before participant registration")
+
+    def decode_group(envelope):
+        events=envelope["payload"].get("events")
+        if not isinstance(events,list) or not events:
+            raise NativeStoreParticipantError("financial event group must contain a non-empty event list")
+        return tuple(_decode_journal_event(item) for item in events)
+
+    def revision(con):
+        return con.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0]
+
+    def validate(con,native_id,envelope):
+        payload=envelope["payload"]
+        if payload.get("group_id")!=native_id or envelope["idempotency_key"]!=native_id:
+            raise NativeStoreParticipantError("financial native event/idempotency ID must equal group_id")
+        if not verify_projection_replay(store):
+            raise NativeStoreParticipantError("financial/SFC projection replay failed before prepare")
+        events=decode_group(envelope)
+        candidate=EntityJournal(journal.registry)
+        for event in events: candidate.post(event)
+        if envelope.get("stock_flow_movements") != financial_stock_flow_movement_specs(events):
+            raise NativeStoreParticipantError("financial T/V/O movement metadata differs from canonical SFC mapper")
+
+    def apply(native_id,envelope,txid):
+        payload=envelope["payload"]
+        append_projected_group(journal,store,native_id,decode_group(envelope),
+            causation_id=payload.get("causation_id"),allow_prepared_txid=txid)
+
+    def exists(con,native_id,envelope):
+        return con.execute("SELECT 1 FROM event_groups WHERE group_id=?",(native_id,)).fetchone() is not None
+
+    return NativeStoreParticipant("financial",store,"financial",revision,validate,apply,exists,authorizer)

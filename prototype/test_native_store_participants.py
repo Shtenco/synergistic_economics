@@ -3,19 +3,30 @@ from dataclasses import asdict
 from decimal import Decimal as D
 import tempfile
 import unittest
+import sys, json
 from pathlib import Path
 
 from physical_flow_store import FlowPosting, PhysicalFlowStore, PhysicalFlowError
 from capital_cohort_bridge import CapitalCohort
 from capital_cohort_store import CapitalCohortStore
 from product_register import ProductRegister
+from financial_event_store import FinancialEventStore
+from entity_journal import EntityJournal
+from sfc_projection_registry import activate_sfc_projection, activate_control_openings
+from sfc_projection_store import verify_projection_replay
 from labour_register import LabourRegister
 from legal_rights_register import LegalRightsRegister
 from cross_register_coordinator import CrossRegisterCoordinator, SQLiteParticipant, PARTICIPANTS
-from native_store_participants import make_physical_participant, make_capital_participant, make_product_participant
+from native_store_participants import (make_physical_participant, make_capital_participant,
+    make_product_participant, make_financial_participant, financial_stock_flow_movement_specs)
 from economic_stock_flow_reconciliation import PositionIdentity,OpeningPosition,ClosingPosition,reconcile_periods,movements_from_event_groups
 
 T="2026-11-13T05:00:00Z"
+ROOT=Path(__file__).resolve().parents[1]
+AUDIT_DIR=ROOT/"research"/"audits"/"sfc_scce_a2_4_2026-11-11"
+sys.path.insert(0,str(AUDIT_DIR))
+from audit_financial_journal_adapter import _corpus_events
+from financial_journal_adapter import _event_payload
 AUTH=lambda actor,authority,event_type,payload: actor=="coordinator" and authority.startswith("AUTH:")
 
 
@@ -40,6 +51,24 @@ class NativeStoreParticipantTests(unittest.TestCase):
             capital=CapitalCohortStore(root/"capital.sqlite3")
             capital.initialize((CapitalCohort("C1","cell-1","machine",2026,0,1,1,"operating",1,1,1),))
             product=ProductRegister(root/"product.sqlite3")
+            financial_store=FinancialEventStore(root/"financial.sqlite3")
+            registry,corpus_events=_corpus_events()
+            journal=EntityJournal(registry)
+            corpus=json.loads((AUDIT_DIR/"SFC_GOLD_2A_CORPUS.json").read_text(encoding="utf-8"))
+            opening=corpus["opening_snapshot"]
+            self.assertTrue(activate_sfc_projection(financial_store,opening["rows"],
+                mapper_version=opening["mapper_version"],evidence_ref=opening["evidence_ref"]))
+            controls=(
+                {"control_id":"impairment_allowance","entity_id":"bank-1","sector":"CB","currency":"LCU",
+                 "valuation_basis":"NOMINAL","period":0,"amount":"0","evidence_ref":opening["evidence_ref"]},
+                {"control_id":"writeoff_memorandum","entity_id":"bank-1","sector":"CB","currency":"LCU",
+                 "valuation_basis":"NOMINAL","period":0,"amount":"0","evidence_ref":opening["evidence_ref"]},
+            )
+            self.assertTrue(activate_control_openings(financial_store,controls,
+                mapper_version="gold2a-controls@1",evidence_ref=opening["evidence_ref"]))
+            self.assertTrue(verify_projection_replay(financial_store))
+            first_financial_event=corpus_events[0]
+            financial_movements=financial_stock_flow_movement_specs((first_financial_event,))
             labour=LabourRegister(root/"labour.sqlite3")
             labour.bootstrap_admin(principal_id="labour-root",authority_ref="BOOTSTRAP:L",occurred_at=T)
             labour.grant_access(event_id="L-ACL",idempotency_key="L-ACL",principal_id="coordinator",
@@ -54,7 +83,7 @@ class NativeStoreParticipantTests(unittest.TestCase):
                 "capital":make_capital_participant(capital,AUTH),
                 "product":make_product_participant(product,AUTH),
                 "labour":labour,"legal_rights":rights,
-                "financial":SQLiteParticipant("financial",root/"financial.sqlite3"),
+                "financial":make_financial_participant(financial_store,journal,AUTH),
             }
             coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",participants)
             outflow,inflow=flow_pair()
@@ -85,8 +114,10 @@ class NativeStoreParticipantTests(unittest.TestCase):
                     "payload":envelope("right.created",{"holder_id":"ORG-A","obligor_id":"ORG-B","right_type":"claim",
                         "scope":"invoice:1","jurisdiction":"KZ","legal_instrument_ref":"CONTRACT-1",
                         "effective_from":T,"evidence_refs":["SIGNED-1"]},"RIGHT-1") | {"no_stock_flow_effect":"legal claim recorded; no recognized financial posting"}},
-                "financial":{"stream_id":"stream:financial","native_event_id":"FIN-1","expected_revision":0,
-                    "payload":{"no_stock_flow_effect":"no financial event in this physical-flow test"}},
+                "financial":{"stream_id":"financial","native_event_id":"FIN-GROUP-1","expected_revision":0,
+                    "payload":envelope("financial.event_group_committed",{"group_id":"FIN-GROUP-1",
+                        "causation_id":"SCENARIO-NATIVE-5","events":[_event_payload(first_financial_event)]},
+                        "FIN-GROUP-1") | {"stock_flow_movements":financial_movements}},
             }
             self.assertTrue(coordinator.submit("TX-NATIVE-5","SCENARIO-NATIVE-5","CAUSE-NATIVE-5",operations))
             self.assertEqual(coordinator.execute("TX-NATIVE-5"),"COMMITTED")
@@ -101,9 +132,16 @@ class NativeStoreParticipantTests(unittest.TestCase):
             self.assertEqual({x["register_id"] for x in group["events"]},set(PARTICIPANTS))
             movements=movements_from_event_groups((group,))
             sender=PositionIdentity(**identity_out); receiver=PositionIdentity(**identity_in)
-            openings=(OpeningPosition(sender,1,D("10"),"OPEN-SENDER"),OpeningPosition(receiver,1,D("0"),"OPEN-RECEIVER"))
-            closings=(ClosingPosition(sender,1,D("5"),"CLOSE-SENDER"),ClosingPosition(receiver,1,D("5"),"CLOSE-RECEIVER"))
+            physical_openings=(OpeningPosition(sender,1,D("10"),"OPEN-SENDER"),OpeningPosition(receiver,1,D("0"),"OPEN-RECEIVER"))
+            physical_closings=(ClosingPosition(sender,1,D("5"),"CLOSE-SENDER"),ClosingPosition(receiver,1,D("5"),"CLOSE-RECEIVER"))
+            financial_rows=[m for m in movements if m.identity.register_id=="financial"]
+            financial_openings=tuple(OpeningPosition(m.identity,m.period_index,D("0"),"GOLD2A:synthetic-opening-v1") for m in financial_rows)
+            financial_closings=tuple(ClosingPosition(m.identity,m.period_index,m.amount,"GOLD2A:bank-loan-origination") for m in financial_rows)
+            openings=physical_openings+financial_openings
+            closings=physical_closings+financial_closings
             reconciled=reconcile_periods(openings,movements,closings)
+            self.assertTrue(verify_projection_replay(financial_store))
+            self.assertEqual(financial_store.counts()["groups"],1)
             self.assertEqual(reconciled.mirror_group_count,1)
 
     def test_prepared_capital_stream_blocks_direct_period_append_until_abort(self):

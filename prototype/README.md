@@ -301,3 +301,8 @@ S3ObjectLockAnchor implements the remote CheckpointAnchor interface with COMPLIA
 ## Native adapters for physical, capital and product stores
 
 native_store_participants.py adds coordinator participant adapters over the existing PhysicalFlowStore, CapitalCohortStore and ProductRegister databases. Their native append APIs remain authoritative; the colocated participant inbox reserves each register stream and supports idempotent commit retry after a crash. The adapter requires an explicit external authorizer callback. Together with LabourRegister and LegalRightsRegister, five of six coordinator participants now target domain stores. Financial remains on a protocol-conformance participant pending a projection-aware journal adapter; physical lot-inventory integration is also still open. See NATIVE_STORE_PARTICIPANTS.md.
+
+
+## FinancialEventStore participant and projection publication order
+
+The financial participant now uses the validated EntityJournal plus append_projected_group, so the event group, journal lines, instrument/control projections, coverage and SFC cursor are committed together in the FinancialEventStore database. Its prepare validator checks the active opening snapshots, projection replay and the same SFC mapper used to derive financial T/V/O movement metadata. The coordinator commits financial last, after physical, capital, labour, product and legal-rights participants have durable receipts. See NATIVE_STORE_PARTICIPANTS.md.

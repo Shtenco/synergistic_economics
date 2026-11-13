@@ -2169,3 +2169,12 @@ The coordinator now has native adapters for PhysicalFlowStore (physical flows), 
 
 
 **Exact-head rerun trigger:** the capital-period and physical-flow-count test fixture corrections are committed in `316a3e3914f3ce7028841b28dacc64fd25c89992`. Re-run all three workflows on the resulting exact HEAD; do not reuse the earlier failed or cancelled run results.
+
+
+### 13 November continuation — projection-aware native financial participant
+
+Added a native FinancialEventStore participant. It requires activated and replay-verified SFC opening snapshots, reconstructs canonical JournalEvent values, validates them against an independent EntityJournal using the same EntityRegistry, derives financial instrument T/V/O movements using the SFC projection mapper, and compares those movements to the command's declared movement metadata. Commit uses append_projected_group with the coordinator transaction ID as the reservation bypass, keeping the event group, journal lines, instrument/control projections, coverage and cursor in one FinancialEventStore transaction.
+
+The coordinator commit order is now explicit: physical, capital, labour, product, legal_rights, then financial. The SFC projection is therefore committed only after the other five participants have durable receipts. The global visibility barrier remains required for readers. This is recoverable multi-database coordination, not a single distributed SQL transaction.
+
+**Current scope:** all six participants now use native stores. The integrated period fixture proves physical sender/receiver movements and financial instrument asset positions. The financial movement bridge currently follows the SFC instrument-asset mapper; liability-side mirrors are separately checked by GOLD controls, and control-only events plus full capital/product/labour/legal T/V/O mappings remain open. Physical lot/reservation inventory is also not yet combined with the physical-flow adapter.

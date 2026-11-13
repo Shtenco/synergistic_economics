@@ -33,4 +33,11 @@ The adapter requires an explicit external authorizer callback. Tests use a contr
 4. The stock-flow mapper currently proves a physical sender/receiver flow. Actual capital, product, labour, legal and financial event-to-T/V/O mappings and a multi-period six-register close remain required.
 5. Cross-host consensus, independent authority service, encrypted deployment, external WORM checkpoint custody and production restore/RPO/RTO are separate release gates.
 
-Five of six coordinator participants now use native domain stores. Do not describe the system as a complete six-register production ledger.
+All six coordinator participants now target native domain stores. Do not describe the system as a complete six-register production ledger.
+
+
+## Financial participant
+
+The financial adapter requires an already activated and replay-verified SFC opening snapshot. It decodes canonical JournalEvent payloads, validates them with a fresh EntityJournal against the same EntityRegistry, and commits through append_projected_group. This single FinancialEventStore transaction contains the immutable event group, journal lines, instrument/control projection deltas, coverage, event checkpoints and projection cursor. The prepare inbox is colocated in the same database and its reservation is checked by append_projected_group.
+
+The financial T/V/O movement metadata is independently derived by the same `_map_event` function used by the SFC projection and compared byte-for-byte with the command's declaration. The current bridge covers SFC instrument asset positions; control-only and all liability-side movement declarations still need explicit extensions and independent GOLD mirror evidence. The coordinator orders commits with financial last, after all other five participants have committed. This makes an SFC projection commit evidence that the other domain participants have already committed, while global readers still use the coordinator visibility barrier.

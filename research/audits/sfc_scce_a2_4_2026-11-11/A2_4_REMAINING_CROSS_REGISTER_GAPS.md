@@ -325,3 +325,12 @@ The new S3 adapter requires bucket Object Lock and versioning, uses COMPLIANCE r
 The coordinator can now bind directly to PhysicalFlowStore, CapitalCohortStore and ProductRegister. Each adapter uses the same database as its domain store for its prepared inbox and receipts, validates candidate operations against the current native revision/reducer, reserves the stream and invokes the store's idempotent append after the coordinator decision. Direct append operations are blocked while a prepare is outstanding. A mandatory external authorizer callback is injected; the adapter has no default allow policy.
 
 Together with LabourRegister and LegalRightsRegister, this yields five native participants out of six. Financial remains protocol-conformance-only until the adapter can atomically use the validated journal and SFC projection store. The physical adapter covers the physical-flow register, not the P6 lot/reservation inventory lifecycle. The integration test proves one physical mirror reconciliation, not full six-register SFC/GOLD closure.
+
+
+## 19. Native projection-aware financial participant
+
+The financial coordinator participant now uses FinancialEventStore and the validated EntityJournal. It refuses registration unless the SFC opening snapshots and current projection replay verify. Prepare reconstructs canonical JournalEvent records, validates them in an independent EntityJournal and requires financial T/V/O movement metadata to match the SFC projection mapper. Commit invokes append_projected_group with the prepared transaction ID, so the event group, postings, instrument/control projections, coverage and cursor are committed in one native financial-store transaction.
+
+The coordinator commits financial last, after physical, capital, labour, product and legal-rights participant receipts. This ordering prevents an SFC projection from becoming visible before the other five native stores have committed. The coordinator's global visibility barrier is still mandatory. It is a recoverable multi-database protocol, not a single cross-database transaction or distributed consensus system.
+
+All six participants now target native stores. Remaining gaps: full lot/reservation inventory integration; actual T/V/O mappers for capital/product/labour/legal positions and financial control-only events; liability-side SFC mirrors in the common reconciler (the GOLD journal/oracle still validates these); cross-period six-register close/reopen/correction rebuild; and live remote WORM/KMS deployment.

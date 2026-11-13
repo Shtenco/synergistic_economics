@@ -482,7 +482,11 @@ class CrossRegisterCoordinator:
     def _operations(self, txid):
         with closing(_connect(self.database_path)) as con:
             return con.execute(
-                "SELECT * FROM coordinator_operations WHERE transaction_id=? ORDER BY participant",
+                """SELECT * FROM coordinator_operations WHERE transaction_id=?
+                   ORDER BY CASE participant
+                     WHEN 'physical' THEN 1 WHEN 'capital' THEN 2 WHEN 'labour' THEN 3
+                     WHEN 'product' THEN 4 WHEN 'legal_rights' THEN 5 WHEN 'financial' THEN 6
+                     ELSE 99 END""",
                 (txid,)
             ).fetchall()
 

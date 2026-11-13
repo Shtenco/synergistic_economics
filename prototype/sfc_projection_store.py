@@ -631,7 +631,8 @@ def _assert_control_invariants(con, period):
 
 
 def append_projected_group(journal: EntityJournal, store: FinancialEventStore, group_id: str,
-                           events: Sequence[JournalEvent], *, causation_id: str | None = None) -> bool:
+                           events: Sequence[JournalEvent], *, causation_id: str | None = None,
+                           allow_prepared_txid: str | None = None) -> bool:
     """Atomically persist events, instrument/control projections, coverage and cursor."""
     if not isinstance(journal, EntityJournal) or not isinstance(store, FinancialEventStore):
         raise SFCProjectionStoreError("canonical EntityJournal and FinancialEventStore are required")
@@ -683,6 +684,11 @@ def append_projected_group(journal: EntityJournal, store: FinancialEventStore, g
         with closing(store._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                table = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='native_participant_inbox'").fetchone()
+                if table:
+                    pending = con.execute("SELECT transaction_id FROM native_participant_inbox WHERE stream_id='financial' AND state='PREPARED'").fetchone()
+                    if pending and pending["transaction_id"] != allow_prepared_txid:
+                        raise SFCProjectionStoreError("financial register reserved by a prepared coordinator transaction")
                 if not verify_sfc_projection_openings(con) or not _verify_control_openings(con):
                     raise SFCProjectionStoreError("both instrument and control opening snapshots must be sealed")
                 _schema(con)
