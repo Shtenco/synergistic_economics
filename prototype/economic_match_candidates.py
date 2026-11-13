@@ -101,6 +101,8 @@ class MatchCandidateStore:
                 entity = deepcopy(current)
                 result_status = "stale"
             else:
+                if current is not None and current.get("status") == "withdrawn":
+                    raise RegistryError("withdrawn candidates cannot be silently reactivated")
                 candidate = deepcopy(expected_candidate)
                 demand = next_state.get("demands", {}).get(candidate["demand_id"])
                 offer = next_state.get("offers", {}).get(candidate["offer_id"])
