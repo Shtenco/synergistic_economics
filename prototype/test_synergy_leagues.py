@@ -99,6 +99,21 @@ class LeagueContractTests(unittest.TestCase):
                 payout_shares=(PayoutShare("worker-1", 6000), PayoutShare("partner-2", 3000)),
             )
 
+
+    def test_buyer_or_assignee_can_cancel_before_submission(self):
+        opened = order()
+        cancelled = opened.cancel("buyer-1", expected_version=1)
+        self.assertEqual(cancelled.status, WorkStatus.CANCELLED)
+        assigned = opened.apply(profile(), expected_version=1).assign("worker-1", expected_version=2)
+        cancelled = assigned.cancel("worker-1", expected_version=3)
+        self.assertEqual(cancelled.status, WorkStatus.CANCELLED)
+        with self.assertRaisesRegex(LeagueError, "not permitted"):
+            assigned.cancel("stranger", expected_version=3)
+        with self.assertRaisesRegex(LeagueError, "only open or assigned"):
+            assigned.submit("worker-1", ("delivery:1",), expected_version=3).cancel(
+                "buyer-1", expected_version=4
+            )
+
     def test_invalid_money_and_naive_timestamps_rejected(self):
         with self.assertRaises(LeagueError):
             WorkOrder(
