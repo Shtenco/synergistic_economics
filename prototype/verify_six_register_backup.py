@@ -132,6 +132,7 @@ def verify_bundle(archive_path):
             for con in participant_connections.values(): con.close()
             coord.close()
         return {"status":"PASS","registers_verified":6,"event_root":manifest["event_root"],
+            "snapshot_consistency":manifest["snapshot_consistency"],
             "committed_transactions":manifest["committed_transactions"],"native_receipts_verified":manifest["committed_transactions"]*6,
             "financial_projection_replay":"PASS","store_checks":store_checks}
 
