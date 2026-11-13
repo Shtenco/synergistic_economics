@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 from sqlite_event_repository import SQLiteEventRepository
+from real_economy_event_bridge import EventBridgeConflict
 from economic_registry import EconomicMarketplaceRegistry, RegistryError
 from economic_match_candidates import MatchCandidateStore
 
@@ -78,7 +79,7 @@ class MatchCandidateStoreTests(unittest.TestCase):
 
     def test_changed_request_with_same_idempotency_key_conflicts(self):
         self.persist()
-        with self.assertRaises(Exception):
+        with self.assertRaises(EventBridgeConflict):
             self.store.persist_candidate(
                 "tenant-a", "d-1", "o-1", command_id="cmd-candidate",
                 idempotency_key="key-candidate", actor_id="other",
