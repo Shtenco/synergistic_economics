@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from durable_event_register import RegisterError
 from labour_register import LabourRegister
+from legal_rights_register import LegalRightsRegister
 from signed_approval_assertions import (
     ApprovalAssertionError,
     SignedApprovalVerifier,
@@ -128,7 +129,8 @@ class SignedBootstrapAuthorizerTests(unittest.TestCase):
         ]
         for index, (principal, register, token) in enumerate(cases):
             with self.subTest(index=index):
-                store = LabourRegister(
+                register_type = LegalRightsRegister if register == "legal_rights" else LabourRegister
+                store = register_type(
                     self.root / f"denied-{index}.sqlite3",
                     bootstrap_authorizer=self.authorizer,
                 )
