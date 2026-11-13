@@ -38,68 +38,103 @@ def _utc(value: Any, key: str) -> datetime:
 def _money(record: Any, key: str) -> tuple[int, str, int]:
     if not isinstance(record, dict):
         raise RouterValidationError(f"{key} must be an object")
-    amount = record.get("amount_minor")
-    scale = record.get("scale")
-    currency = record.get("currency")
+    if set(record) != {"amount_minor", "currency", "scale"}:
+        raise RouterValidationError(f"{key} must contain only amount_minor, currency and scale")
+    amount, scale, currency = record["amount_minor"], record["scale"], record["currency"]
     if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
         raise RouterValidationError(f"{key}.amount_minor must be a non-negative integer")
     if isinstance(scale, bool) or not isinstance(scale, int) or not 0 <= scale <= 6:
         raise RouterValidationError(f"{key}.scale must be an integer from 0 to 6")
-    if not isinstance(currency, str) or len(currency) != 3 or not currency.isascii() or not currency.isalpha() or currency.upper() != currency:
+    if (not isinstance(currency, str) or len(currency) != 3 or not currency.isascii()
+            or not currency.isalpha() or currency.upper() != currency):
         raise RouterValidationError(f"{key}.currency must be a three-letter uppercase code")
     return amount, currency, scale
+
+
+def _unique_text_list(value: Any, key: str) -> list[str]:
+    if (not isinstance(value, list)
+            or any(not isinstance(item, str) or not item.strip() for item in value)
+            or len(set(value)) != len(value)):
+        raise RouterValidationError(f"{key} must be a list of unique non-empty strings")
+    return value
 
 
 def validate_demand(demand: dict[str, Any]) -> None:
     if not isinstance(demand, dict):
         raise RouterValidationError("demand must be an object")
-    if demand.get("schema_id") != "synergy.economic-router.demand" or isinstance(demand.get("schema_version"), bool) or demand.get("schema_version") != 1:
+    if (demand.get("schema_id") != "synergy.economic-router.demand"
+            or isinstance(demand.get("schema_version"), bool)
+            or demand.get("schema_version") != 1):
         raise RouterValidationError("unsupported demand schema")
+    allowed = {
+        "schema_id", "schema_version", "demand_id", "buyer_id", "tenant_id", "consent_ref",
+        "category", "jurisdiction", "status", "requirements", "quantity", "budget",
+        "expires_at", "evidence_refs", "source_system", "source_ref", "source_fingerprint",
+    }
+    unknown = set(demand) - allowed
+    if unknown:
+        raise RouterValidationError("unknown demand fields: " + ", ".join(sorted(unknown)))
     for key in ("demand_id", "buyer_id", "category", "jurisdiction", "tenant_id", "consent_ref"):
         _text(demand, key)
     if demand.get("status") != "open":
         raise RouterValidationError("demand.status must be open")
-    requirements = demand.get("requirements", [])
-    if not isinstance(requirements, list) or any(not isinstance(x, str) or not x.strip() for x in requirements):
-        raise RouterValidationError("requirements must be a list of non-empty strings")
+    _unique_text_list(demand.get("requirements", []), "requirements")
+    _unique_text_list(demand.get("evidence_refs", []), "evidence_refs")
     quantity = demand.get("quantity", 1)
     if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
         raise RouterValidationError("quantity must be a positive integer")
     _money(demand.get("budget"), "budget")
     _utc(demand.get("expires_at"), "expires_at")
+    source_fields = {"source_system", "source_ref", "source_fingerprint"}
+    if source_fields.intersection(demand) and not source_fields.issubset(demand):
+        raise RouterValidationError("source_system, source_ref and source_fingerprint must be supplied together")
+    if source_fields.issubset(demand):
+        _text(demand, "source_system")
+        _text(demand, "source_ref")
+        fingerprint = demand["source_fingerprint"]
+        if (not isinstance(fingerprint, str) or len(fingerprint) != 64
+                or any(ch not in "0123456789abcdef" for ch in fingerprint)):
+            raise RouterValidationError("source_fingerprint must be a lowercase SHA-256 hex digest")
 
 
 def validate_offer(offer: dict[str, Any]) -> None:
     if not isinstance(offer, dict):
         raise RouterValidationError("offer must be an object")
-    if offer.get("schema_id") != "synergy.economic-router.offer" or isinstance(offer.get("schema_version"), bool) or offer.get("schema_version") != 1:
+    if (offer.get("schema_id") != "synergy.economic-router.offer"
+            or isinstance(offer.get("schema_version"), bool)
+            or offer.get("schema_version") != 1):
         raise RouterValidationError("unsupported offer schema")
+    allowed = {
+        "schema_id", "schema_version", "offer_id", "seller_id", "tenant_id", "category",
+        "jurisdiction", "status", "seller_verification", "capabilities", "capacity",
+        "price", "expires_at", "evidence_refs",
+    }
+    unknown = set(offer) - allowed
+    if unknown:
+        raise RouterValidationError("unknown offer fields: " + ", ".join(sorted(unknown)))
     for key in ("offer_id", "seller_id", "category", "jurisdiction", "tenant_id"):
         _text(offer, key)
     if offer.get("status") != "active":
         raise RouterValidationError("offer.status must be active")
     if offer.get("seller_verification") != "verified":
         raise RouterValidationError("seller_verification must be verified")
-    capabilities = offer.get("capabilities", [])
-    if not isinstance(capabilities, list) or any(not isinstance(x, str) or not x.strip() for x in capabilities):
-        raise RouterValidationError("capabilities must be a list of non-empty strings")
+    _unique_text_list(offer.get("capabilities", []), "capabilities")
+    _unique_text_list(offer.get("evidence_refs", []), "evidence_refs")
     capacity = offer.get("capacity", 1)
     if isinstance(capacity, bool) or not isinstance(capacity, int) or capacity < 1:
         raise RouterValidationError("capacity must be a positive integer")
     _money(offer.get("price"), "price")
     _utc(offer.get("expires_at"), "expires_at")
-    evidence = offer.get("evidence_refs", [])
-    if not isinstance(evidence, list) or any(not isinstance(x, str) or not x.strip() for x in evidence):
-        raise RouterValidationError("evidence_refs must be a list of non-empty strings")
 
 
-def _fingerprint(demand_id: str, offer_id: str) -> str:
-    raw = json.dumps([demand_id, offer_id, "economic-router-match-v1"],
+def _fingerprint(tenant_id: str, demand_id: str, offer_id: str) -> str:
+    raw = json.dumps([tenant_id, demand_id, offer_id, "economic-router-match-v1"],
                      separators=(",", ":"), ensure_ascii=False)
     return sha256(raw.encode("utf-8")).hexdigest()
 
 
-def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime | None = None) -> dict[str, Any] | None:
+def score_offer(demand: dict[str, Any], offer: dict[str, Any], *,
+                now: datetime | None = None) -> dict[str, Any] | None:
     """Return a deterministic compatible match, or None for an incompatible offer."""
     validate_demand(demand)
     validate_offer(offer)
@@ -109,8 +144,6 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
     if _utc(demand["expires_at"], "demand.expires_at") <= now:
         return None
     if _utc(offer["expires_at"], "offer.expires_at") <= now:
-        return None
-    if demand["tenant_id"] != offer["tenant_id"]:
         return None
     if demand["tenant_id"] != offer["tenant_id"]:
         return None
@@ -129,13 +162,13 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
     available = set(offer.get("capabilities", []))
     if not required.issubset(available):
         return None
-    # Score is intentionally explainable: capability coverage and budget fit.
     price_fit_bps = 10_000 if budget == 0 and price == 0 else (
         max(0, 10_000 - (price * 10_000 // max(budget, 1)))
     )
-    score_bps = min(10_000, 7_000 + (len(required) * 300) + price_fit_bps // 5)
+    score_bps = min(10_000, 7_000 + len(required) * 300 + price_fit_bps // 5)
     return {
-        "match_id": _fingerprint(demand["tenant_id"], demand["demand_id"], offer["offer_id"]),\n        "tenant_id": demand["tenant_id"],
+        "match_id": _fingerprint(demand["tenant_id"], demand["demand_id"], offer["offer_id"]),
+        "tenant_id": demand["tenant_id"],
         "demand_id": demand["demand_id"],
         "offer_id": offer["offer_id"],
         "buyer_id": demand["buyer_id"],
@@ -158,7 +191,7 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
 
 def route_demand(demand: dict[str, Any], offers: Iterable[dict[str, Any]], *,
                  now: datetime | None = None, limit: int = 20) -> list[dict[str, Any]]:
-    """Rank offers without side effects; callers persist commands through the canonical event boundary."""
+    """Rank offers without side effects; persistence belongs to the canonical repository."""
     if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
         raise RouterValidationError("limit must be a positive integer")
     validate_demand(demand)
