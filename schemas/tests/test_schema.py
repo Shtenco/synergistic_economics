@@ -30,8 +30,13 @@ class CanonicalSchemaTests(unittest.TestCase):
             "idempotency_key": "LABOUR-EVENT-1", "payload": {"planned_hours": "2"}
         }
         Draft202012Validator(contract, format_checker=FormatChecker()).validate(sample)
+        validator = Draft202012Validator(contract, format_checker=FormatChecker())
         with self.assertRaises(Exception):
-            Draft202012Validator(contract, format_checker=FormatChecker()).validate(dict(sample, schema_version=2))
+            validator.validate(dict(sample, schema_version=2))
+        with self.assertRaises(Exception):
+            validator.validate(dict(sample, effective_at="2026-11-13T10:00:00+03:00"))
+        with self.assertRaises(Exception):
+            validator.validate(dict(sample, stock_flow_movements=[], no_stock_flow_effect="invalid dual declaration"))
     def test_schema_is_valid_draft_2020_12(self):
         self.assertEqual(self.schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
 

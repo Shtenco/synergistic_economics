@@ -27,11 +27,13 @@
     },
     "effective_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
     },
     "recorded_at": {
       "type": "string",
-      "format": "date-time"
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
     },
     "actor_id": {
       "type": "string",
@@ -52,7 +54,8 @@
       "type": "array",
       "items": {
         "type": "object"
-      }
+      },
+      "minItems": 1
     },
     "no_stock_flow_effect": {
       "type": "string",
@@ -87,5 +90,11 @@
     "idempotency_key",
     "payload"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "not": {
+    "required": [
+      "stock_flow_movements",
+      "no_stock_flow_effect"
+    ]
+  }
 }

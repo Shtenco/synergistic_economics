@@ -31,6 +31,12 @@ class RegisterEventContractTests(unittest.TestCase):
                        {"payload":[]},{"event_type":" "}):
             with self.subTest(change=change),self.assertRaises(RegisterEventContractError):
                 normalize_event_envelope("physical",legacy()|change)
+    def test_unknown_fields_empty_movements_and_dual_effect_fail_closed(self):
+        for change in ({"unregistered": True}, {"stock_flow_movements": []},
+                       {"stock_flow_movements": [{"movement_id": "M1"}], "no_stock_flow_effect": "none"}):
+            with self.subTest(change=change), self.assertRaises(RegisterEventContractError):
+                normalize_event_envelope("physical", legacy() | change)
+
     def test_migration_does_not_mutate_callers_event(self):
         source=legacy(); before=dict(source)
         normalized=normalize_event_envelope("product",source)
