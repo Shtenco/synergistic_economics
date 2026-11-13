@@ -2148,3 +2148,6 @@ Added economic_stock_flow_reconciliation.py and adversarial tests. The kernel ma
 Added s3_object_lock_anchor.py with S3 versioning, conditional immutable writes, COMPLIANCE retention, SSE-KMS ARN checks and monotonic hash-chained anchor records. Mocked contract tests pass locally; no live AWS resource or restore drill exists. External WORM deployment remains OPEN.
 
 **CI status for these additions:** pending until the next exact-HEAD Prototype, SCCE Stage-C2 and A2.4 workflows complete. Do not reuse the preceding exact-head PASS as evidence for this newer code.
+
+
+**Exact-head CI trigger — common event groups, SFC/GOLD T/V/O kernel and S3 Object Lock adapter:** these additions follow commit `0c6b5993e654a35666e1a3fcfc0b13e17d0d1fd7`. All three workflows must complete on the resulting branch HEAD. Mocked S3 contract tests are not evidence of a live AWS deployment.
