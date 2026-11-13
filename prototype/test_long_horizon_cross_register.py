@@ -347,7 +347,7 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             # the six real authoritative SQLite stores, not synthetic receipt fixtures.
             from external_checkpoints import (
                 Ed25519Signer, TrustedKeyRegistry, LocalImmutableAnchor,
-                publish_checkpoint, verify_checkpoint,
+                publish_checkpoint, verify_checkpoint, verify_backup_bytes,
             )
             from period_governance import PeriodGovernance, REGISTERS
 
@@ -405,7 +405,14 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
 
             def make_checkpoint(generation, sequence, projection_hash, event_root,
                                 snapshot_hashes, commit_sequence, event_count):
-                backup_digest=sha(canonical(snapshot_hashes))
+                # Hash the actual six-file SQLite backup artifact, not merely
+                # a manifest of logical database-state hashes. The exact same
+                # bytes are passed to verify_backup_bytes after signing.
+                backup_bytes=canonical({
+                    name:base64.b64encode(path.read_bytes()).decode("ascii")
+                    for name,path in sorted(generation_paths.items())
+                }).encode("utf-8")
+                backup_digest=hashlib.sha256(backup_bytes).hexdigest()
                 manifest={
                     "manifest_schema_version":1,"service_id":"SYNERGY-LONG-HORIZON-TEST",
                     "database_schema_version":4,"mapper_version":"gold2a-entity-journal-mapper@1",
@@ -440,6 +447,11 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             )
             close_ref,close_digest=make_checkpoint(
                 0,0,sha("generation-0-projection"),closed_source_root,closed_hashes,8,8)
+            close_manifest=verify_checkpoint(close_ref,close_digest,trust,anchor,require_latest=True)
+            self.assertTrue(verify_backup_bytes(close_manifest,canonical({
+                name:base64.b64encode(path.read_bytes()).decode("ascii")
+                for name,path in sorted(generation_paths.items())
+            }).encode("utf-8")))
             self.assertTrue(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertFalse(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertEqual(governance.active_generation(2033),0)
@@ -631,6 +643,12 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 1,1,global_reconciliation,source_root,closing_hashes,9,9)
             self.assertTrue(governance.publish_generation(
                 "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
+            generation_manifest=verify_checkpoint(
+                generation_ref,generation_digest,trust,anchor,require_latest=True)
+            self.assertTrue(verify_backup_bytes(generation_manifest,canonical({
+                name:base64.b64encode(path.read_bytes()).decode("ascii")
+                for name,path in sorted(generation_paths.items())
+            }).encode("utf-8")))
             self.assertFalse(governance.publish_generation(
                 "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
             self.assertEqual(governance.active_generation(2033),1)
