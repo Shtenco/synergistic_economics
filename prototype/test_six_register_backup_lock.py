@@ -1,11 +1,15 @@
 """Regression tests for coordinator-consistent six-register backup snapshots."""
 from pathlib import Path
+import json
+import tarfile
 import tempfile
 import threading
 import unittest
+from io import BytesIO
 from unittest.mock import patch
 
 from create_six_register_backup import KEYS, create_backup
+from verify_six_register_backup import _extract_verified
 from cross_register_coordinator import _exclusive_process_lock
 
 
@@ -17,6 +21,27 @@ def _hold_lock(path, entered, release):
 
 
 class SixRegisterBackupLockTests(unittest.TestCase):
+    def test_restore_rejects_archive_without_snapshot_consistency_proof(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive_path = root / "legacy-backup.tar.gz"
+            manifest = {
+                "schema": "synergy.six-register-backup.v1",
+                "registers_verified": 6,
+            }
+            with tarfile.open(archive_path, "w:gz") as archive:
+                for key in KEYS:
+                    data = b"placeholder"
+                    info = tarfile.TarInfo(f"{key}.sqlite3")
+                    info.size = len(data)
+                    archive.addfile(info, BytesIO(data))
+                raw = json.dumps(manifest).encode("utf-8")
+                info = tarfile.TarInfo("backup-manifest.json")
+                info.size = len(raw)
+                archive.addfile(info, BytesIO(raw))
+            with self.assertRaisesRegex(RuntimeError, "snapshot consistency"):
+                _extract_verified(archive_path, root / "restore")
+
     def test_backup_waits_for_coordinator_execution_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
