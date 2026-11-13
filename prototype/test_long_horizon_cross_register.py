@@ -1,9 +1,16 @@
 """Eight-transaction native-domain lifecycle, correction and replay integration."""
 from dataclasses import asdict, replace
 from decimal import Decimal as D
+import base64
+import hashlib
 import json
+import sqlite3
 import tempfile
+import time
 import unittest
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pathlib import Path
 
 from physical_flow_store import PhysicalFlowStore
@@ -25,6 +32,32 @@ from economic_stock_flow_reconciliation import (
     PositionIdentity, OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
 )
 from test_native_store_participants import AUTH, T, envelope, flow_pair, _corpus_events, _event_payload, AUDIT_DIR
+from signed_approval_assertions import SignedApprovalVerifier, encode_assertion_payload
+
+
+def _signed_governance_approval(context, private_key, *, subject, role, jti):
+    now=int(time.time())
+    header={"alg":"EdDSA","kid":"period-governance-integration-key","typ":"JWT"}
+    header_segment=base64.urlsafe_b64encode(json.dumps(
+        header,sort_keys=True,separators=(",",":")).encode()).decode().rstrip("=")
+    claims={
+        "iss":"https://identity.synergy.example",
+        "sub":subject,
+        "aud":"synergy-period-governance",
+        "service_id":context["service_id"],
+        "request_id":context["request_id"],
+        "request_digest":context["request_digest"],
+        "role":role,
+        "evidence_ref":context["evidence_ref"],
+        "jti":jti,
+        "iat":now-5,
+        "exp":now+120,
+    }
+    payload_segment=encode_assertion_payload(claims)
+    signing_input=header_segment+"."+payload_segment
+    signature=base64.urlsafe_b64encode(
+        private_key.sign(signing_input.encode("ascii"))).decode().rstrip("=")
+    return signing_input+"."+signature
 
 
 class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
@@ -387,13 +420,23 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 }
                 return publish_checkpoint(manifest,signer,anchor)
 
+            approval_private_key=Ed25519PrivateKey.generate()
+            approval_public_key=approval_private_key.public_key().public_bytes(
+                encoding=serialization.Encoding.Raw,format=serialization.PublicFormat.Raw)
+            approval_verifier=SignedApprovalVerifier(
+                root/"approval-assertion-replays.sqlite3",
+                issuer="https://identity.synergy.example",
+                audience="synergy-period-governance",
+                key_resolver=lambda issuer,kid: (
+                    approval_public_key if issuer=="https://identity.synergy.example"
+                    and kid=="period-governance-integration-key" else None),
+                is_revoked=lambda issuer,kid,jti: False,
+            )
             governance=PeriodGovernance(
                 root/"period-governance.sqlite3",
                 lambda ref,digest:verify_checkpoint(ref,digest,trust,anchor,require_latest=False),
                 "SYNERGY-LONG-HORIZON-TEST",
-                lambda approver,role,context,evidence:
-                    context["service_id"]=="SYNERGY-LONG-HORIZON-TEST"
-                    and evidence==f"APPROVAL:{approver}:{role}:{context['request_id']}",
+                approval_verifier,
             )
             close_ref,close_digest=make_checkpoint(
                 0,0,sha("generation-0-projection"),closed_source_root,closed_hashes,8,8)
@@ -408,16 +451,42 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             self.assertTrue(governance.request_reopen(
                 "REOPEN-LONG-HORIZON-2033",2033,"reconcile late labour and rights evidence",
                 "EVIDENCE:REOPEN-2033",scope,close_ref,close_digest))
+            with sqlite3.connect(root/"period-governance.sqlite3") as con:
+                con.row_factory=sqlite3.Row
+                request=con.execute(
+                    "SELECT * FROM reopen_requests WHERE request_id=?",
+                    ("REOPEN-LONG-HORIZON-2033",)).fetchone()
+            approval_context={
+                "service_id":"SYNERGY-LONG-HORIZON-TEST",
+                "request_id":request["request_id"],"period":request["period"],
+                "old_generation":request["old_generation"],"new_generation":request["new_generation"],
+                "reason":request["reason"],"evidence_ref":request["evidence_ref"],
+                "scope":json.loads(request["scope_json"]),
+                "pre_reopen_checkpoint_ref":request["pre_reopen_checkpoint_ref"],
+                "pre_reopen_checkpoint_digest":request["pre_reopen_checkpoint_digest"],
+            }
+            approval_context["request_digest"]=hashlib.sha256(
+                canonical(approval_context).encode("utf-8")).hexdigest()
+            owner_assertion=_signed_governance_approval(
+                approval_context,approval_private_key,subject="person-A",
+                role="period_owner",jti="reopen-2033-owner")
             self.assertTrue(governance.approve_reopen(
-                "REOPEN-LONG-HORIZON-2033","person-A","period_owner",
-                "APPROVAL:person-A:period_owner:REOPEN-LONG-HORIZON-2033"))
+                "REOPEN-LONG-HORIZON-2033","person-A","period_owner",owner_assertion))
+            self.assertFalse(governance.approve_reopen(
+                "REOPEN-LONG-HORIZON-2033","person-A","period_owner",owner_assertion))
+            same_person_assertion=_signed_governance_approval(
+                approval_context,approval_private_key,subject="person-A",
+                role="independent_controller",jti="reopen-2033-same-person")
             with self.assertRaisesRegex(ValueError,"two distinct people"):
                 governance.approve_reopen(
                     "REOPEN-LONG-HORIZON-2033","person-A","independent_controller",
-                    "APPROVAL:person-A:independent_controller:REOPEN-LONG-HORIZON-2033")
+                    same_person_assertion)
+            controller_assertion=_signed_governance_approval(
+                approval_context,approval_private_key,subject="person-B",
+                role="independent_controller",jti="reopen-2033-controller")
             self.assertTrue(governance.approve_reopen(
                 "REOPEN-LONG-HORIZON-2033","person-B","independent_controller",
-                "APPROVAL:person-B:independent_controller:REOPEN-LONG-HORIZON-2033"))
+                controller_assertion))
 
             # Only after both independent approvals, append a real corrective
             # transaction through all six native participants.
