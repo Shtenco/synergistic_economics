@@ -1006,7 +1006,7 @@ class CrossRegisterCoordinator:
 
     def reconcile_event_stream(self,opening_positions,closing_positions):
         """Reconcile T/V/O movements from the verified committed event-stream prefix."""
-        from stock_flow_reconciliation import movements_from_event_groups,reconcile_periods
+        from economic_stock_flow_reconciliation import movements_from_event_groups,reconcile_periods
         groups=self.iter_committed_event_groups()
         movements=movements_from_event_groups(groups)
         return reconcile_periods(opening_positions,movements,closing_positions)
