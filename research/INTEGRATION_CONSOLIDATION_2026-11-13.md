@@ -128,3 +128,6 @@ The financial participant now rebuilds its in-memory EntityJournal from Financia
 ## Durable canonical six-register event stream
 
 The coordinator now persists each assembled six-register event group after all participant native receipts are verified and before setting the global transaction state to COMMITTED. The append-only `coordinator_event_groups` table stores commit sequence, canonical JSON, payload digest, previous hash and group hash. Update/delete triggers protect history; startup and reads verify the hash chain. The global read barrier requires the committed event group as well as all six participant receipts. The stream exposes a committed-prefix iterator and a latest sequence/hash checkpoint for external anchoring. Crash injection covers the window after event-group persistence but before the COMMITTED barrier.
+
+
+The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.

@@ -312,3 +312,6 @@ The native adapter suite also simulates failure after the native physical append
 
 
 The coordinator now persists each globally committed six-register event group in an append-only `coordinator_event_groups` stream. Each group is canonical JSON, sequence-numbered and SHA-256 hash-chained; the read barrier requires the durable group and all participant receipts. `iter_committed_event_groups()` exposes only the committed prefix, and `latest_event_group_checkpoint()` returns the sequence/hash pair suitable for external checkpoint anchoring.
+
+
+The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.

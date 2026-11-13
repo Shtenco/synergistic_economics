@@ -56,3 +56,6 @@ On adapter construction, committed FinancialEventStore groups are replayed in im
 ## Durable common event stream
 
 After all six participant receipts verify, the coordinator persists the assembled canonical event group in its own append-only `coordinator_event_groups` table. Groups have a monotonic commit sequence, canonical payload digest, previous hash and group hash. Update/delete triggers reject history mutation; startup and reads verify the complete chain. The global read barrier is crossed only after the event group is durable and the transaction state is COMMITTED. `iter_committed_event_groups()` returns the committed prefix; `latest_event_group_checkpoint()` supplies the current sequence/hash for external anchoring. A crash after group persistence but before the COMMITTED barrier is recoverable and explicitly fault-injected.
+
+
+The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.

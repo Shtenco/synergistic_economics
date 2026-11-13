@@ -349,3 +349,6 @@ The native integration test reconstructs all six store adapters and the coordina
 ## 23. Durable canonical cross-register event stream
 
 A coordinator-owned `coordinator_event_groups` append-only table now persists the canonical six-register group after all participant receipts verify and before the transaction becomes globally COMMITTED. Each row includes monotonic sequence, canonical payload, payload digest, previous hash and group hash. Update/delete triggers and full-chain verification protect history. The read barrier requires a valid durable group and all six participant receipts; `iter_committed_event_groups()` exposes the committed prefix and `latest_event_group_checkpoint()` exposes sequence/hash for remote anchoring. The crash matrix covers a process death after event-group persistence but before COMMITTED, and negative controls prove tampering makes visibility fail closed.
+
+
+The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.

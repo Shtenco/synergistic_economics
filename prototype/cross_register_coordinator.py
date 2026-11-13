@@ -945,3 +945,68 @@ class CrossRegisterCoordinator:
             row=con.execute("SELECT commit_sequence,group_hash FROM coordinator_event_groups WHERE transaction_id=?",
                 (txid,)).fetchone()
         return {"sequence":row["commit_sequence"],"group_hash":row["group_hash"]}
+
+
+    def publish_event_stream_checkpoint(self,anchor,service_id):
+        """Anchor every missing event-stream sequence, including genesis, in an immutable external store."""
+        if not isinstance(service_id,str) or not service_id or service_id!=service_id.strip():
+            raise CoordinatorError("checkpoint service_id must be trimmed non-empty text")
+        groups=self.iter_committed_event_groups()
+        with closing(_connect(self.database_path)) as con:
+            rows=con.execute(
+                """SELECT g.commit_sequence,g.transaction_id,g.previous_hash,g.group_hash
+                   FROM coordinator_event_groups g JOIN coordinator_transactions t
+                     ON t.transaction_id=g.transaction_id
+                   WHERE t.state='COMMITTED' ORDER BY g.commit_sequence"""
+            ).fetchall()
+        if len(rows)!=len(groups):
+            raise CoordinatorError("committed event-group prefix differs from checkpoint source rows")
+        manifests=[{
+            "schema_version":"synergy.event-stream-checkpoint.v1",
+            "service_id":service_id,"sequence":0,"transaction_id":None,
+            "previous_group_hash":_EVENT_GROUP_ZERO_HASH,"group_hash":_EVENT_GROUP_ZERO_HASH,
+        }]
+        for row in rows:
+            manifests.append({
+                "schema_version":"synergy.event-stream-checkpoint.v1",
+                "service_id":service_id,"sequence":row["commit_sequence"],
+                "transaction_id":row["transaction_id"],
+                "previous_group_hash":row["previous_hash"],"group_hash":row["group_hash"],
+            })
+        current=anchor.latest(service_id)
+        current_sequence=-1 if current is None else current["checkpoint_sequence"]
+        if current_sequence>len(rows):
+            raise CoordinatorError("external checkpoint is ahead of the committed coordinator event stream")
+        service_key=hashlib.sha256(service_id.encode("utf-8")).hexdigest()
+        for manifest in manifests:
+            sequence=manifest["sequence"]
+            object_key=f"event-stream/{service_key}/{sequence:020d}-{manifest['group_hash']}.json"
+            body=_canonical(manifest).encode("utf-8")
+            digest=hashlib.sha256(body).hexdigest()
+            if sequence<=current_sequence:
+                if not anchor.is_anchored(service_id,sequence,object_key,digest):
+                    raise CoordinatorError("external checkpoint history conflicts with canonical event stream")
+                continue
+            if sequence!=current_sequence+1:
+                raise CoordinatorError("external checkpoint sequence would contain a gap")
+            anchor.put_immutable(object_key,body)
+            anchor.advance_latest(service_id,sequence,object_key,digest)
+            current_sequence=sequence
+        latest=anchor.latest(service_id)
+        expected=manifests[-1]
+        expected_key=f"event-stream/{service_key}/{expected['sequence']:020d}-{expected['group_hash']}.json"
+        expected_digest=hashlib.sha256(_canonical(expected).encode("utf-8")).hexdigest()
+        if latest is None or (latest["checkpoint_sequence"],latest["object_key"],latest["object_digest"])!=(
+            expected["sequence"],expected_key,expected_digest
+        ):
+            raise CoordinatorError("external anchor latest pointer does not match the canonical event stream")
+        if not anchor.is_anchored(service_id,expected["sequence"],expected_key,expected_digest):
+            raise CoordinatorError("external anchor cannot verify the latest event-stream checkpoint")
+        return expected
+
+    def reconcile_event_stream(self,opening_positions,closing_positions):
+        """Reconcile T/V/O movements from the verified committed event-stream prefix."""
+        from stock_flow_reconciliation import movements_from_event_groups,reconcile_periods
+        groups=self.iter_committed_event_groups()
+        movements=movements_from_event_groups(groups)
+        return reconcile_periods(opening_positions,movements,closing_positions)

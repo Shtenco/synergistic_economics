@@ -2220,3 +2220,6 @@ The coordinator now persists a canonical six-register event group in an append-o
 
 
 **Exact-head CI trigger — durable canonical event stream:** commit `f0dc7347e1ae1cbcdc31ab5f990be8c0aac303c9` adds the coordinator-owned append-only six-register event-group table, monotonic commit sequence, canonical payload digest, previous/group SHA-256 hashes, fail-closed visibility, committed-prefix iterator, external-anchor checkpoint and crash injection after group persistence but before COMMITTED. The crash matrix now includes that boundary and event-group tamper controls. Exact-head CI must pass before this stream is considered verified.
+
+
+The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.

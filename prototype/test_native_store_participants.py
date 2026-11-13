@@ -12,6 +12,7 @@ from capital_cohort_store import CapitalCohortStore
 from product_register import ProductRegister
 from financial_event_store import FinancialEventStore
 from entity_journal import EntityJournal
+from external_checkpoints import LocalImmutableAnchor
 from sfc_projection_registry import activate_sfc_projection
 from sfc_projection_store import activate_control_openings, verify_projection_replay
 from labour_register import LabourRegister
@@ -132,6 +133,15 @@ class NativeStoreParticipantTests(unittest.TestCase):
             checkpoint=coordinator.latest_event_group_checkpoint()
             self.assertEqual(checkpoint["sequence"],1)
             self.assertEqual(len(checkpoint["group_hash"]),64)
+            external_anchor=LocalImmutableAnchor(root/"external-anchor.sqlite3")
+            manifest=coordinator.publish_event_stream_checkpoint(external_anchor,"SYNERGY-TEST")
+            anchored=external_anchor.latest("SYNERGY-TEST")
+            self.assertEqual(anchored["checkpoint_sequence"],1)
+            self.assertEqual(manifest["group_hash"],checkpoint["group_hash"])
+            self.assertTrue(external_anchor.is_anchored("SYNERGY-TEST",1,
+                anchored["object_key"],anchored["object_digest"]))
+            self.assertEqual(coordinator.publish_event_stream_checkpoint(
+                external_anchor,"SYNERGY-TEST"),manifest)
             self.assertEqual({x["register_id"] for x in group["events"]},set(PARTICIPANTS))
             movements=movements_from_event_groups((group,))
             sender=PositionIdentity(**identity_out); receiver=PositionIdentity(**identity_in)
@@ -143,6 +153,7 @@ class NativeStoreParticipantTests(unittest.TestCase):
             openings=physical_openings+financial_openings
             closings=physical_closings+financial_closings
             reconciled=reconcile_periods(openings,movements,closings)
+            self.assertEqual(coordinator.reconcile_event_stream(openings,closings),reconciled)
             self.assertTrue(verify_projection_replay(financial_store))
             self.assertEqual(financial_store.counts()["groups"],1)
             self.assertEqual(reconciled.mirror_group_count,1)
