@@ -61,6 +61,7 @@ def finite_decimal(value, field, *, minimum=None):
 
 class DurableEventRegister:
     """Hash-chained event log with append-only ACL and replay-derived state."""
+    authoritative_domain_adapter = True
     SCHEMA_VERSION = 2
     REGISTER_NAME = "abstract"
 

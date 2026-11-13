@@ -85,7 +85,7 @@ class NativeStoreParticipantTests(unittest.TestCase):
                 "labour":labour,"legal_rights":rights,
                 "financial":make_financial_participant(financial_store,journal,AUTH),
             }
-            coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",participants)
+            coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",participants,require_authoritative_adapters=True)
             outflow,inflow=flow_pair()
             outdict=asdict(outflow); outdict["quantity"]=str(outdict["quantity"]); outdict["uncertainty"]=str(outdict["uncertainty"])
             indict=asdict(inflow); indict["quantity"]=str(indict["quantity"]); indict["uncertainty"]=str(indict["uncertainty"])
@@ -173,7 +173,7 @@ class NativeStoreParticipantTests(unittest.TestCase):
                 "legal_rights":LegalRightsRegister(root/"rights.sqlite3"),
                 "financial":reopened_financial,
             }
-            reopened_coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",reopened_participants)
+            reopened_coordinator=CrossRegisterCoordinator(root/"coordinator.sqlite3",reopened_participants,require_authoritative_adapters=True)
             self.assertTrue(reopened_coordinator.is_visible("TX-NATIVE-5"))
             replayed_group=reopened_coordinator.committed_event_group("TX-NATIVE-5")
             self.assertEqual(reopened_coordinator.iter_committed_event_groups(),[group])

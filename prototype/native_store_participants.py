@@ -21,6 +21,8 @@ def _required(value,field):
 
 
 class NativeStoreParticipant:
+    authoritative_domain_adapter = True
+
     def __init__(self,name,store,stream_id,revision_reader,validator,applier,event_exists,authorizer):
         self.name,self.store,self.stream_id=name,store,stream_id
         self.revision_reader,self.validator,self.applier=revision_reader,validator,applier

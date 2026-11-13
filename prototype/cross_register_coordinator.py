@@ -354,11 +354,17 @@ class SQLiteParticipant:
 class CrossRegisterCoordinator:
     """Durable coordinator with an irreversible commit decision and read barrier."""
 
-    def __init__(self, database_path, participants: Mapping[str, SQLiteParticipant]):
+    def __init__(self, database_path, participants: Mapping[str, object], *, require_authoritative_adapters=False):
         if set(participants) != set(PARTICIPANTS):
             raise CoordinatorError("exactly six named participants are required")
         if any(participants[name].name != name for name in PARTICIPANTS):
             raise CoordinatorError("participant mapping/name mismatch")
+        if not isinstance(require_authoritative_adapters, bool):
+            raise CoordinatorError("require_authoritative_adapters must be boolean")
+        if require_authoritative_adapters and any(
+            not getattr(participants[name], "authoritative_domain_adapter", False) for name in PARTICIPANTS
+        ):
+            raise CoordinatorError("production coordinator requires six authoritative native-domain adapters")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.execution_lock_path = self.database_path.with_name(
@@ -493,11 +499,12 @@ class CrossRegisterCoordinator:
             payload = op.get("payload")
             if not isinstance(payload, Mapping):
                 raise CoordinatorError(f"{name}.payload must be a JSON object")
-            from register_event_contract import normalize_event_envelope
-            try:
-                payload = normalize_event_envelope(name, payload)
-            except ValueError as exc:
-                raise CoordinatorError(f"{name} native event contract rejected: {exc}") from exc
+            if getattr(self.participants[name], "authoritative_domain_adapter", False):
+                from register_event_contract import normalize_event_envelope
+                try:
+                    payload = normalize_event_envelope(name, payload)
+                except ValueError as exc:
+                    raise CoordinatorError(f"{name} native event contract rejected: {exc}") from exc
             payload_json = _canonical(payload)
             digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
             revision = op.get("expected_revision")
