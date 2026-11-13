@@ -2187,3 +2187,6 @@ The coordinator commit order is now explicit: physical, capital, labour, product
 
 
 **Exact-head CI rerun trigger:** the financial participant test now imports `activate_control_openings` from its actual module. Commit `fb746b2074ac6a6e4cc6903f6c5bec4b98599390` contains the correction. Re-run Prototype, SCCE Stage-C2 and A2.4 on the resulting branch HEAD.
+
+
+**CI correction record — opening-snapshot readiness:** the native financial adapter initially treated `verify_projection_replay()` as a valid empty-store readiness test. It correctly returned false before the first event group because the projection runtime/cursor is created by the first projected append. Readiness now verifies the frozen SFC and control opening hashes when there are zero groups, and requires full replay verification once groups exist. The test no longer asserts replay of an uninitialized runtime; post-commit replay verification remains mandatory.

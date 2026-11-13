@@ -66,7 +66,6 @@ class NativeStoreParticipantTests(unittest.TestCase):
             )
             self.assertTrue(activate_control_openings(financial_store,controls,
                 mapper_version="gold2a-controls@1",evidence_ref=opening["evidence_ref"]))
-            self.assertTrue(verify_projection_replay(financial_store))
             first_financial_event=corpus_events[0]
             financial_movements=financial_stock_flow_movement_specs((first_financial_event,))
             labour=LabourRegister(root/"labour.sqlite3")

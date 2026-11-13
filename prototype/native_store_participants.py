@@ -284,11 +284,20 @@ def financial_stock_flow_movement_specs(events):
 
 def make_financial_participant(store,journal,authorizer):
     from entity_journal import EntityJournal
-    from sfc_projection_store import append_projected_group,verify_projection_replay
+    from sfc_projection_registry import verify_sfc_projection_openings
+    from sfc_projection_store import append_projected_group,verify_projection_replay,_verify_control_openings
     if not isinstance(journal,EntityJournal):
         raise NativeStoreParticipantError("canonical EntityJournal instance is required")
-    if not verify_projection_replay(store):
-        raise NativeStoreParticipantError("financial/SFC projection must be activated and replay-verified before participant registration")
+
+    def projection_ready():
+        with closing(store._connect()) as con:
+            if not verify_sfc_projection_openings(con) or not _verify_control_openings(con):
+                return False
+            groups=con.execute("SELECT COUNT(*) FROM event_groups").fetchone()[0]
+        return groups==0 or verify_projection_replay(store)
+
+    if not projection_ready():
+        raise NativeStoreParticipantError("financial/SFC opening snapshots or existing projection replay are invalid")
 
     def decode_group(envelope):
         events=envelope["payload"].get("events")
@@ -303,8 +312,8 @@ def make_financial_participant(store,journal,authorizer):
         payload=envelope["payload"]
         if payload.get("group_id")!=native_id or envelope["idempotency_key"]!=native_id:
             raise NativeStoreParticipantError("financial native event/idempotency ID must equal group_id")
-        if not verify_projection_replay(store):
-            raise NativeStoreParticipantError("financial/SFC projection replay failed before prepare")
+        if not projection_ready():
+            raise NativeStoreParticipantError("financial/SFC opening or existing projection replay failed before prepare")
         events=decode_group(envelope)
         candidate=EntityJournal(journal.registry)
         for event in events: candidate.post(event)
