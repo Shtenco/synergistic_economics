@@ -29,6 +29,7 @@ sys.path.insert(0,str(AUDIT_DIR))
 from audit_financial_journal_adapter import _corpus_events
 from financial_journal_adapter import _event_payload
 AUTH=lambda actor,authority,event_type,payload: actor=="coordinator" and authority.startswith("AUTH:")
+BOOTSTRAP_AUTH=lambda principal,authority,register,payload: authority.startswith("BOOTSTRAP:") and payload=={"principal_id":principal,"permissions":["*"]}
 
 
 def flow_pair(flow_id="FLOW-1",quantity="5",reverse=False,period="P1"):
@@ -89,11 +90,11 @@ class NativeStoreParticipantTests(unittest.TestCase):
                 mapper_version="gold2a-controls@1",evidence_ref=opening["evidence_ref"]))
             first_financial_event=corpus_events[0]
             financial_movements=financial_stock_flow_movement_specs((first_financial_event,))
-            labour=LabourRegister(root/"labour.sqlite3")
+            labour=LabourRegister(root/"labour.sqlite3",bootstrap_authorizer=BOOTSTRAP_AUTH)
             labour.bootstrap_admin(principal_id="labour-root",authority_ref="BOOTSTRAP:L",occurred_at=T)
             labour.grant_access(event_id="L-ACL",idempotency_key="L-ACL",principal_id="coordinator",
                 permissions=["labour:read","labour:write"],actor_id="labour-root",authority_ref="POLICY:L",occurred_at=T)
-            rights=LegalRightsRegister(root/"rights.sqlite3")
+            rights=LegalRightsRegister(root/"rights.sqlite3",bootstrap_authorizer=BOOTSTRAP_AUTH)
             rights.bootstrap_admin(principal_id="rights-root",authority_ref="BOOTSTRAP:R",occurred_at=T)
             rights.grant_access(event_id="R-ACL",idempotency_key="R-ACL",principal_id="coordinator",
                 permissions=["legal_rights:read","legal_rights:write","legal_rights:adjudicate"],

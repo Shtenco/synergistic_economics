@@ -13,6 +13,12 @@ from register_event_contract import normalize_event_envelope
 T = "2026-11-13T07:00:00Z"
 
 
+def allow_test_bootstrap(principal_id, authority_ref, register_name, payload):
+    return (authority_ref.startswith("BOOTSTRAP:")
+            and payload == {"principal_id": principal_id, "permissions": ["*"]})
+
+
+
 def legacy(register):
     return {
         "event_type": "domain.event", "effective_at": T, "recorded_at": T,
@@ -149,12 +155,12 @@ class LegacyPreparedCompatibilityTests(unittest.TestCase):
             )
             self.assertTrue(activate_control_openings(financial_store, controls,
                 mapper_version="gold2a-controls@1", evidence_ref=opening["evidence_ref"]))
-            labour = LabourRegister(root / "labour.sqlite3")
+            labour = LabourRegister(root / "labour.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
             labour.bootstrap_admin(principal_id="labour-root",authority_ref="BOOTSTRAP:L",occurred_at=T)
             labour.grant_access(event_id="L-ACL",idempotency_key="L-ACL",principal_id="coordinator",
                 permissions=["labour:read","labour:write"],actor_id="labour-root",
                 authority_ref="POLICY:L",occurred_at=T)
-            rights = LegalRightsRegister(root / "rights.sqlite3")
+            rights = LegalRightsRegister(root / "rights.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
             rights.bootstrap_admin(principal_id="rights-root",authority_ref="BOOTSTRAP:R",occurred_at=T)
             rights.grant_access(event_id="R-ACL",idempotency_key="R-ACL",principal_id="coordinator",
                 permissions=["legal_rights:read","legal_rights:write","legal_rights:adjudicate"],

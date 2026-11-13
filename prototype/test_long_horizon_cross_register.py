@@ -31,7 +31,7 @@ from native_store_participants import (
 from economic_stock_flow_reconciliation import (
     PositionIdentity, OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
 )
-from test_native_store_participants import AUTH, T, envelope, flow_pair, _corpus_events, _event_payload, AUDIT_DIR
+from test_native_store_participants import AUTH, BOOTSTRAP_AUTH, T, envelope, flow_pair, _corpus_events, _event_payload, AUDIT_DIR
 from signed_approval_assertions import SignedApprovalVerifier, encode_assertion_payload
 
 
@@ -92,11 +92,11 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             capital=CapitalCohortStore(root/"capital.sqlite3")
             capital.initialize((CapitalCohort("C1","cell-1","machine",2026,0,1,1,"operating",1,1,1),))
             product=ProductRegister(root/"product.sqlite3")
-            labour=LabourRegister(root/"labour.sqlite3")
+            labour=LabourRegister(root/"labour.sqlite3",bootstrap_authorizer=BOOTSTRAP_AUTH)
             labour.bootstrap_admin(principal_id="labour-root",authority_ref="BOOTSTRAP:L",occurred_at=T)
             labour.grant_access(event_id="L-ACL",idempotency_key="L-ACL",principal_id="coordinator",
                 permissions=["labour:read","labour:write"],actor_id="labour-root",authority_ref="POLICY:L",occurred_at=T)
-            rights=LegalRightsRegister(root/"rights.sqlite3")
+            rights=LegalRightsRegister(root/"rights.sqlite3",bootstrap_authorizer=BOOTSTRAP_AUTH)
             rights.bootstrap_admin(principal_id="rights-root",authority_ref="BOOTSTRAP:R",occurred_at=T)
             rights.grant_access(event_id="R-ACL",idempotency_key="R-ACL",principal_id="coordinator",
                 permissions=["legal_rights:read","legal_rights:write","legal_rights:adjudicate"],
