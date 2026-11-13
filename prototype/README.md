@@ -309,3 +309,6 @@ The financial participant now uses the validated EntityJournal plus append_proje
 
 
 The native adapter suite also simulates failure after the native physical append but before receipt persistence, reconstructs a fresh participant adapter and verifies idempotent retry with exactly one physical effect. Exact-head CI is required before treating this crash window as verified.
+
+
+The coordinator now persists each globally committed six-register event group in an append-only `coordinator_event_groups` stream. Each group is canonical JSON, sequence-numbered and SHA-256 hash-chained; the read barrier requires the durable group and all participant receipts. `iter_committed_event_groups()` exposes only the committed prefix, and `latest_event_group_checkpoint()` returns the sequence/hash pair suitable for external checkpoint anchoring.

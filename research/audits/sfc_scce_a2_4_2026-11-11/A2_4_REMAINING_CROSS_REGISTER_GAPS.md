@@ -344,3 +344,8 @@ A deterministic fault-injection test terminates the participant operation after 
 ## 22. Native six-store restart recovery
 
 The native integration test reconstructs all six store adapters and the coordinator from their durable database files after a committed transaction. The financial participant rebuilds its in-memory EntityJournal from verified FinancialEventStore group history. The test verifies the original transaction remains visible and its canonical event group is preserved. This proves object/process restart over existing databases, not a clean-environment backup restore; the latter remains required for disaster-recovery acceptance.
+
+
+## 23. Durable canonical cross-register event stream
+
+A coordinator-owned `coordinator_event_groups` append-only table now persists the canonical six-register group after all participant receipts verify and before the transaction becomes globally COMMITTED. Each row includes monotonic sequence, canonical payload, payload digest, previous hash and group hash. Update/delete triggers and full-chain verification protect history. The read barrier requires a valid durable group and all six participant receipts; `iter_committed_event_groups()` exposes the committed prefix and `latest_event_group_checkpoint()` exposes sequence/hash for remote anchoring. The crash matrix covers a process death after event-group persistence but before COMMITTED, and negative controls prove tampering makes visibility fail closed.

@@ -51,3 +51,8 @@ The native participant test suite now injects a failure after PhysicalFlowStore 
 ## Financial journal restart replay
 
 On adapter construction, committed FinancialEventStore groups are replayed in immutable commit order into the supplied EntityJournal after the store verifies its event-group and posting-mirror chains. A conflicting preloaded in-memory event is rejected. This prevents a restarted process from validating new journal events against an empty in-memory journal while durable financial history already exists. The native integration test reopens all six stores and the coordinator, then verifies the committed event group and global visibility barrier.
+
+
+## Durable common event stream
+
+After all six participant receipts verify, the coordinator persists the assembled canonical event group in its own append-only `coordinator_event_groups` table. Groups have a monotonic commit sequence, canonical payload digest, previous hash and group hash. Update/delete triggers reject history mutation; startup and reads verify the complete chain. The global read barrier is crossed only after the event group is durable and the transaction state is COMMITTED. `iter_committed_event_groups()` returns the committed prefix; `latest_event_group_checkpoint()` supplies the current sequence/hash for external anchoring. A crash after group persistence but before the COMMITTED barrier is recoverable and explicitly fault-injected.

@@ -244,9 +244,30 @@ def _negative_controls():
         else:
             raise AssertionError("committed retry accepted a missing native event")
 
+
+    # The canonical coordinator event stream is append-only and hash chained.
+    with tempfile.TemporaryDirectory(prefix="synergy-coord-event-group-tamper-") as directory:
+        root=Path(directory)
+        coordinator,participants=_paths(root)
+        coordinator.submit("event-group-tamper-001","scenario-tamper","event-group-tamper",_operations())
+        assert coordinator.execute("event-group-tamper-001")=="COMMITTED"
+        assert coordinator.is_visible("event-group-tamper-001")
+        with sqlite3.connect(root/"coordinator.sqlite3") as con:
+            con.execute("DROP TRIGGER coordinator_event_groups_no_update")
+            con.execute("UPDATE coordinator_event_groups SET payload_json='{}' WHERE transaction_id=?",
+                ("event-group-tamper-001",))
+        assert not coordinator.is_visible("event-group-tamper-001")
+        try:
+            coordinator.committed_event_group("event-group-tamper-001")
+        except CoordinatorError:
+            pass
+        else:
+            raise AssertionError("tampered canonical event group crossed the read barrier")
+
     print("PASS: changed-content replay rejected; identical submit and execute are idempotent")
     print("PASS: immutable coordinator transition history records the decision barrier")
     print("PASS: stale participant revision aborts the pre-decision transaction")
+    print("PASS: canonical event-group hash chain detects tampering and fails closed")
 
 
 def _run_parent():
@@ -258,7 +279,7 @@ def _run_parent():
             f"after_commit:{name}",
             f"after_commit_receipt:{name}",
         ))
-    crash_points.extend(("after_prepared_barrier", "after_commit_decision", "after_commit_barrier"))
+    crash_points.extend(("after_prepared_barrier", "after_commit_decision", "after_event_group_persist", "after_commit_barrier"))
 
     for index, point in enumerate(crash_points):
         with tempfile.TemporaryDirectory(prefix=f"synergy-coord-{index}-") as directory:

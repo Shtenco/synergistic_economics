@@ -2212,3 +2212,8 @@ The financial participant now replays committed groups from FinancialEventStore.
 
 
 **Exact-head CI trigger — six-store restart replay:** commit `04e5ddcae4481004d59517b9dfd363e919288c48` adds FinancialEventStore group-log replay into EntityJournal and reconstructs all six native participants plus coordinator from durable databases. Exact-head Prototype, SCCE Stage-C2 and A2.4 workflows must pass before this restart path is marked verified.
+
+
+### 13 November continuation — durable canonical event-group stream
+
+The coordinator now persists a canonical six-register event group in an append-only, sequence-numbered SHA-256 hash chain after all participant receipts verify and before publishing COMMITTED. `is_visible()` now requires the event group, intact chain and all six native receipts. `iter_committed_event_groups()` exposes only the committed prefix; `latest_event_group_checkpoint()` returns sequence and group hash for external checkpoint anchoring. Startup performs an idempotent backfill of the contiguous committed prefix for pre-existing coordinator transactions. The crash matrix adds termination after event-group persistence but before the global barrier, and negative controls tamper with the event-group payload to verify fail-closed visibility.

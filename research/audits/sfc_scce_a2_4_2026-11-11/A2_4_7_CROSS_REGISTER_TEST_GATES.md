@@ -325,3 +325,10 @@ pending; this is an implemented integration test, not a completed gate.
 A synthetic A2.4.7 integration fixture now composes the actual seven-cell SCCE physical engine with the B8.1 cohort-to-service adapter, B3 physical-flow endpoint register, typed product valuation, labour/time/consent controls, and the GOLD-2A P2 financial projection. A shared scenario provenance ID is carried through each register's own event/reference and the financial group's causation ID. The fixture checks native physical units separately from financial currency and replays the financial positions from sealed openings.
 
 This is not a single production runtime or a cross-register atomic transaction. The financial P2 transaction is atomic within its own SQLite database; physical, cohort, product, labour and rights registers do not yet participate in that same transaction coordinator. Therefore Gate 2 remains OPEN. The fixture is COMMITTED / EXECUTION PENDING until exact-head CI logs are inspected. Gate 3 comparative and Gate 4 empirical work remain NOT STARTED.
+
+
+## 13 November implementation update — durable common event stream
+
+The cross-register coordinator now persists the verified six-participant event group in an append-only, sequence-numbered SHA-256 hash chain before publishing COMMITTED. Visibility requires the group record, valid chain and all participant receipts. The committed-prefix iterator and latest sequence/hash checkpoint are available for SFC/GOLD replay and external anchoring. The crash matrix includes the event-group-persisted/pre-barrier crash point; negative controls tamper with the canonical payload and require visibility to fail closed.
+
+This closes the protocol's missing durable common-group record. It does not yet close full domain-wide T/V/O coverage: current common reconciliation covers physical sender/receiver flows and financial instrument asset positions; liability mirrors remain GOLD-validated separately, and capital/product/labour/legal position mappers plus control-only financial movements remain open.

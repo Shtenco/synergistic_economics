@@ -123,3 +123,8 @@ The native participant test suite now injects a failure after a physical domain 
 ## Six-store process restart
 
 The financial participant now rebuilds its in-memory EntityJournal from FinancialEventStore.iter_groups() on construction, after the store verifies the immutable group and posting chains. The native integration test then reopens all six domain stores and the coordinator from their durable databases and verifies that the transaction remains globally visible and the canonical six-register event group is identical. This is a process-restart test; online backup/restore of the actual six domain databases remains a separate acceptance gate.
+
+
+## Durable canonical six-register event stream
+
+The coordinator now persists each assembled six-register event group after all participant native receipts are verified and before setting the global transaction state to COMMITTED. The append-only `coordinator_event_groups` table stores commit sequence, canonical JSON, payload digest, previous hash and group hash. Update/delete triggers protect history; startup and reads verify the hash chain. The global read barrier requires the committed event group as well as all six participant receipts. The stream exposes a committed-prefix iterator and a latest sequence/hash checkpoint for external anchoring. Crash injection covers the window after event-group persistence but before the COMMITTED barrier.

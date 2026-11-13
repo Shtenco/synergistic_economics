@@ -39,6 +39,47 @@ def _digest(value) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
 
 
+
+_EVENT_GROUP_ZERO_HASH = "0" * 64
+
+
+def _verify_event_group_chain(con) -> bool:
+    """Verify the immutable canonical six-register event-group hash chain."""
+    try:
+        rows=con.execute(
+            "SELECT commit_sequence,transaction_id,common_event_id,payload_json,payload_digest,previous_hash,group_hash "
+            "FROM coordinator_event_groups ORDER BY commit_sequence"
+        ).fetchall()
+        previous=_EVENT_GROUP_ZERO_HASH
+        expected_sequence=1
+        for row in rows:
+            if row["commit_sequence"]!=expected_sequence or row["previous_hash"]!=previous:
+                return False
+            raw=row["payload_json"]
+            if not isinstance(raw,str): return False
+            payload=json.loads(raw)
+            if _canonical(payload)!=raw: return False
+            digest=hashlib.sha256(raw.encode("utf-8")).hexdigest()
+            if digest!=row["payload_digest"]: return False
+            expected_hash=hashlib.sha256((previous+digest).encode("ascii")).hexdigest()
+            if expected_hash!=row["group_hash"]: return False
+            if payload.get("transaction_id")!=row["transaction_id"] or payload.get("common_event_id")!=row["common_event_id"]:
+                return False
+            events=payload.get("events")
+            if not isinstance(events,list) or len(events)!=len(PARTICIPANTS):
+                return False
+            if [event.get("register_id") for event in events if isinstance(event,dict)]!=list(PARTICIPANTS):
+                return False
+            if any(not isinstance(event,dict) or event.get("common_event_id")!=row["transaction_id"] for event in events):
+                return False
+            if con.execute("SELECT 1 FROM coordinator_transactions WHERE transaction_id=?",(row["transaction_id"],)).fetchone() is None:
+                return False
+            previous=expected_hash
+            expected_sequence+=1
+        return True
+    except (sqlite3.Error,TypeError,ValueError,KeyError,json.JSONDecodeError):
+        return False
+
 def _required(value, field):
     if not isinstance(value, str) or not value or value != value.strip():
         raise CoordinatorError(f"{field} must be trimmed non-empty text")
@@ -373,7 +414,23 @@ class CrossRegisterCoordinator:
                 CREATE TRIGGER IF NOT EXISTS coordinator_operations_no_delete
                     BEFORE DELETE ON coordinator_operations
                     BEGIN SELECT RAISE(ABORT,'coordinator operations are immutable'); END;
+                CREATE TABLE IF NOT EXISTS coordinator_event_groups(
+                    commit_sequence INTEGER PRIMARY KEY CHECK(commit_sequence>0),
+                    transaction_id TEXT NOT NULL UNIQUE REFERENCES coordinator_transactions(transaction_id),
+                    common_event_id TEXT NOT NULL UNIQUE,
+                    payload_json TEXT NOT NULL,
+                    payload_digest TEXT NOT NULL,
+                    previous_hash TEXT NOT NULL,
+                    group_hash TEXT NOT NULL
+                );
+                CREATE TRIGGER IF NOT EXISTS coordinator_event_groups_no_update
+                    BEFORE UPDATE ON coordinator_event_groups
+                    BEGIN SELECT RAISE(ABORT,'canonical event groups are immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS coordinator_event_groups_no_delete
+                    BEFORE DELETE ON coordinator_event_groups
+                    BEGIN SELECT RAISE(ABORT,'canonical event-group history is immutable'); END;
             """)
+        self._backfill_event_groups()
 
     def _set_state(self, txid, state):
         if state not in STATES:
@@ -575,6 +632,8 @@ class CrossRegisterCoordinator:
                 raise CoordinatorError(f"{name} durable prepare receipt is missing or mismatched")
             receipt = self.participants[name].commit(txid, token)
             self._record_committed(txid, name, receipt)
+        self._persist_event_group(txid)
+        _fault("after_event_group_persist")
         self._set_state(txid, "COMMITTED")
         _fault("after_commit_barrier")
 
@@ -659,6 +718,20 @@ class CrossRegisterCoordinator:
         """Read barrier: all six receipts AND native persisted events must match."""
         if self.state(txid) != "COMMITTED":
             return False
+        with closing(_connect(self.database_path)) as con:
+            if not _verify_event_group_chain(con):
+                return False
+            group_row=con.execute("SELECT commit_sequence FROM coordinator_event_groups WHERE transaction_id=?",(txid,)).fetchone()
+            if group_row is None:
+                return False
+            pending_prior=con.execute(
+                """SELECT 1 FROM coordinator_event_groups g
+                   JOIN coordinator_transactions t ON t.transaction_id=g.transaction_id
+                   WHERE g.commit_sequence<=? AND t.state!='COMMITTED' LIMIT 1""",
+                (group_row["commit_sequence"],)
+            ).fetchone()
+            if pending_prior:
+                return False
         operations = self._operations(txid)
         if len(operations) != len(PARTICIPANTS) or {r["participant"] for r in operations} != set(PARTICIPANTS):
             return False
@@ -700,10 +773,10 @@ class CrossRegisterCoordinator:
             if actual_digest != row["payload_digest"]:
                 return False
         return True
-    def committed_event_group(self, txid):
-        """Return the six participant events under one verified common transaction ID."""
-        if not self.is_visible(txid):
-            raise CoordinatorError("transaction is not globally visible")
+    def _assemble_event_group(self, txid):
+        """Assemble a candidate only after all six participant native receipts exist."""
+        if self.state(txid) not in {"COMMITTING","COMMITTED"}:
+            raise CoordinatorError("event group assembly requires an irreversible commit decision")
         with closing(_connect(self.database_path)) as con:
             row = con.execute(
                 "SELECT envelope_json FROM coordinator_transactions WHERE transaction_id=?",
@@ -753,3 +826,122 @@ class CrossRegisterCoordinator:
             "causation_id": envelope["causation_id"],
             "events": tuple(events),
         }
+
+
+    def _persist_event_group(self,txid):
+        group=self._assemble_event_group(txid)
+        payload_json=_canonical(group)
+        payload_digest=hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
+        with closing(_connect(self.database_path)) as con:
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                if not _verify_event_group_chain(con):
+                    raise CoordinatorError("canonical event-group hash chain is corrupt")
+                existing=con.execute(
+                    "SELECT * FROM coordinator_event_groups WHERE transaction_id=?",(txid,)
+                ).fetchone()
+                if existing:
+                    if existing["payload_json"]!=payload_json or existing["payload_digest"]!=payload_digest:
+                        raise CoordinatorError("canonical event group retry changed immutable content")
+                    con.execute("COMMIT")
+                    return
+                pending_group=con.execute(
+                    """SELECT g.transaction_id FROM coordinator_event_groups g
+                       JOIN coordinator_transactions t ON t.transaction_id=g.transaction_id
+                       WHERE t.state!='COMMITTED' ORDER BY g.commit_sequence LIMIT 1"""
+                ).fetchone()
+                if pending_group:
+                    raise CoordinatorError("an earlier canonical event group has not crossed the commit barrier")
+                current_decision=con.execute(
+                    "SELECT MIN(transition_id) FROM coordinator_transitions WHERE transaction_id=? AND to_state='COMMIT_DECIDED'",
+                    (txid,)
+                ).fetchone()[0]
+                earlier_decision=con.execute(
+                    """SELECT t.transaction_id FROM coordinator_transactions t
+                       JOIN coordinator_transitions d ON d.transaction_id=t.transaction_id AND d.to_state='COMMIT_DECIDED'
+                       WHERE t.transaction_id<>? AND t.state IN ('COMMIT_DECIDED','COMMITTING')
+                         AND d.transition_id<? AND NOT EXISTS(
+                           SELECT 1 FROM coordinator_event_groups g WHERE g.transaction_id=t.transaction_id)
+                       ORDER BY d.transition_id LIMIT 1""",
+                    (txid,current_decision)
+                ).fetchone()
+                if earlier_decision:
+                    raise CoordinatorError("an earlier commit decision must recover before publishing this event group")
+                latest=con.execute(
+                    "SELECT commit_sequence,group_hash FROM coordinator_event_groups ORDER BY commit_sequence DESC LIMIT 1"
+                ).fetchone()
+                sequence=1 if latest is None else latest["commit_sequence"]+1
+                previous_hash=_EVENT_GROUP_ZERO_HASH if latest is None else latest["group_hash"]
+                group_hash=hashlib.sha256((previous_hash+payload_digest).encode("ascii")).hexdigest()
+                con.execute(
+                    """INSERT INTO coordinator_event_groups(
+                       commit_sequence,transaction_id,common_event_id,payload_json,payload_digest,previous_hash,group_hash
+                       ) VALUES(?,?,?,?,?,?,?)""",
+                    (sequence,txid,txid,payload_json,payload_digest,previous_hash,group_hash)
+                )
+                if not _verify_event_group_chain(con):
+                    raise CoordinatorError("new canonical event group failed hash-chain verification")
+                con.execute("COMMIT")
+            except Exception:
+                if con.in_transaction: con.execute("ROLLBACK")
+                raise
+
+    def _backfill_event_groups(self):
+        """Migrate the contiguous committed prefix into the canonical stream."""
+        with closing(_connect(self.database_path)) as con:
+            if not _verify_event_group_chain(con):
+                raise CoordinatorError("canonical event-group hash chain is corrupt at startup")
+            rows=con.execute(
+                """SELECT t.transaction_id,t.state,MIN(d.transition_id) AS decision_transition
+                   FROM coordinator_transactions t
+                   JOIN coordinator_transitions d ON d.transaction_id=t.transaction_id AND d.to_state='COMMIT_DECIDED'
+                   WHERE t.state IN ('COMMITTED','COMMIT_DECIDED','COMMITTING')
+                   GROUP BY t.transaction_id ORDER BY decision_transition"""
+            ).fetchall()
+        for row in rows:
+            if row["state"]!="COMMITTED":
+                break
+            with closing(_connect(self.database_path)) as con:
+                exists=con.execute("SELECT 1 FROM coordinator_event_groups WHERE transaction_id=?",
+                    (row["transaction_id"],)).fetchone()
+            if exists is None:
+                self._persist_event_group(row["transaction_id"])
+
+    def committed_event_group(self,txid):
+        """Read the immutable canonical six-register group after the global visibility barrier."""
+        if not self.is_visible(txid):
+            raise CoordinatorError("transaction is not globally visible")
+        with closing(_connect(self.database_path)) as con:
+            if not _verify_event_group_chain(con):
+                raise CoordinatorError("canonical event-group hash chain is corrupt")
+            row=con.execute("SELECT payload_json FROM coordinator_event_groups WHERE transaction_id=?",
+                (txid,)).fetchone()
+        if row is None:
+            raise CoordinatorError("committed transaction has no canonical event group")
+        return json.loads(row["payload_json"])
+
+    def iter_committed_event_groups(self):
+        """Return the append-only committed prefix of the common economic event stream."""
+        with closing(_connect(self.database_path)) as con:
+            if not _verify_event_group_chain(con):
+                raise CoordinatorError("canonical event-group hash chain is corrupt")
+            rows=con.execute(
+                """SELECT g.transaction_id,g.payload_json,t.state FROM coordinator_event_groups g
+                   JOIN coordinator_transactions t ON t.transaction_id=g.transaction_id
+                   ORDER BY g.commit_sequence"""
+            ).fetchall()
+        result=[]
+        for row in rows:
+            if row["state"]!="COMMITTED": break
+            result.append(json.loads(row["payload_json"]))
+        return result
+
+    def latest_event_group_checkpoint(self):
+        """Return the latest committed event-stream sequence/hash for external anchoring."""
+        groups=self.iter_committed_event_groups()
+        if not groups: return {"sequence":0,"group_hash":_EVENT_GROUP_ZERO_HASH}
+        txid=groups[-1]["transaction_id"]
+        with closing(_connect(self.database_path)) as con:
+            row=con.execute("SELECT commit_sequence,group_hash FROM coordinator_event_groups WHERE transaction_id=?",
+                (txid,)).fetchone()
+        return {"sequence":row["commit_sequence"],"group_hash":row["group_hash"]}
