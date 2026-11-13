@@ -111,6 +111,24 @@ class MatchCandidateStoreTests(unittest.TestCase):
         )
         self.assertEqual(self.store.get_candidate("tenant-a", candidate_id)["status"], "stale")
 
+
+    def test_withdrawn_candidate_cannot_be_silently_reactivated(self):
+        receipt = self.persist()
+        candidate_id = receipt.result["candidate_id"]
+        self.store.withdraw_candidate(
+            "tenant-a", candidate_id, command_id="cmd-withdraw",
+            idempotency_key="key-withdraw", actor_id="test",
+            authority_ref="test:mandate", correlation_id="corr-withdraw",
+            occurred_at=NOW,
+        )
+        with self.assertRaises(RegistryError):
+            self.store.persist_candidate(
+                "tenant-a", "d-1", "o-1", command_id="cmd-reactivate",
+                idempotency_key="key-reactivate", actor_id="test",
+                authority_ref="test:mandate", correlation_id="corr-reactivate",
+                occurred_at=NOW,
+            )
+
     def test_incompatible_pair_cannot_be_persisted(self):
         self.registry.register_offer(
             dict(OFFER, offer_id="o-2", price={"amount_minor": 200000, "currency": "KZT", "scale": 2}),
