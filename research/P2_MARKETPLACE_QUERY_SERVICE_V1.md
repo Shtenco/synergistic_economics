@@ -13,7 +13,7 @@ Expose tenant-scoped discovery over the P1 canonical Demand/Offer Registry. This
 4. Returns ranked `MatchCandidate` records with compatibility explanations.
 5. Reports `side_effects=none` and `authority=routing_only`.
 
-The result is a transient query response, not a contract or a reservation. Candidate persistence and lifecycle commands are deliberately deferred until a separate decision/event contract is reviewed.
+The result is a transient query response, not a contract or a reservation. Candidate persistence is implemented as a separate lifecycle adapter over the same tenant aggregate and canonical SQLite event/outbox transaction. It does not create a second event store.
 
 ## Limits and invariants
 
@@ -27,3 +27,26 @@ The result is a transient query response, not a contract or a reservation. Candi
 ## Acceptance
 
 Tests cover ranking, tenant isolation, expiry, bounded limits and read-only behavior. Production HTTP/API exposure requires authentication, authorization, rate limiting, audit policy and an API contract; this module is the service layer, not an internet-facing server.
+
+
+## Persisted MatchCandidate lifecycle (P2 continuation)
+
+`MatchCandidateStore` persists candidates in the existing tenant marketplace aggregate:
+
+- `marketplace.match_candidate.upserted`: create or refresh a deterministic tenant-scoped candidate keyed by tenant, demand, offer and matching policy version.
+- `marketplace.match_candidate.staled`: explicit lifecycle transition when an operator or reconciliation process determines the candidate is no longer current.
+- `marketplace.match_candidate.withdrawn`: explicit withdrawal; withdrawn candidates are not silently reactivated by reads.
+- Each candidate stores the policy version, demand/offer canonical fingerprints, timestamps, source IDs and the routing-only match explanation.
+- Candidate writes use the canonical `SQLiteEventRepository.execute` path, preserving atomic event/projection/receipt/outbox semantics and durable idempotency.
+- The write transaction rechecks tenant membership, source fingerprints and compatibility against the in-transaction aggregate snapshot. A source change between discovery and commit fails closed.
+- Reads derive `freshness=current|stale` from the current demand/offer fingerprints. An active record with changed/missing sources reports `effective_status=stale`; reads do not mutate or auto-reconcile state.
+- Candidate list limits are bounded to 1–100. Candidate lifecycle never reserves capacity, accepts offers, creates contracts or triggers payment/settlement.
+
+The lifecycle is intentionally explicit: source freshness detection is read-only, while persisting a stale/withdrawn transition requires a separately authorized command with its own idempotency key and audit event.
+
+## Remaining P2 hardening
+
+- Add an authorized reconciliation worker that scans stale fingerprints and emits explicit stale events.
+- Add offer/demand amendment and closure commands with candidate invalidation semantics.
+- Add authenticated HTTP/API exposure, authorization, rate limiting and audit policy.
+- Exercise concurrent writer races on the supported deployment topology; SQLite WAL/BEGIN IMMEDIATE is a single-host serialization boundary, not a distributed lock.
