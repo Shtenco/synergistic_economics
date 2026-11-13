@@ -223,3 +223,46 @@ class SignedApprovalVerifier:
                     con.execute("ROLLBACK")
                 raise
         return True
+
+
+class SignedBootstrapAuthorizer:
+    """Adapt signed Ed25519 JWS assertions to DurableEventRegister bootstrap.
+
+    The authority_ref passed to the register is the compact signed assertion.
+    The assertion binds the first-admin subject, register/service, stable event
+    identity, role and canonical bootstrap payload digest.
+    """
+
+    def __init__(self, verifier: SignedApprovalVerifier):
+        if not callable(verifier):
+            raise ApprovalAssertionError("a signed approval verifier is mandatory")
+        self.verifier = verifier
+
+    @staticmethod
+    def request_context(principal_id, register_name, payload):
+        for value, field in ((principal_id, "principal_id"), (register_name, "register_name")):
+            if not isinstance(value, str) or not value or value != value.strip():
+                raise ApprovalAssertionError(f"{field} must be trimmed non-empty text")
+        if (not isinstance(payload, dict)
+                or payload != {"principal_id": principal_id, "permissions": ["*"]}):
+            raise ApprovalAssertionError("bootstrap payload must grant only the first administrator")
+        request_id = f"{register_name}:ACL:BOOTSTRAP:{principal_id}"
+        material = {
+            "service_id": register_name,
+            "request_id": request_id,
+            "subject": principal_id,
+            "role": "bootstrap_admin",
+            "event_type": "acl.granted",
+            "payload": payload,
+        }
+        return {
+            "service_id": register_name,
+            "request_id": request_id,
+            "request_digest": hashlib.sha256(_canonical(material)).hexdigest(),
+        }
+
+    def __call__(self, principal_id, authority_ref, register_name, payload):
+        context = self.request_context(principal_id, register_name, payload)
+        return self.verifier(
+            principal_id, "bootstrap_admin", context, authority_ref
+        )

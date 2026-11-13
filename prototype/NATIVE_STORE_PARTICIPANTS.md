@@ -16,6 +16,13 @@ native_store_participants.py binds the existing physical-flow, capital-cohort an
 
 The inbox protects immutable prepared content, forbids deletion, constrains state transitions and verifies the payload digest on commit/read. It is a recoverable prepare/commit protocol across independent SQLite databases, not one cross-database SQL transaction.
 
+
+## Signed first-administrator bootstrap
+
+For production composition, construct `SignedApprovalVerifier` with an independently administered issuer key resolver and live revocation callback, then wrap it in `SignedBootstrapAuthorizer` from `signed_approval_assertions.py` and inject that callable as `bootstrap_authorizer` into `LabourRegister` / `LegalRightsRegister`. The `authority_ref` supplied to `bootstrap_admin()` is the compact EdDSA JWT/JWS assertion itself. Its signed claims must use the register name as `service_id`, the stable `REGISTER:ACL:BOOTSTRAP:PRINCIPAL` request ID, the `bootstrap_admin` role, the principal as `sub`, and the SHA-256 request digest returned by `SignedBootstrapAuthorizer.request_context()`. The assertion is short-lived, audience/issuer/key bound, revocation checked and replay protected by the verifier.
+
+The adapter is production-capable verification logic, not a production identity provider. This repository still does not operate the issuer, key-distribution service, revocation service or their independent trust domain. Never use the deterministic test signer/key resolver as production authority.
+
 ## Current adapters
 
 - PhysicalFlowStore: one paired outflow/inflow physical flow, stable flow ID, native-unit and endpoint mirror validation.
