@@ -2118,3 +2118,6 @@ The A2.4/SFC-SCCE, Prototype 6 and UEB source lines are now represented together
 The first two runs predate the workflow-only branch-filter commit and therefore are not exact-HEAD evidence for PR #6. The A2.4 run is exact-HEAD evidence. This status update is intentionally placed under the audit path so Prototype, Stage-C2 and A2.4 workflows rerun against one identical commit. Their new run IDs and final conclusions must be recorded after completion; do not infer success from the earlier runs.
 
 **Scope remains unchanged:** CI success does not close the production integration gaps. The single atomic six-register command boundary, authoritative durable Labour and Legal Rights registers, common-stream multi-period SFC/GOLD reconciliation, and remote WORM plus independent KMS/HSM custody remain OPEN until their specific implementation and recovery evidence exists.
+
+
+**Exact-head CI trigger:** the consolidation evidence above is committed on the integration branch. A follow-up Contents-API commit records this trigger so all three workflows execute against the same branch HEAD; this line is an execution marker, not a test result.
