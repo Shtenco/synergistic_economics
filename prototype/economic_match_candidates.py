@@ -176,8 +176,7 @@ class MatchCandidateStore:
             "updated_at": occurred_at.isoformat().replace("+00:00", "Z"),
             "last_seen_at": occurred_at.isoformat().replace("+00:00", "Z"),
         }
-        event_type = ("marketplace.match_candidate.refreshed" if existing
-                      else "marketplace.match_candidate.created")
+        event_type = "marketplace.match_candidate.upserted"
         return self._commit(
             tenant_id=tenant_id, candidate_id=candidate_id, event_type=event_type,
             command_id=command_id, idempotency_key=idempotency_key, actor_id=actor_id,
