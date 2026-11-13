@@ -2178,3 +2178,6 @@ Added a native FinancialEventStore participant. It requires activated and replay
 The coordinator commit order is now explicit: physical, capital, labour, product, legal_rights, then financial. The SFC projection is therefore committed only after the other five participants have durable receipts. The global visibility barrier remains required for readers. This is recoverable multi-database coordination, not a single distributed SQL transaction.
 
 **Current scope:** all six participants now use native stores. The integrated period fixture proves physical sender/receiver movements and financial instrument asset positions. The financial movement bridge currently follows the SFC instrument-asset mapper; liability-side mirrors are separately checked by GOLD controls, and control-only events plus full capital/product/labour/legal T/V/O mappings remain open. Physical lot/reservation inventory is also not yet combined with the physical-flow adapter.
+
+
+**Exact-head CI trigger — all six native coordinator participants:** the projection-aware FinancialEventStore adapter, GOLD journal validator, SFC-derived instrument movement binding and financial-last commit order follow commit `9a22581b24b9c21ccea67f31ab18587db4284c96`. The exact-head run must exercise the full six-native integration test; do not mark this step complete from source inspection alone.
