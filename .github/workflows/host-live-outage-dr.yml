@@ -51,7 +51,7 @@ jobs:
           DR_SSH_KNOWN_HOSTS: ${{ secrets.SYNERGY_DR_SSH_KNOWN_HOSTS }}
         run: |
           test -n "$DR_SSH_KNOWN_HOSTS"
-          printf '%s\\n' "$DR_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DR_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
       - name: Power off test VM, power it on, and verify all six stores
         env:
