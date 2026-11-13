@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synergy.example/schemas/economic-router-offer-v1.schema.json",
+  "title": "SYNERGY Economic Router Offer v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "offer_id",
+    "seller_id",
+    "category",
+    "jurisdiction",
+    "status",
+    "seller_verification",
+    "capabilities",
+    "capacity",
+    "price",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "synergy.economic-router.offer"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "offer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "seller_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jurisdiction": {
+      "type": "string",
+      "minLength": 2
+    },
+    "status": {
+      "enum": [
+        "active",
+        "paused",
+        "reserved",
+        "withdrawn",
+        "expired"
+      ]
+    },
+    "seller_verification": {
+      "enum": [
+        "pending",
+        "verified",
+        "rejected",
+        "suspended"
+      ]
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "capacity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "price": {
+      "$ref": "#/$defs/money"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount_minor",
+        "currency",
+        "scale"
+      ],
+      "properties": {
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        }
+      }
+    }
+  }
+}
