@@ -237,8 +237,8 @@ class WorkOrder:
         reviewer_id = _required(reviewer_id, "reviewer_id")
         if self.status != WorkStatus.SUBMITTED:
             raise LeagueError("revision can be requested only for submitted work")
-        if reviewer_id in (self.buyer_id, self.assignee_id):
-            raise LeagueError("reviewer must be independent of buyer and assignee")
+        if reviewer_id == self.assignee_id:
+            raise LeagueError("assignee cannot review their own delivery")
         return replace(self, status=WorkStatus.REVISION_REQUESTED, reviewer_id=reviewer_id, version=self.version + 1)
 
     def accept(self, reviewer_id: str, *, expected_version: int) -> "WorkOrder":
