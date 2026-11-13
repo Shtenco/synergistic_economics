@@ -1,24 +1,16 @@
 name: SCCE Stage-C2 validation
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 on:
   push:
     paths:
-      - "prototype/scc_endogenous_household_*.py"
-      - "prototype/scc_household_signals.py"
-      - "prototype/care_service_queue.py"
-      - "prototype/test_care_service_queue.py"
-      - "prototype/test_scc_endogenous_household_*.py"
-      - "prototype/test_scc_household_signals.py"
+      - "prototype/**"
+      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
       - ".github/workflows/scc-c2-validation.yml"
-  pull_request:
-    paths:
-      - "prototype/scc_endogenous_household_*.py"
-      - "prototype/scc_household_signals.py"
-      - "prototype/care_service_queue.py"
-      - "prototype/test_care_service_queue.py"
-      - "prototype/test_scc_endogenous_household_*.py"
-      - "prototype/test_scc_household_signals.py"
-      - ".github/workflows/scc-c2-validation.yml"
+
   workflow_dispatch:
 
 jobs:
@@ -29,6 +21,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Install Ed25519 checkpoint dependency
+        run: python -m pip install "cryptography>=44,<47"
       - name: Run C2 household signal and feedback tests
         run: |
           python -m unittest discover -s prototype -p 'test_*.py' -v

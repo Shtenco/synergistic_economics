@@ -1,0 +1,99 @@
+name: A2.4 audit control fixtures
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - audit/sfc-scce-a2-4-continuation-20261111
+    paths:
+      - "research/audits/sfc_scce_a2_4_2026-11-11/**"
+      - "prototype/**"
+      - ".github/workflows/a2-4-audit-controls.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit-control-fixtures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Record interpreter
+        run: python --version
+      - name: Install Ed25519 checkpoint dependency
+        run: python -m pip install "cryptography>=44,<47"
+      - name: Compile audit controls
+        run: python -m compileall -q prototype research/audits/sfc_scce_a2_4_2026-11-11
+      - name: Fail-closed register corruption matrix and correction lineage replay
+        run: python -m unittest discover -s prototype -p 'test_domain_register_stores.py' -v
+      - name: A2.4.1 real SCCE multi-period physical transition
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_scce_physical_transition.py
+      - name: A2.4.2 B8.1 cohort-to-SCCE live engine adapter
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_scce_capital_cohort_bridge.py
+      - name: A2.4.2 durable B8.1 capital cohort event store
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_capital_cohort_store.py
+      - name: A2.4.1 six-sector SFC and physical arithmetic
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_six_sector.py
+      - name: A2.4.2 capital stock and services bridge
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_capital_bridge.py
+      - name: A2.4.2 same-cohort capital integration fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_same_cohort_capital.py
+      - name: A2.4.2 B8.1 cohort ontology and state transitions
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_b81_cohort_contract.py
+      - name: A2.4.3 native-unit product balances
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_dimensions.py
+      - name: A2.4.3 typed product valuation adapter
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_valuation_adapter.py
+      - name: A2.4.3 durable product, native-unit balance and valuation register
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_product_register.py
+      - name: A2.4.3 physical flow endpoint register
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_physical_flow_register.py
+      - name: A2.4.3 durable physical flow event store
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_physical_flow_store.py
+      - name: A2.4.4 entity, sector and issuer identity journal
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_entity_sector_journal.py
+      - name: A2.4.4 financial event balance controls
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_events.py
+      - name: A2.4.4 independent SFC-GOLD-1 arithmetic oracle
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_gold_oracle.py
+      - name: A2.4.4 independent SFC-GOLD-2A debt and impairment oracle
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_gold_2a_oracle.py
+      - name: A2.4.4 financial event replay and recovery audit
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_replay_recovery.py --self-test
+      - name: A2.4.4 balanced double-entry journal fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal.py
+      - name: A2.4.4 instrument stock-flow and holder/issuer mirrors
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_instrument_stock_flow.py
+      - name: A2.4.4 durable financial event store
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_event_store.py
+      - name: A2.4.4 validated journal-to-store adapter
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_financial_journal_adapter.py
+      - name: A2.4.4 pure SFC T/V/O projection kernel
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_kernel.py
+      - name: A2.4.4 explicit SFC opening snapshot activation
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_registry.py
+      - name: A2.4.4 P2 atomic projection, coverage, cursor and replay recovery
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_sfc_projection_store.py
+      - name: A2.4.4 P2 subprocess crash, restart and backup recovery
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_p2_crash_recovery.py
+      - name: A2.4.7 durable coordinator six-participant crash matrix
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_cross_register_crash_matrix.py
+      - name: A2.4.7 dual-approved closed-period governance
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_period_governance.py
+      - name: A2.4.7 signed approval assertion identity and replay controls
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_signed_approval_assertions.py
+      - name: A2.4.7 Ed25519 external checkpoint and backup verification
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_external_checkpoints.py
+      - name: A2.4.7 six-store signed-checkpoint disaster recovery drill
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_cross_register_disaster_recovery.py
+      - name: A2.4.5 labour, time and consent fixture
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_labour_consent.py
+      - name: A2.4.7 unified synthetic cross-register integration
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_unified_cross_register.py
