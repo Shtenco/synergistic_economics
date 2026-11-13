@@ -2209,3 +2209,6 @@ Added a deterministic fault-injection test that raises after the PhysicalFlowSto
 ### 13 November continuation — six-store restart and financial journal replay
 
 The financial participant now replays committed groups from FinancialEventStore.iter_groups() into the in-memory EntityJournal when the adapter is reconstructed. It verifies the immutable event-group and posting-mirror chains first and rejects conflicts with preloaded journal events. The native integration test reopens all six domain stores and the coordinator from their durable databases, verifies financial projection replay, verifies the committed event group and checks the global visibility barrier after restart. Backup/restore of the six real domain stores remains OPEN.
+
+
+**Exact-head CI trigger — six-store restart replay:** commit `04e5ddcae4481004d59517b9dfd363e919288c48` adds FinancialEventStore group-log replay into EntityJournal and reconstructs all six native participants plus coordinator from durable databases. Exact-head Prototype, SCCE Stage-C2 and A2.4 workflows must pass before this restart path is marked verified.
