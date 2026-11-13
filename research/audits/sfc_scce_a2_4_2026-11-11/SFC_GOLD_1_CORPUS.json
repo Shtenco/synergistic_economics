@@ -1,0 +1,470 @@
+{
+  "corpus_id": "SFC-GOLD-1",
+  "version": "1.2.0",
+  "status": "FROZEN_SYNTHETIC_CONTROL_CORPUS",
+  "scope": "Independent arithmetic oracle fixture for a minimal bank-created deposit lifecycle. Synthetic data; not empirical evidence or a production chart of accounts. Version 1.1.0 additionally freezes canonical per-event replay checkpoints. Version 1.2.0 freezes holder and issuer identity on every expected position and rejects duplicate expected position keys.",
+  "amount_representation": "base-10 decimal strings; no binary floating point",
+  "periods": [
+    {
+      "effective_period": 1,
+      "label": "P1"
+    }
+  ],
+  "entities": [
+    {
+      "entity_id": "bank-1",
+      "sector": "CB"
+    },
+    {
+      "entity_id": "household-1",
+      "sector": "H"
+    },
+    {
+      "entity_id": "supplier-1",
+      "sector": "NFC"
+    }
+  ],
+  "events": [
+    {
+      "event_id": "G1-E1",
+      "event_type": "bank_loan_origination",
+      "effective_period": 1,
+      "postings": [
+        {
+          "account": "loan_asset",
+          "side": "D",
+          "amount": "19",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "household-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "household-1",
+          "issuer_sector": "H",
+          "instrument_id": "loan-hh-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2029-12-31",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "loan_liability",
+          "side": "C",
+          "amount": "19",
+          "entity_id": "household-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "household-1",
+          "issuer_sector": "H",
+          "instrument_id": "loan-hh-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2029-12-31",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "D",
+          "amount": "19",
+          "entity_id": "household-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "C",
+          "amount": "19",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "household-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        }
+      ]
+    },
+    {
+      "event_id": "G1-E2",
+      "event_type": "supplier_payment",
+      "effective_period": 1,
+      "postings": [
+        {
+          "account": "deposit_asset",
+          "side": "C",
+          "amount": "7",
+          "entity_id": "household-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "D",
+          "amount": "7",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "household-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "D",
+          "amount": "7",
+          "entity_id": "supplier-1",
+          "institutional_sector": "NFC",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-supplier-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "C",
+          "amount": "7",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "supplier-1",
+          "counterparty_sector": "NFC",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-supplier-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        }
+      ]
+    },
+    {
+      "event_id": "G1-E3",
+      "event_type": "principal_repayment",
+      "effective_period": 1,
+      "postings": [
+        {
+          "account": "loan_liability",
+          "side": "D",
+          "amount": "5",
+          "entity_id": "household-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "household-1",
+          "issuer_sector": "H",
+          "instrument_id": "loan-hh-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2029-12-31",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "loan_asset",
+          "side": "C",
+          "amount": "5",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "household-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "household-1",
+          "issuer_sector": "H",
+          "instrument_id": "loan-hh-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2029-12-31",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "C",
+          "amount": "5",
+          "entity_id": "household-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "D",
+          "amount": "5",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "household-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "deposit-hh-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "on_demand",
+          "denomination": "nominal",
+          "valuation_basis": "nominal"
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "final_positions": [
+      {
+        "entity_id": "bank-1",
+        "account": "loan_asset",
+        "instrument_id": "loan-hh-001",
+        "balance": "14",
+        "holder_entity_id": "bank-1",
+        "issuer_entity_id": "household-1"
+      },
+      {
+        "entity_id": "household-1",
+        "account": "loan_liability",
+        "instrument_id": "loan-hh-001",
+        "balance": "14",
+        "holder_entity_id": "bank-1",
+        "issuer_entity_id": "household-1"
+      },
+      {
+        "entity_id": "household-1",
+        "account": "deposit_asset",
+        "instrument_id": "deposit-hh-001",
+        "balance": "7",
+        "holder_entity_id": "household-1",
+        "issuer_entity_id": "bank-1"
+      },
+      {
+        "entity_id": "bank-1",
+        "account": "deposit_liability",
+        "instrument_id": "deposit-hh-001",
+        "holder_entity_id": "household-1",
+        "balance": "7",
+        "issuer_entity_id": "bank-1"
+      },
+      {
+        "entity_id": "supplier-1",
+        "account": "deposit_asset",
+        "instrument_id": "deposit-supplier-001",
+        "balance": "7",
+        "holder_entity_id": "supplier-1",
+        "issuer_entity_id": "bank-1"
+      },
+      {
+        "entity_id": "bank-1",
+        "account": "deposit_liability",
+        "instrument_id": "deposit-supplier-001",
+        "holder_entity_id": "supplier-1",
+        "balance": "7",
+        "issuer_entity_id": "bank-1"
+      }
+    ],
+    "system_deposit_liability": "14",
+    "system_deposit_asset": "14",
+    "bank_loan_asset": "14",
+    "household_loan_liability": "14",
+    "aggregate_sector_financial_net_lending": {
+      "CB": "0",
+      "H": "-7",
+      "NFC": "7"
+    },
+    "replay_checkpoints": [
+      {
+        "after_event_id": "G1-E1",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "19",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "19",
+            "issuer_entity_id": "bank-1"
+          }
+        ]
+      },
+      {
+        "after_event_id": "G1-E2",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "19",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "12",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "12",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "supplier-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-supplier-001",
+            "balance": "7",
+            "holder_entity_id": "supplier-1",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-supplier-001",
+            "holder_entity_id": "supplier-1",
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
+          }
+        ]
+      },
+      {
+        "after_event_id": "G1-E3",
+        "positions": [
+          {
+            "entity_id": "bank-1",
+            "account": "loan_asset",
+            "instrument_id": "loan-hh-001",
+            "balance": "14",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "loan_liability",
+            "instrument_id": "loan-hh-001",
+            "balance": "14",
+            "holder_entity_id": "bank-1",
+            "issuer_entity_id": "household-1"
+          },
+          {
+            "entity_id": "household-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-hh-001",
+            "balance": "7",
+            "holder_entity_id": "household-1",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-hh-001",
+            "holder_entity_id": "household-1",
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "supplier-1",
+            "account": "deposit_asset",
+            "instrument_id": "deposit-supplier-001",
+            "balance": "7",
+            "holder_entity_id": "supplier-1",
+            "issuer_entity_id": "bank-1"
+          },
+          {
+            "entity_id": "bank-1",
+            "account": "deposit_liability",
+            "instrument_id": "deposit-supplier-001",
+            "holder_entity_id": "supplier-1",
+            "balance": "7",
+            "issuer_entity_id": "bank-1"
+          }
+        ]
+      }
+    ]
+  },
+  "exclusions": [
+    "interest accrual and settlement",
+    "FX revaluation and other-volume changes",
+    "impairment allowance and write-off",
+    "legal forgiveness",
+    "collateral and guarantees",
+    "multiple-period opening/closing carry-forward",
+    "taxes, fees, capital and non-financial counterpart transactions"
+  ],
+  "acceptance": "Oracle must recompute the expected positions from the immutable events and reject mutations that preserve global debit/credit balance but break instrument holder/issuer identity or event economics."
+}

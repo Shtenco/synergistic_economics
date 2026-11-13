@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synergy.example/schemas/native-register-event-envelope-v1.schema.json",
+  "title": "SYNERGY Native Register Event Envelope",
+  "description": "Canonical envelope shared by physical, capital, labour, product, legal-rights and financial participants.",
+  "type": "object",
+  "properties": {
+    "schema_id": {
+      "const": "synergy.native-register-event"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "register_id": {
+      "enum": [
+        "physical",
+        "capital",
+        "labour",
+        "product",
+        "legal_rights",
+        "financial"
+      ]
+    },
+    "event_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "effective_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(?:Z|\\+00:00)$"
+    },
+    "actor_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "authority_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object"
+    },
+    "stock_flow_movements": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "minItems": 1
+    },
+    "no_stock_flow_effect": {
+      "type": "string",
+      "minLength": 1
+    },
+    "migration": {
+      "type": "object",
+      "properties": {
+        "migration_id": {
+          "const": "native-event-envelope-v0-to-v1"
+        },
+        "source_schema_version": {
+          "const": 0
+        }
+      },
+      "required": [
+        "migration_id",
+        "source_schema_version"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_id",
+    "schema_version",
+    "register_id",
+    "event_type",
+    "effective_at",
+    "recorded_at",
+    "actor_id",
+    "authority_ref",
+    "idempotency_key",
+    "payload"
+  ],
+  "additionalProperties": false,
+  "not": {
+    "required": [
+      "stock_flow_movements",
+      "no_stock_flow_effect"
+    ]
+  }
+}

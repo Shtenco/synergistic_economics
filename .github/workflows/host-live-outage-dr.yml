@@ -1,0 +1,73 @@
+name: Live DigitalOcean VM outage and recovery drill
+on:
+  workflow_dispatch:
+    inputs:
+      droplet_id:
+        description: Disposable test droplet ID (must carry the synergy-dr-test tag)
+        required: true
+        type: string
+      confirm_power_off:
+        description: Type POWER_OFF_SYNERGY_DR_TEST_HOST to authorize hard VM power-off
+        required: true
+        type: string
+      unavailable_register:
+        description: Which native store must be isolated and proven fail-closed after reboot
+        required: true
+        type: choice
+        options:
+          - physical
+          - capital
+          - labour
+          - product
+          - legal_rights
+          - financial
+permissions:
+  contents: read
+concurrency:
+  group: synergy-live-host-dr
+  cancel-in-progress: false
+jobs:
+  host-outage:
+    if: ${{ inputs.confirm_power_off == 'POWER_OFF_SYNERGY_DR_TEST_HOST' }}
+    runs-on: ubuntu-latest
+    environment: host-live-dr
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install SSH client
+        run: sudo apt-get update && sudo apt-get install -y openssh-client
+      - name: Install dedicated recovery SSH key
+        env:
+          DR_SSH_PRIVATE_KEY: ${{ secrets.SYNERGY_DR_SSH_PRIVATE_KEY }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DR_SSH_PRIVATE_KEY" > ~/.ssh/synergy-dr
+          chmod 600 ~/.ssh/synergy-dr
+      - name: Install pinned SSH host keys
+        env:
+          DR_SSH_KNOWN_HOSTS: ${{ secrets.SYNERGY_DR_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$DR_SSH_KNOWN_HOSTS"
+          printf '%s\n' "$DR_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Power off test VM, power it on, and verify all six stores
+        env:
+          DO_API_TOKEN: ${{ secrets.SYNERGY_DO_API_TOKEN }}
+          DR_DROPLET_ID: ${{ inputs.droplet_id }}
+          DR_SSH_PRIVATE_KEY_PATH: ~/.ssh/synergy-dr
+          DR_SSH_KNOWN_HOSTS_PATH: ~/.ssh/known_hosts
+          DR_SSH_USER: ${{ vars.SYNERGY_DR_SSH_USER }}
+          DR_REMOTE_VERIFY_COMMAND: ${{ vars.SYNERGY_DR_REMOTE_VERIFY_COMMAND }}
+          DR_UNAVAILABLE_REGISTER: ${{ inputs.unavailable_register }}
+          DR_BACKUP_OUTPUT_PATH: ${{ runner.temp }}/synergy-six-register-backup.tar.gz
+        run: python research/infra/digitalocean_host_outage_drill.py
+      - name: Upload verified six-register recovery bundle for the independent AWS restore drill
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-six-register-backup
+          path: ${{ runner.temp }}/synergy-six-register-backup.tar.gz
+          if-no-files-found: error
+          retention-days: 7

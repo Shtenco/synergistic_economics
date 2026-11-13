@@ -1,0 +1,774 @@
+{
+  "corpus_id": "SFC-GOLD-2A",
+  "version": "1.0.0",
+  "status": "FROZEN_SYNTHETIC_CONTROL_CORPUS",
+  "scope": "Debt principal, accrued interest, interest settlement, impairment allowance, creditor write-off and legally effective forgiveness only. No FX, collateral, guarantees, taxes, fees, capital adequacy or empirical calibration.",
+  "amount_representation": "Canonical base-10 decimal strings; binary floating point forbidden.",
+  "entities": [
+    {
+      "entity_id": "bank-1",
+      "sector": "CB"
+    },
+    {
+      "entity_id": "borrower-1",
+      "sector": "H"
+    }
+  ],
+  "instrument_identities": [
+    {
+      "instrument_id": "LOAN-001",
+      "instrument_class": "loan",
+      "holder_entity_id": "bank-1",
+      "holder_sector": "CB",
+      "issuer_entity_id": "borrower-1",
+      "issuer_sector": "H",
+      "currency": "LCU",
+      "maturity": "2030-12-31",
+      "denomination": "NOMINAL",
+      "valuation_basis": "NOMINAL"
+    },
+    {
+      "instrument_id": "DEP-001",
+      "instrument_class": "deposit",
+      "holder_entity_id": "borrower-1",
+      "holder_sector": "H",
+      "issuer_entity_id": "bank-1",
+      "issuer_sector": "CB",
+      "currency": "LCU",
+      "maturity": "ON_DEMAND",
+      "denomination": "NOMINAL",
+      "valuation_basis": "NOMINAL"
+    },
+    {
+      "instrument_id": "INT-001",
+      "instrument_class": "accrued_interest",
+      "holder_entity_id": "bank-1",
+      "holder_sector": "CB",
+      "issuer_entity_id": "borrower-1",
+      "issuer_sector": "H",
+      "currency": "LCU",
+      "maturity": "ON_DEMAND",
+      "denomination": "NOMINAL",
+      "valuation_basis": "NOMINAL"
+    }
+  ],
+  "opening_snapshot": {
+    "period": 0,
+    "mapper_version": "sfc-gold-2a-mapper@1",
+    "evidence_ref": "GOLD2A:synthetic-opening-v1",
+    "balances": {
+      "loan_asset": "0",
+      "loan_liability": "0",
+      "interest_receivable": "0",
+      "interest_payable": "0",
+      "deposit_asset": "0",
+      "deposit_liability": "0",
+      "impairment_allowance": "0",
+      "writeoff_memorandum": "0"
+    },
+    "rows": [
+      {
+        "identity": {
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "holder_entity_id": "bank-1",
+          "holder_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      },
+      {
+        "identity": {
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "holder_entity_id": "borrower-1",
+          "holder_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      },
+      {
+        "identity": {
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "holder_entity_id": "bank-1",
+          "holder_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        "period": 0,
+        "amount": "0",
+        "evidence_ref": "GOLD2A:synthetic-opening-v1"
+      }
+    ]
+  },
+  "periods": [
+    {
+      "period": 1,
+      "opening_balances": {
+        "loan_asset": "0",
+        "loan_liability": "0",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "0",
+        "interest_receivable": "0",
+        "interest_payable": "0",
+        "deposit_asset": "0",
+        "deposit_liability": "0"
+      },
+      "closing_balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      },
+      "sector_financial_net_lending": {
+        "CB": "10",
+        "H": "-10"
+      }
+    },
+    {
+      "period": 2,
+      "opening_balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      },
+      "closing_balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "80",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      },
+      "sector_financial_net_lending": {
+        "CB": "0",
+        "H": "0"
+      }
+    },
+    {
+      "period": 3,
+      "opening_balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "80",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      },
+      "closing_balances": {
+        "loan_asset": "65",
+        "loan_liability": "80",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      },
+      "sector_financial_net_lending": {
+        "CB": "0",
+        "H": "0"
+      }
+    },
+    {
+      "period": 4,
+      "opening_balances": {
+        "loan_asset": "65",
+        "loan_liability": "80",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      },
+      "closing_balances": {
+        "loan_asset": "60",
+        "loan_liability": "75",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "55",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      },
+      "sector_financial_net_lending": {
+        "CB": "-5",
+        "H": "5"
+      }
+    }
+  ],
+  "events": [
+    {
+      "event_id": "G2A-E01",
+      "event_type": "bank_loan_origination",
+      "effective_period": 1,
+      "component": "T",
+      "legal_effect": "create_principal_and_deposit",
+      "postings": [
+        {
+          "account": "loan_asset",
+          "side": "D",
+          "amount": "100",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "loan_liability",
+          "side": "C",
+          "amount": "100",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "D",
+          "amount": "100",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "C",
+          "amount": "100",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E02",
+      "event_type": "interest_accrual",
+      "effective_period": 1,
+      "component": "T",
+      "legal_effect": "accrue_interest",
+      "postings": [
+        {
+          "account": "interest_receivable",
+          "side": "D",
+          "amount": "10",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "interest_income",
+          "side": "C",
+          "amount": "10",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB"
+        },
+        {
+          "account": "interest_expense",
+          "side": "D",
+          "amount": "10",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H"
+        },
+        {
+          "account": "interest_payable",
+          "side": "C",
+          "amount": "10",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E03",
+      "event_type": "interest_payment",
+      "effective_period": 1,
+      "component": "T",
+      "legal_effect": "settle_accrued_interest",
+      "postings": [
+        {
+          "account": "deposit_liability",
+          "side": "D",
+          "amount": "4",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "interest_receivable",
+          "side": "C",
+          "amount": "4",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "interest_payable",
+          "side": "D",
+          "amount": "4",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "INT-001",
+          "instrument_class": "accrued_interest",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "C",
+          "amount": "4",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E04",
+      "event_type": "impairment_allowance_recognition",
+      "effective_period": 2,
+      "component": "V",
+      "legal_effect": "valuation_allowance_only",
+      "postings": [
+        {
+          "account": "impairment_expense",
+          "side": "D",
+          "amount": "20",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB"
+        },
+        {
+          "account": "impairment_allowance",
+          "side": "C",
+          "amount": "20",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E05",
+      "event_type": "principal_repayment",
+      "effective_period": 3,
+      "component": "T",
+      "legal_effect": "reduce_principal",
+      "postings": [
+        {
+          "account": "loan_liability",
+          "side": "D",
+          "amount": "20",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "loan_asset",
+          "side": "C",
+          "amount": "20",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "deposit_liability",
+          "side": "D",
+          "amount": "20",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "deposit_asset",
+          "side": "C",
+          "amount": "20",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "bank-1",
+          "issuer_sector": "CB",
+          "instrument_id": "DEP-001",
+          "instrument_class": "deposit",
+          "currency": "LCU",
+          "maturity": "ON_DEMAND",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E06",
+      "event_type": "creditor_write_off",
+      "effective_period": 3,
+      "component": "O",
+      "legal_effect": "accounting_derecognition_no_legal_extinguishment",
+      "writeoff_claim_delta": "15",
+      "postings": [
+        {
+          "account": "impairment_allowance",
+          "side": "D",
+          "amount": "15",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB"
+        },
+        {
+          "account": "loan_asset",
+          "side": "C",
+          "amount": "15",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        }
+      ]
+    },
+    {
+      "event_id": "G2A-E07",
+      "event_type": "legal_debt_forgiveness",
+      "effective_period": 4,
+      "component": "T",
+      "legal_effect": "legally_extinguish_principal",
+      "forgiven_principal": "5",
+      "postings": [
+        {
+          "account": "debt_forgiveness_expense",
+          "side": "D",
+          "amount": "5",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB"
+        },
+        {
+          "account": "loan_asset",
+          "side": "C",
+          "amount": "5",
+          "entity_id": "bank-1",
+          "institutional_sector": "CB",
+          "counterparty_entity_id": "borrower-1",
+          "counterparty_sector": "H",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "loan_liability",
+          "side": "D",
+          "amount": "5",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H",
+          "counterparty_entity_id": "bank-1",
+          "counterparty_sector": "CB",
+          "issuer_entity_id": "borrower-1",
+          "issuer_sector": "H",
+          "instrument_id": "LOAN-001",
+          "instrument_class": "loan",
+          "currency": "LCU",
+          "maturity": "2030-12-31",
+          "denomination": "NOMINAL",
+          "valuation_basis": "NOMINAL"
+        },
+        {
+          "account": "debt_forgiveness_gain",
+          "side": "C",
+          "amount": "5",
+          "entity_id": "borrower-1",
+          "institutional_sector": "H"
+        }
+      ]
+    }
+  ],
+  "replay_checkpoints": [
+    {
+      "after_event_id": "G2A-E01",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "0",
+        "interest_payable": "0",
+        "deposit_asset": "100",
+        "deposit_liability": "100"
+      }
+    },
+    {
+      "after_event_id": "G2A-E02",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "10",
+        "interest_payable": "10",
+        "deposit_asset": "100",
+        "deposit_liability": "100"
+      }
+    },
+    {
+      "after_event_id": "G2A-E03",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "0",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "100",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      }
+    },
+    {
+      "after_event_id": "G2A-E04",
+      "balances": {
+        "loan_asset": "100",
+        "loan_liability": "100",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "80",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "96",
+        "deposit_liability": "96"
+      }
+    },
+    {
+      "after_event_id": "G2A-E05",
+      "balances": {
+        "loan_asset": "80",
+        "loan_liability": "80",
+        "impairment_allowance": "20",
+        "writeoff_memorandum": "0",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
+    },
+    {
+      "after_event_id": "G2A-E06",
+      "balances": {
+        "loan_asset": "65",
+        "loan_liability": "80",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "60",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
+    },
+    {
+      "after_event_id": "G2A-E07",
+      "balances": {
+        "loan_asset": "60",
+        "loan_liability": "75",
+        "impairment_allowance": "5",
+        "writeoff_memorandum": "15",
+        "net_loan_carrying": "55",
+        "interest_receivable": "6",
+        "interest_payable": "6",
+        "deposit_asset": "76",
+        "deposit_liability": "76"
+      }
+    }
+  ],
+  "expected_closing": {
+    "contractual_principal": "75",
+    "recognized_gross_loan_asset": "60",
+    "unrecognized_but_legally_enforceable_written_off_claim": "15",
+    "impairment_allowance": "5",
+    "net_loan_carrying_amount": "55",
+    "interest_receivable": "6",
+    "interest_payable": "6",
+    "deposit_asset": "76",
+    "deposit_liability": "76"
+  },
+  "acceptance_controls": [
+    "Every event balances in LCU and preserves full holder/issuer/instrument identity.",
+    "Impairment allowance changes valuation only; it does not reduce gross principal or borrower legal liability.",
+    "Creditor write-off reduces recognized gross loan asset and consumes allowance but does not extinguish the legal debt unless an explicit legal release event exists.",
+    "Legal forgiveness reduces both contractual principal and recognized gross claim by the legally forgiven amount; it is not inferred from write-off.",
+    "At every checkpoint: contractual principal = recognized gross loan asset + enforceable written-off memorandum claim.",
+    "At every checkpoint: net loan carrying = recognized gross loan asset - impairment allowance.",
+    "Interest receivable equals interest payable; deposit asset equals deposit liability.",
+    "For each account and period, opening + T + V + O = closing; impairment recognition is V, write-off is O, principal repayment/interest accrual/payment/forgiveness are T.",
+    "Transaction-only sector financial net lending is computed from financial-asset transactions minus financial-liability transactions; V and O are excluded; sector totals sum to zero in each period."
+  ],
+  "explicit_nonclaims": [
+    "This corpus is synthetic, not empirical.",
+    "This does not certify IFRS, GAAP, SNA or jurisdiction-specific legal treatment.",
+    "The impairment allowance is not central-bank reserve money or collateral.",
+    "Legal enforceability of the written-off claim is a frozen synthetic fact, not inferred from an accounting entry."
+  ]
+}

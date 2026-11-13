@@ -4,10 +4,14 @@ on:
   push:
     paths:
       - "schemas/**"
+      - "prototype/register_event_contract.py"
+      - "prototype/test_register_event_contract.py"
       - ".github/workflows/schema-validation.yml"
   pull_request:
     paths:
       - "schemas/**"
+      - "prototype/register_event_contract.py"
+      - "prototype/test_register_event_contract.py"
       - ".github/workflows/schema-validation.yml"
 
 jobs:
@@ -22,3 +26,5 @@ jobs:
         run: python -m pip install -r schemas/requirements-dev.txt
       - name: Validate canonical schema and examples
         run: python -m unittest discover -s schemas/tests -v
+      - name: Validate six-register envelope migration and compatibility
+        run: python -m unittest discover -s prototype -p 'test_register_event_contract.py' -v

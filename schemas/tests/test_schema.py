@@ -18,6 +18,25 @@ class CanonicalSchemaTests(unittest.TestCase):
         Draft202012Validator.check_schema(cls.schema)
         cls.validator = Draft202012Validator(cls.schema, format_checker=FormatChecker())
 
+    def test_native_register_event_envelope_schema_is_valid(self):
+        schema_path = ROOT / "native-register-event-envelope-v1.schema.json"
+        contract = json.loads(schema_path.read_text(encoding="utf-8"))
+        Draft202012Validator.check_schema(contract)
+        sample = {
+            "schema_id": "synergy.native-register-event", "schema_version": 1,
+            "register_id": "labour", "event_type": "engagement.offered",
+            "effective_at": "2026-11-13T07:00:00Z", "recorded_at": "2026-11-13T07:00:00Z",
+            "actor_id": "coordinator", "authority_ref": "AUTH:CONTRACT-1",
+            "idempotency_key": "LABOUR-EVENT-1", "payload": {"planned_hours": "2"}
+        }
+        Draft202012Validator(contract, format_checker=FormatChecker()).validate(sample)
+        validator = Draft202012Validator(contract, format_checker=FormatChecker())
+        with self.assertRaises(Exception):
+            validator.validate(dict(sample, schema_version=2))
+        with self.assertRaises(Exception):
+            validator.validate(dict(sample, effective_at="2026-11-13T10:00:00+03:00"))
+        with self.assertRaises(Exception):
+            validator.validate(dict(sample, stock_flow_movements=[], no_stock_flow_effect="invalid dual declaration"))
     def test_schema_is_valid_draft_2020_12(self):
         self.assertEqual(self.schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
 
