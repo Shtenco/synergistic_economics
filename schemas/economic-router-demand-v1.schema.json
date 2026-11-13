@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synergy.example/schemas/economic-router-demand-v1.schema.json",
+  "title": "SYNERGY Economic Router DemandSignal v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "demand_id",
+    "buyer_id",
+    "tenant_id",
+    "consent_ref",
+    "category",
+    "jurisdiction",
+    "status",
+    "requirements",
+    "quantity",
+    "budget",
+    "expires_at"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "synergy.economic-router.demand"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "demand_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "buyer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1
+    },
+    "jurisdiction": {
+      "type": "string",
+      "minLength": 2
+    },
+    "status": {
+      "enum": [
+        "open",
+        "paused",
+        "matched",
+        "withdrawn",
+        "expired"
+      ]
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "quantity": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "budget": {
+      "$ref": "#/$defs/money"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "consent_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_system": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_fingerprint": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "$defs": {
+    "money": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount_minor",
+        "currency",
+        "scale"
+      ],
+      "properties": {
+        "amount_minor": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currency": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        }
+      }
+    }
+  }
+}
