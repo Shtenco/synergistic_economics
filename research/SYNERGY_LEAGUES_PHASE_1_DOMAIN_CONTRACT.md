@@ -73,7 +73,7 @@ The store's `security_domain` argument is a partition boundary, not authenticati
 ## 6. Explicitly not implemented
 
 - Authentication, identity proofing, authorization/RBAC, and consent registry.
-- Persistent database, API, event outbox, audit log, or distributed transaction.
+- Authenticated API, transactional outbox, production audit service, or distributed transaction. The phase-2 SQLite work-order snapshot/event store is implemented, but is not yet a complete production persistence service.
 - Real escrow, payment execution, accounting journal postings, refunds, tax, or chargebacks.
 - Dispute resolution, arbitration, sanctions, fraud controls, or service-level enforcement.
 - Marketplace search/ranking, recommendation, messaging, and notifications.
