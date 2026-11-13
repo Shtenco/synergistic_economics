@@ -97,9 +97,12 @@ class SQLiteLotInventoryAdapterTests(unittest.TestCase):
         )
         self.assertEqual(
             [row["payload"]["domain_aggregate_version"] for row in canonical_events],
-            [1, 2, 2, 3, 3, 4],
+            [1, 2, 2, 3, 4, 5],
         )
 
+        # Versions follow each event's own aggregate: consume advances the
+        # reservation and source lot; release advances both; quarantine then
+        # advances the source lot again.
         # A retry of the first command after five later commands must use its
         # original expected aggregate version and return the original receipt.
         version_before = self.inventory.repository.load_aggregate(
