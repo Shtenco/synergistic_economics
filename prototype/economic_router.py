@@ -135,7 +135,7 @@ def score_offer(demand: dict[str, Any], offer: dict[str, Any], *, now: datetime 
     )
     score_bps = min(10_000, 7_000 + (len(required) * 300) + price_fit_bps // 5)
     return {
-        "match_id": _fingerprint(demand["demand_id"], offer["offer_id"]),
+        "match_id": _fingerprint(demand["tenant_id"], demand["demand_id"], offer["offer_id"]),\n        "tenant_id": demand["tenant_id"],
         "demand_id": demand["demand_id"],
         "offer_id": offer["offer_id"],
         "buyer_id": demand["buyer_id"],
