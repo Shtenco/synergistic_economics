@@ -386,7 +386,7 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                     context["service_id"]=="SYNERGY-LONG-HORIZON-TEST"
                     and evidence==f"APPROVAL:{approver}:{role}:{context['request_id']}",
             )
-            close_ref,close_digest=make_checkpoint(0,1,sha("generation-0-projection"))
+            close_ref,close_digest=make_checkpoint(0,0,sha("generation-0-projection"))
             self.assertTrue(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertFalse(governance.close_period(2033,0,close_ref,close_digest,"period-controller"))
             self.assertEqual(governance.active_generation(2033),0)
@@ -428,7 +428,7 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 })),
             } for name in sorted(REGISTERS)]
             global_reconciliation=sha(canonical(receipt_commitment))
-            generation_ref,generation_digest=make_checkpoint(1,2,global_reconciliation)
+            generation_ref,generation_digest=make_checkpoint(1,1,global_reconciliation)
             self.assertTrue(governance.publish_generation(
                 "REOPEN-LONG-HORIZON-2033",global_reconciliation,generation_ref,generation_digest))
             self.assertFalse(governance.publish_generation(
