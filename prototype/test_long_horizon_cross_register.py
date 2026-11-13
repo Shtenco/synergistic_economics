@@ -491,6 +491,24 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             self.assertIn("POST-CLOSE-LEGAL-EVIDENCE",corrected_rights["evidence_refs"])
             self.assertEqual(financial_store.counts()["groups"],9)
 
+            post_close_groups=tuple(reopened.iter_committed_event_groups())
+            self.assertEqual(len(post_close_groups),9)
+            post_close_movements=movements_from_event_groups(post_close_groups)
+            openings=[]; closings=[]
+            add_series(mine,1,9,"10",post_close_movements)
+            add_series(mill,1,9,"0",post_close_movements)
+            add_series(product_position,1,3,"0",post_close_movements)
+            add_series(labour_position,5,9,"0",post_close_movements)
+            post_close_financial_positions=sorted({
+                row.identity for row in post_close_movements if row.identity.register_id=="financial"})
+            for identity in post_close_financial_positions:
+                periods=[row.period_index for row in post_close_movements if row.identity==identity]
+                add_series(identity,min(periods),max(periods),"0",post_close_movements)
+            post_close_reconciliation=reconcile_periods(
+                tuple(openings),post_close_movements,tuple(closings))
+            self.assertEqual(reopened.reconcile_event_stream(
+                tuple(openings),tuple(closings)),post_close_reconciliation)
+
             # Re-copy the post-correction authoritative stores and replay them
             # independently before generating the six generation-1 receipts.
             for name,source in database_paths.items():
