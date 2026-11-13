@@ -246,8 +246,8 @@ class WorkOrder:
         reviewer_id = _required(reviewer_id, "reviewer_id")
         if self.status != WorkStatus.SUBMITTED:
             raise LeagueError("only submitted work can be accepted")
-        if reviewer_id in (self.buyer_id, self.assignee_id):
-            raise LeagueError("reviewer must be independent of buyer and assignee")
+        if reviewer_id == self.assignee_id:
+            raise LeagueError("assignee cannot review their own delivery")
         return replace(self, status=WorkStatus.ACCEPTED, reviewer_id=reviewer_id, version=self.version + 1)
 
     @property
