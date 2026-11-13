@@ -44,6 +44,16 @@ class EconomicRouterTests(unittest.TestCase):
         with self.assertRaises(RouterValidationError):
             score_offer(demand, OFFER, now=NOW)
 
+    def test_cross_tenant_offer_is_not_matched(self):
+        offer = dict(OFFER, tenant_id="other-tenant")
+        self.assertIsNone(score_offer(DEMAND, offer, now=NOW))
+
+    def test_missing_consent_reference_is_rejected(self):
+        demand = dict(DEMAND)
+        demand.pop("consent_ref")
+        with self.assertRaises(RouterValidationError):
+            score_offer(demand, OFFER, now=NOW)
+
     def test_unverified_seller_fails_closed(self):
         offer = dict(OFFER, seller_verification="unknown")
         with self.assertRaises(RouterValidationError):
