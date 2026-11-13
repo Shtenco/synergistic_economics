@@ -69,7 +69,7 @@ class MatchCandidateStore:
             expected_version, _ = self.repository.load_aggregate(AGGREGATE_TYPE, tenant_id)
         request = {
             "tenant_id": tenant_id, "candidate_id": candidate_id,
-            "event_type": event_type, "candidate": expected_candidate,
+            "event_type": event_type, "candidate_identity": {\n                "demand_id": (expected_candidate or {}).get("demand_id"),\n                "offer_id": (expected_candidate or {}).get("offer_id"),\n                "policy_version": (expected_candidate or {}).get("policy_version"),\n                "demand_fingerprint": (expected_candidate or {}).get("demand_fingerprint"),\n                "offer_fingerprint": (expected_candidate or {}).get("offer_fingerprint"),\n            },
         }
 
         def transition(state):
