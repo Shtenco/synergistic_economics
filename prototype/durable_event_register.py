@@ -222,6 +222,20 @@ class DurableEventRegister:
         if not isinstance(payload, Mapping):
             raise RegisterError("payload must be a JSON object")
         payload_json = canonical_json(dict(payload))
+        payload = json.loads(payload_json)
+        if bootstrap:
+            principal_id = required_text(payload.get("principal_id"), "principal_id")
+            if event_type != "acl.granted" or actor_id != principal_id or payload.get("permissions") != ["*"]:
+                raise RegisterError("bootstrap is permitted only for the first administrator grant")
+            if not callable(self.bootstrap_authorizer):
+                raise RegisterError("trusted external bootstrap authorizer is required")
+            try:
+                decision = self.bootstrap_authorizer(
+                    principal_id, authority_ref, self.REGISTER_NAME, json.loads(payload_json))
+            except Exception as exc:
+                raise RegisterError("external bootstrap authority verification failed") from exc
+            if decision is not True:
+                raise RegisterError("external bootstrap authority policy denied first-administrator creation")
         digest = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
@@ -304,21 +318,12 @@ class DurableEventRegister:
     def bootstrap_admin(self, *, principal_id, authority_ref, occurred_at):
         principal_id = required_text(principal_id, "principal_id")
         authority_ref = required_text(authority_ref, "authority_ref")
-        payload = {"principal_id":principal_id,"permissions":["*"]}
-        if not callable(self.bootstrap_authorizer):
-            raise RegisterError("trusted external bootstrap authorizer is required")
-        try:
-            decision = self.bootstrap_authorizer(
-                principal_id, authority_ref, self.REGISTER_NAME, dict(payload))
-        except Exception as exc:
-            raise RegisterError("external bootstrap authority verification failed") from exc
-        if decision is not True:
-            raise RegisterError("external bootstrap authority policy denied first-administrator creation")
         return self._append(event_id=f"{self.REGISTER_NAME}:ACL:BOOTSTRAP:{principal_id}",
             idempotency_key=f"{self.REGISTER_NAME}:ACL:BOOTSTRAP:{principal_id}",
             aggregate_id=f"ACL:{principal_id}", event_type="acl.granted",
             effective_at=occurred_at, recorded_at=occurred_at, actor_id=principal_id,
-            authority_ref=authority_ref, payload=payload, bootstrap=True)
+            authority_ref=authority_ref,
+            payload={"principal_id":principal_id,"permissions":["*"]}, bootstrap=True)
 
     def grant_access(self, *, event_id, idempotency_key, principal_id, permissions,
                      actor_id, authority_ref, occurred_at):

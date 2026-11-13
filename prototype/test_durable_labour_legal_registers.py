@@ -24,6 +24,17 @@ class BootstrapAuthorizationTests(unittest.TestCase):
             with self.assertRaises(RegisterError):
                 missing.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP:TEST", occurred_at=T)
             self.assertEqual(missing.total_event_count, 0)
+            with self.assertRaises(RegisterError):
+                missing._append(
+                    event_id="labour:ACL:BOOTSTRAP:direct",
+                    idempotency_key="labour:ACL:BOOTSTRAP:direct",
+                    aggregate_id="ACL:direct", event_type="acl.granted",
+                    effective_at=T, recorded_at=T, actor_id="direct",
+                    authority_ref="BOOTSTRAP:DIRECT",
+                    payload={"principal_id": "direct", "permissions": ["*"]},
+                    bootstrap=True,
+                )
+            self.assertEqual(missing.total_event_count, 0)
 
             for index, decision in enumerate(("ALLOW", 1, False, None, object())):
                 store = LabourRegister(
