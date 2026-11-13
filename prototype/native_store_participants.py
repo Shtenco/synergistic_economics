@@ -69,9 +69,10 @@ class NativeStoreParticipant:
             raise NativeStoreParticipantError("expected_revision must be a non-negative integer")
         envelope=op.get("payload")
         if not isinstance(envelope,dict): raise NativeStoreParticipantError("native event envelope must be an object")
-        from register_event_contract import normalize_event_envelope
+        source_envelope=dict(envelope)
+        from register_event_contract import normalize_event_envelope, equivalent_event_envelopes
         try:
-            envelope=normalize_event_envelope(self.name,envelope)
+            envelope=normalize_event_envelope(self.name,source_envelope)
         except ValueError as exc:
             raise NativeStoreParticipantError(f"native event contract rejected: {exc}") from exc
         for field in ("event_type","effective_at","recorded_at","actor_id","authority_ref","idempotency_key"):
@@ -89,10 +90,22 @@ class NativeStoreParticipant:
             try:
                 old=con.execute("SELECT * FROM native_participant_inbox WHERE transaction_id=?",(txid,)).fetchone()
                 if old:
-                    if (old["stream_id"],old["native_event_id"],old["payload_digest"],old["payload_json"],old["expected_revision"],old["prepare_token"])!=(stream,native_id,digest,payload_json,revision,token):
+                    old_raw=old["payload_json"]
+                    if not isinstance(old_raw,str) or _canonical(json.loads(old_raw))!=old_raw:
+                        raise NativeStoreParticipantError("stored native prepare payload is not canonical JSON")
+                    old_digest=hashlib.sha256(old_raw.encode()).hexdigest()
+                    if old_digest!=old["payload_digest"]:
+                        raise NativeStoreParticipantError("stored native prepare payload digest is corrupt")
+                    same_identity=(old["stream_id"],old["native_event_id"],old["expected_revision"])==(stream,native_id,revision)
+                    same_payload=(old_raw==_canonical(source_envelope) or
+                                  equivalent_event_envelopes(self.name,json.loads(old_raw),envelope))
+                    old_token=self._token(txid,op,old_digest)
+                    if not same_identity or not same_payload or old_token!=old["prepare_token"]:
                         raise NativeStoreParticipantError("transaction ID reused with changed participant content")
                     if old["state"]=="ABORTED": raise NativeStoreParticipantError("aborted transaction cannot be prepared again")
-                    con.execute("COMMIT"); return token
+                    # Preserve the original v0 bytes, digest and token. A schema upgrade
+                    # is a read/compare compatibility path, never a receipt rewrite.
+                    con.execute("COMMIT"); return old["prepare_token"]
                 current=self.revision_reader(con)
                 if current!=revision: raise NativeStoreParticipantError(f"native revision conflict: expected {current}, got {revision}")
                 if con.execute("SELECT 1 FROM native_participant_inbox WHERE stream_id=? AND state='PREPARED'",(stream,)).fetchone():

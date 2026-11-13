@@ -529,12 +529,69 @@ class CrossRegisterCoordinator:
             con.execute("BEGIN IMMEDIATE")
             try:
                 old = con.execute(
-                    "SELECT envelope_digest FROM coordinator_transactions WHERE transaction_id=?",
+                    "SELECT envelope_json,envelope_digest FROM coordinator_transactions WHERE transaction_id=?",
                     (txid,)
                 ).fetchone()
                 if old:
-                    if old["envelope_digest"] != envelope_digest:
+                    if old["envelope_digest"] == envelope_digest:
+                        con.execute("COMMIT")
+                        return False
+
+                    # A legacy PREPARING transaction may already have durable v0
+                    # participant reservations. Compare semantic v0->v1 identity,
+                    # but never rewrite its immutable coordinator rows or receipts.
+                    if not all(getattr(self.participants[name], "authoritative_domain_adapter", False)
+                               for name in PARTICIPANTS):
                         raise CoordinatorError("coordinator transaction ID reused with changed envelope")
+                    try:
+                        old_envelope=json.loads(old["envelope_json"])
+                        if (_canonical(old_envelope)!=old["envelope_json"]
+                                or hashlib.sha256(old["envelope_json"].encode()).hexdigest()!=old["envelope_digest"]
+                                or old_envelope.get("transaction_id")!=txid
+                                or old_envelope.get("scenario_id")!=envelope["scenario_id"]
+                                or old_envelope.get("causation_id")!=envelope["causation_id"]
+                                or old_envelope.get("schema_version")!=1):
+                            raise ValueError("legacy coordinator envelope identity/digest mismatch")
+                        old_meta={item["name"]:item for item in old_envelope.get("participants",[])}
+                        old_rows=con.execute(
+                            "SELECT * FROM coordinator_operations WHERE transaction_id=?",(txid,)
+                        ).fetchall()
+                        if len(old_rows)!=len(PARTICIPANTS) or set(old_meta)!=set(PARTICIPANTS):
+                            raise ValueError("legacy coordinator operation coverage is incomplete")
+                        from register_event_contract import normalize_event_envelope
+                        legacy_count=0
+                        for name,stream,native_id,payload_json,digest,revision in rows:
+                            prior=next((item for item in old_rows if item["participant"]==name),None)
+                            meta=old_meta[name]
+                            if prior is None:
+                                raise ValueError("legacy coordinator operation is missing")
+                            prior_raw=prior["payload_json"]
+                            prior_payload=json.loads(prior_raw)
+                            if (_canonical(prior_payload)!=prior_raw
+                                    or hashlib.sha256(prior_raw.encode()).hexdigest()!=prior["payload_digest"]):
+                                raise ValueError("legacy participant payload/digest mismatch")
+                            expected_meta={
+                                "name":name,"stream_id":prior["stream_id"],"native_event_id":prior["native_event_id"],
+                                "expected_revision":prior["expected_revision"],"payload_digest":prior["payload_digest"],
+                                "event_schema_id":prior_payload.get("schema_id"),
+                                "event_schema_version":prior_payload.get("schema_version"),
+                            }
+                            if meta!=expected_meta:
+                                raise ValueError("legacy coordinator participant metadata mismatch")
+                            if (prior["stream_id"],prior["native_event_id"],prior["expected_revision"])!=(stream,native_id,revision):
+                                raise ValueError("legacy participant identity changed")
+                            incoming=json.loads(payload_json)
+                            if normalize_event_envelope(name,prior_payload)!=normalize_event_envelope(name,incoming):
+                                raise ValueError("legacy participant semantic content changed")
+                            if prior_payload.get("schema_id") is None and prior_payload.get("schema_version") is None:
+                                legacy_count+=1
+                            elif not (prior_payload.get("schema_id")=="synergy.native-register-event"
+                                      and prior_payload.get("schema_version")==0):
+                                raise ValueError("non-legacy payload cannot use migration retry compatibility")
+                        if legacy_count==0:
+                            raise ValueError("no legacy v0 payloads were found")
+                    except (KeyError,TypeError,ValueError,json.JSONDecodeError) as exc:
+                        raise CoordinatorError("coordinator transaction ID reused with changed or unverifiable envelope") from exc
                     con.execute("COMMIT")
                     return False
                 con.execute("""INSERT INTO coordinator_transactions(

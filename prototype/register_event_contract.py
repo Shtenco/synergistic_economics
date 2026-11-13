@@ -76,3 +76,11 @@ def normalize_event_envelope(register_id, envelope):
     }:
         raise RegisterEventContractError("migration provenance does not match the registered v0-to-v1 migration")
     return result
+
+
+def equivalent_event_envelopes(register_id, left, right):
+    """Compare envelopes by current semantics without rewriting either source."""
+    try:
+        return normalize_event_envelope(register_id, left) == normalize_event_envelope(register_id, right)
+    except (RegisterEventContractError, TypeError, AttributeError):
+        return False
