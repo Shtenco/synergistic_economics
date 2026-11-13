@@ -161,8 +161,10 @@ class WorkOrder:
         created, deadline = _timestamp(self.created_at, "created_at"), _timestamp(self.deadline, "deadline")
         if deadline <= created:
             raise LeagueError("deadline must be later than created_at")
-        if self.version < 1:
-            raise LeagueError("work-order version must be positive")
+        if not isinstance(self.status, WorkStatus):
+            raise LeagueError("status must be a WorkStatus value")
+        if isinstance(self.version, bool) or not isinstance(self.version, int) or self.version < 1:
+            raise LeagueError("work-order version must be a positive integer")
         if len(self.applications) != len(set(self.applications)):
             raise LeagueError("duplicate applications are not allowed")
         if self.payout_shares:
@@ -249,6 +251,18 @@ class WorkOrder:
         if reviewer_id == self.assignee_id:
             raise LeagueError("assignee cannot review their own delivery")
         return replace(self, status=WorkStatus.ACCEPTED, reviewer_id=reviewer_id, version=self.version + 1)
+
+    def cancel(self, actor_id: str, *, expected_version: int) -> "WorkOrder":
+        self._check_version(expected_version)
+        actor_id = _required(actor_id, "actor_id")
+        if self.status not in (WorkStatus.OPEN, WorkStatus.ASSIGNED):
+            raise LeagueError("only open or assigned work can be cancelled")
+        permitted = {self.buyer_id}
+        if self.assignee_id:
+            permitted.add(self.assignee_id)
+        if actor_id not in permitted:
+            raise LeagueError("actor is not permitted to cancel this work order")
+        return replace(self, status=WorkStatus.CANCELLED, version=self.version + 1)
 
     @property
     def settlement_ready(self) -> bool:
