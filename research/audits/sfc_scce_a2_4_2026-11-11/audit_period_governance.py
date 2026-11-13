@@ -22,7 +22,7 @@ def _sha(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _checkpoint(signer, anchor, sequence, generation, event_root=None, projection_hash=None):
+def _checkpoint(signer, anchor, sequence, generation, event_root=None, projection_hash=None, period=7):
     backup = f"period-{7}-generation-{generation}-backup".encode()
     manifest = {
         "manifest_schema_version": 1,
@@ -38,7 +38,7 @@ def _checkpoint(signer, anchor, sequence, generation, event_root=None, projectio
         "projection_state_hash": projection_hash or _sha(f"projection-generation-{generation}"),
         "coverage_count": 100,
         "applied_through_cursor": sequence,
-        "period": 7,
+        "period": period,
         "period_closed": True,
         "backup_sha256": sha256_bytes(backup),
         "checkpoint_sequence": sequence,
@@ -114,6 +114,15 @@ def main():
         assert not governance.close_period(7, 0, close_ref, close_digest, "controller-A")
         assert governance.active_generation(7) == 0
 
+        # Extend the close chain across three consecutive accounting periods.
+        # Each close has its own signed checkpoint; the global checkpoint
+        # sequence remains monotonic across period identities.
+        close8_ref, close8_digest = _checkpoint(signer, anchor, 2, 0, period=8)
+        assert governance.close_period(8, 0, close8_ref, close8_digest, "controller-A")
+        close9_ref, close9_digest = _checkpoint(signer, anchor, 3, 0, period=9)
+        assert governance.close_period(9, 0, close9_ref, close9_digest, "controller-A")
+        assert [governance.active_generation(p) for p in (7, 8, 9)] == [0, 0, 0]
+
         correction = {
             "reversal_of": "native-event-original",
             "amount": "12.50",
@@ -121,17 +130,17 @@ def main():
             "valuation_basis": "NOMINAL",
         }
         assert governance.append_correction(
-            "correction-001", 8, "native-event-original",
+            "correction-001", 10, "native-event-original",
             "late evidence discovered after close", "period-owner-A",
             "legal-evidence://correction-001", correction,
         )
         assert not governance.append_correction(
-            "correction-001", 8, "native-event-original",
+            "correction-001", 10, "native-event-original",
             "late evidence discovered after close", "period-owner-A",
             "legal-evidence://correction-001", correction,
         )
         _rejects(lambda: governance.append_correction(
-            "correction-in-closed-period", 7, "native-event-original",
+            "correction-in-closed-period", 9, "native-event-original",
             "attempt to rewrite closed history", "period-owner-A",
             "legal-evidence://bad", correction,
         ), "correction was allowed to mutate a closed period")
@@ -168,7 +177,7 @@ def main():
                 _sha(name + "-reconciliation"),
             )
         generation1_ref, generation1_digest = _checkpoint(
-            signer, anchor, 2, 1, event_root=root_hash,
+            signer, anchor, 6, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
         )
         _rejects(lambda: governance.publish_generation(
@@ -185,7 +194,7 @@ def main():
         # A valid signature for the same period/generation is insufficient
         # when its event root does not match the six participant rebuilds.
         wrong_root_ref, wrong_root_digest = _checkpoint(
-            signer, anchor, 3, 1, event_root=_sha("wrong-event-root"),
+            signer, anchor, 5, 1, event_root=_sha("wrong-event-root"),
             projection_hash=global_reconciliation,
         )
         _rejects(lambda: governance.publish_generation(
