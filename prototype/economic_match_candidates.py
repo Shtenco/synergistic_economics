@@ -220,8 +220,16 @@ class MatchCandidateStore:
             and _fingerprint(demand) == candidate["demand_fingerprint"]
             and _fingerprint(offer) == candidate["offer_fingerprint"]
         )
-        result["freshness"] = "current" if sources_current else "stale"
-        if candidate.get("status") == "active" and not sources_current:
+        currently_compatible = (
+            sources_current and score_offer(demand, offer, now=_utc_now()) is not None
+        )
+        if not sources_current:
+            result["freshness"] = "stale"
+        elif not currently_compatible:
+            result["freshness"] = "expired_or_incompatible"
+        else:
+            result["freshness"] = "current"
+        if candidate.get("status") == "active" and not currently_compatible:
             result["effective_status"] = "stale"
         else:
             result["effective_status"] = candidate.get("status")
