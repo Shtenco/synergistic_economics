@@ -46,6 +46,25 @@ def envelope(event_type,payload,idempotency):
 
 
 class NativeStoreParticipantTests(unittest.TestCase):
+    def test_authorizer_requires_exact_boolean_true_and_denial_has_no_side_effects(self):
+        rejected_decisions = ("DENY", 1, object(), None, False)
+        for decision in rejected_decisions:
+            with self.subTest(decision=repr(decision)):
+                with tempfile.TemporaryDirectory() as tmp:
+                    store=PhysicalFlowStore(Path(tmp)/"physical.sqlite3")
+                    participant=make_physical_participant(store,lambda *args, result=decision: result)
+                    outflow,inflow=flow_pair("FLOW-AUTH-DENIED")
+                    outdict=asdict(outflow); outdict["quantity"]=str(outdict["quantity"]); outdict["uncertainty"]=str(outdict["uncertainty"])
+                    indict=asdict(inflow); indict["quantity"]=str(indict["quantity"]); indict["uncertainty"]=str(indict["uncertainty"])
+                    operation={"stream_id":"physical","native_event_id":"FLOW-AUTH-DENIED","expected_revision":0,
+                        "payload":envelope("physical.flow_recorded",{"outflow":outdict,"inflow":indict},"FLOW-AUTH-DENIED")}
+                    from native_store_participants import NativeStoreParticipantError
+                    with self.assertRaisesRegex(NativeStoreParticipantError,"external authority policy denied"):
+                        participant.prepare("TX-AUTH-DENIED",operation)
+                    with __import__("contextlib").closing(store._connect()) as con:
+                        self.assertEqual(con.execute("SELECT COUNT(*) FROM native_participant_inbox").fetchone()[0],0)
+                    self.assertEqual(store.flow_count(),0)
+
     def test_six_native_registers_commit_as_one_six_participant_event_group(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

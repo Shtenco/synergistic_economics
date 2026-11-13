@@ -112,7 +112,8 @@ class NativeStoreParticipant:
                     raise NativeStoreParticipantError("native register stream already has a prepared transaction")
                 if con.execute("SELECT 1 FROM native_participant_inbox WHERE native_event_id=?",(native_id,)).fetchone():
                     raise NativeStoreParticipantError("native event ID already reserved")
-                if not self.authorizer(envelope["actor_id"],envelope["authority_ref"],envelope["event_type"],envelope["payload"]):
+                decision=self.authorizer(envelope["actor_id"],envelope["authority_ref"],envelope["event_type"],envelope["payload"])
+                if decision is not True:
                     raise NativeStoreParticipantError("external authority policy denied native register operation")
                 if self.event_exists(con,native_id,envelope):
                     raise NativeStoreParticipantError("native event already exists outside this transaction")
