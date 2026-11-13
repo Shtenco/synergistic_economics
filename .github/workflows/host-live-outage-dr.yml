@@ -10,6 +10,17 @@ on:
         description: Type POWER_OFF_SYNERGY_DR_TEST_HOST to authorize hard VM power-off
         required: true
         type: string
+      unavailable_register:
+        description: Which native store must be isolated and proven fail-closed after reboot
+        required: true
+        type: choice
+        options:
+          - physical
+          - capital
+          - labour
+          - product
+          - legal_rights
+          - financial
 permissions:
   contents: read
 concurrency:
@@ -42,4 +53,13 @@ jobs:
           DR_SSH_PRIVATE_KEY_PATH: ~/.ssh/synergy-dr
           DR_SSH_USER: ${{ vars.SYNERGY_DR_SSH_USER }}
           DR_REMOTE_VERIFY_COMMAND: ${{ vars.SYNERGY_DR_REMOTE_VERIFY_COMMAND }}
+          DR_UNAVAILABLE_REGISTER: ${{ inputs.unavailable_register }}
+          DR_BACKUP_OUTPUT_PATH: ${{ runner.temp }}/synergy-six-register-backup.tar.gz
         run: python research/infra/digitalocean_host_outage_drill.py
+      - name: Upload verified six-register recovery bundle for the independent AWS restore drill
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-six-register-backup
+          path: ${{ runner.temp }}/synergy-six-register-backup.tar.gz
+          if-no-files-found: error
+          retention-days: 7
