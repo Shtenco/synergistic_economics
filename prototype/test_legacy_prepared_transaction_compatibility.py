@@ -115,6 +115,8 @@ class LegacyPreparedCompatibilityTests(unittest.TestCase):
         from product_register import ProductRegister
         from financial_event_store import FinancialEventStore
         from entity_journal import EntityJournal
+        from labour_register import LabourRegister
+        from legal_rights_register import LegalRightsRegister
         from sfc_projection_registry import activate_sfc_projection
         from sfc_projection_store import activate_control_openings
         from native_store_participants import (
