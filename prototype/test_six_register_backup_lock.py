@@ -39,8 +39,10 @@ class SixRegisterBackupLockTests(unittest.TestCase):
                 info = tarfile.TarInfo("backup-manifest.json")
                 info.size = len(raw)
                 archive.addfile(info, BytesIO(raw))
+            restore = root / "restore"
+            restore.mkdir()
             with self.assertRaisesRegex(RuntimeError, "snapshot consistency"):
-                _extract_verified(archive_path, root / "restore")
+                _extract_verified(archive_path, restore)
 
     def test_backup_waits_for_coordinator_execution_lock(self):
         with tempfile.TemporaryDirectory() as tmp:
