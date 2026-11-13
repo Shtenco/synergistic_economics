@@ -2134,3 +2134,6 @@ Implemented on the consolidation branch:
 The new unit tests have passed in the isolated local test harness. The full coordinator integration test is wired against the repository's actual CrossRegisterCoordinator and will be judged by exact-HEAD GitHub CI after this commit. Until then it is NOT CI-verified. The coordinator test deliberately uses four protocol conformance participants alongside the two native domain stores; the other four native adapters remain OPEN.
 
 Still OPEN: common canonical event stream across all six stores; production privacy/evidence integrations; period-close T/V/O reconciliation over actual register events; remote Object Lock/KMS deployment and restore drill; cross-host consensus and production RPO/RTO.
+
+
+**Exact-head validation trigger — Labour/Legal native stores:** this marker follows commit `ec152a2fda0ad3aa0cfa26b12176dcefb0eb326e`. Prototype, SCCE Stage-C2 and A2.4 workflows must complete against the resulting exact branch HEAD before these new native-store tests are marked CI-verified.
