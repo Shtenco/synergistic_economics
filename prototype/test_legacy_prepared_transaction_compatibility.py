@@ -69,6 +69,41 @@ class LegacyPreparedCompatibilityTests(unittest.TestCase):
                 ).fetchone()
             self.assertEqual(tuple(row), (raw, digest, token, "PREPARED"))
 
+    def test_real_labour_and_legal_rights_registers_retry_v0_prepared_rows(self):
+        from labour_register import LabourRegister
+        from legal_rights_register import LegalRightsRegister
+
+        with tempfile.TemporaryDirectory() as tmp:
+            registers = {
+                "labour": LabourRegister(Path(tmp) / "labour.sqlite3"),
+                "legal_rights": LegalRightsRegister(Path(tmp) / "legal-rights.sqlite3"),
+            }
+            for name, participant in registers.items():
+                txid = f"TX-V0-{name.upper()}"
+                stream = "ENG-1" if name == "labour" else "RIGHT-1"
+                native_id = f"NATIVE-{name.upper()}-1"
+                source = legacy(name)
+                operation = {"stream_id": stream, "native_event_id": native_id,
+                             "expected_revision": 0, "payload": source}
+                raw = _canonical(source)
+                token, digest = participant._participant_token(txid, operation)
+                with participant._connect() as con:
+                    con.execute(
+                        "INSERT INTO native_participant_inbox VALUES(?,?,?,?,?,?,?,'PREPARED',NULL)",
+                        (txid, stream, native_id, digest, raw, 0, token),
+                    )
+
+                upgraded = normalize_event_envelope(name, source)
+                self.assertEqual(participant.prepare(
+                    txid, operation | {"payload": upgraded}), token)
+                with participant._connect() as con:
+                    row = con.execute(
+                        "SELECT payload_json,payload_digest,prepare_token,state "
+                        "FROM native_participant_inbox WHERE transaction_id=?", (txid,)
+                    ).fetchone()
+                self.assertEqual(tuple(row), (raw, digest, token, "PREPARED"))
+
+
     def test_coordinator_submit_accepts_semantic_v0_retry_without_mutation(self):
         with tempfile.TemporaryDirectory() as tmp:
             participants = {name: _Adapter(name) for name in PARTICIPANTS}
