@@ -8,7 +8,7 @@ Both stores provide:
 - canonical finite JSON payloads, global append sequence, per-aggregate optimistic versions and idempotency keys;
 - immutable event rows and SHA-256 hash-chain verification over the full event envelope;
 - replay-derived state (no mutable projection is treated as authority);
-- append-only ACL grants/revocations, default-deny read/write permissions and last-administrator protection;
+- append-only ACL grants/revocations, default-deny read/write permissions and last-administrator protection; first-administrator bootstrap requires an injected external authorizer and fails closed unless it returns the exact boolean `True`;
 - effective/recorded UTC timestamps, actor, authority reference, evidence references and correction lineage;
 - durable coordinator prepare/commit/abort methods using the same register database as the authoritative event log.
 
@@ -38,6 +38,8 @@ The stores implement the participant protocol natively: prepare, commit, abort, 
 This is a partial six-register integration. Physical, capital, product and financial participant adapters still require the same native-store transaction contract before the whole economic command can be described as authoritative across all six registers. SQLite WAL and process locks are single-host/shared-filesystem mechanisms, not cross-host consensus.
 
 ## Security and recovery limitations
+
+First-administrator creation is a separate trust boundary. `DurableEventRegister` accepts an optional `bootstrap_authorizer` at construction so existing stores can be reopened without contacting the authority service; however, `bootstrap_admin()` refuses to proceed unless that injected callback validates `(principal_id, authority_ref, register_name, payload)` and returns the exact boolean `True`. The callback must be bound by the trusted deployment composition root to a signed bootstrap authority / permission service. A test callback is only a fixture and is not production authorization. The immutable bootstrap event retains the authority reference for audit. No production signed bootstrap provider is included in this prototype.
 
 Hash chains and SQLite immutability triggers detect accidental/tamper corruption but do not authenticate a privileged database administrator who can rewrite the whole database and recompute the chain. Production deployments still need independent signing, externally administered trust roots, encrypted backups, remote immutable checkpoints, access review, retention and restore drills.
 

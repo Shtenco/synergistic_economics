@@ -12,10 +12,47 @@ from cross_register_coordinator import CrossRegisterCoordinator, SQLiteParticipa
 T = "2026-11-13T05:00:00Z"
 
 
+def allow_test_bootstrap(principal_id, authority_ref, register_name, payload):
+    return (authority_ref.startswith("BOOTSTRAP:")
+            and payload == {"principal_id": principal_id, "permissions": ["*"]})
+
+
+class BootstrapAuthorizationTests(unittest.TestCase):
+    def test_bootstrap_requires_external_authorizer_and_exact_boolean_true(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = LabourRegister(Path(tmp) / "missing.sqlite3")
+            with self.assertRaises(RegisterError):
+                missing.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP:TEST", occurred_at=T)
+            self.assertEqual(missing.total_event_count, 0)
+
+            for index, decision in enumerate(("ALLOW", 1, False, None, object())):
+                store = LabourRegister(
+                    Path(tmp) / f"denied-{index}.sqlite3",
+                    bootstrap_authorizer=lambda *args, decision=decision: decision,
+                )
+                with self.assertRaises(RegisterError):
+                    store.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP:TEST", occurred_at=T)
+                self.assertEqual(store.total_event_count, 0)
+                self.assertTrue(store.verify())
+
+    def test_bootstrap_authorizer_receives_register_identity_and_proof_reference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            calls = []
+            def authorize(principal_id, authority_ref, register_name, payload):
+                calls.append((principal_id, authority_ref, register_name, payload))
+                return True
+            store = LabourRegister(Path(tmp) / "accepted.sqlite3", bootstrap_authorizer=authorize)
+            self.assertTrue(store.bootstrap_admin(
+                principal_id="root", authority_ref="SIGNED-BOOTSTRAP:ROOT-1", occurred_at=T))
+            self.assertEqual(calls, [("root", "SIGNED-BOOTSTRAP:ROOT-1", "labour",
+                                      {"principal_id": "root", "permissions": ["*"]})])
+            self.assertTrue(store.verify())
+
+
 class DurableLabourRegisterTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.store = LabourRegister(Path(self.tmp.name) / "labour.sqlite3")
+        self.store = LabourRegister(Path(self.tmp.name) / "labour.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
         self.store.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP:POLICY-1", occurred_at=T)
         self.store.grant_access(event_id="ACL-LABOUR-WRITER", idempotency_key="ACL-LABOUR-WRITER",
             principal_id="worker-agent", permissions=["labour:read", "labour:write"],
@@ -110,7 +147,7 @@ class DurableLabourRegisterTests(unittest.TestCase):
 class DurableLegalRightsRegisterTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory()
-        self.store=LegalRightsRegister(Path(self.tmp.name)/"rights.sqlite3")
+        self.store=LegalRightsRegister(Path(self.tmp.name)/"rights.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
         self.store.bootstrap_admin(principal_id="root",authority_ref="BOOTSTRAP:POLICY-1",occurred_at=T)
         self.store.grant_access(event_id="ACL-RIGHTS-WRITER",idempotency_key="ACL-RIGHTS-WRITER",
             principal_id="registrar",permissions=["legal_rights:read","legal_rights:write","legal_rights:adjudicate"],
@@ -178,7 +215,7 @@ class DurableLegalRightsRegisterTests(unittest.TestCase):
 class NativeRegisterCoordinatorTests(unittest.TestCase):
     def test_prepared_authority_is_serialized_against_acl_changes_and_commit_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
-            store=LabourRegister(Path(tmp)/"labour.sqlite3")
+            store=LabourRegister(Path(tmp)/"labour.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
             store.bootstrap_admin(principal_id="root",authority_ref="BOOTSTRAP",occurred_at=T)
             store.grant_access(event_id="ACL-W",idempotency_key="ACL-W",principal_id="writer",
                 permissions=["labour:read","labour:write"],actor_id="root",authority_ref="POLICY",occurred_at=T)
@@ -203,11 +240,11 @@ class NativeRegisterCoordinatorTests(unittest.TestCase):
     def test_coordinator_commits_to_native_labour_and_legal_registers(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
-            labour=LabourRegister(root/"labour.sqlite3")
+            labour=LabourRegister(root/"labour.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
             labour.bootstrap_admin(principal_id="labour-root",authority_ref="BOOTSTRAP:L",occurred_at=T)
             labour.grant_access(event_id="L-ACL",idempotency_key="L-ACL",principal_id="coordinator",
                 permissions=["labour:read","labour:write"],actor_id="labour-root",authority_ref="POLICY:L",occurred_at=T)
-            rights=LegalRightsRegister(root/"rights.sqlite3")
+            rights=LegalRightsRegister(root/"rights.sqlite3", bootstrap_authorizer=allow_test_bootstrap)
             rights.bootstrap_admin(principal_id="rights-root",authority_ref="BOOTSTRAP:R",occurred_at=T)
             rights.grant_access(event_id="R-ACL",idempotency_key="R-ACL",principal_id="coordinator",
                 permissions=["legal_rights:read","legal_rights:write","legal_rights:adjudicate"],

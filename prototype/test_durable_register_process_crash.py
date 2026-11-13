@@ -10,6 +10,11 @@ from labour_register import LabourRegister
 from legal_rights_register import LegalRightsRegister
 
 T = "2026-11-13T05:00:00Z"
+
+
+def allow_test_bootstrap(principal_id, authority_ref, register_name, payload):
+    return (authority_ref.startswith("BOOTSTRAP:")
+            and payload == {"principal_id": principal_id, "permissions": ["*"]})
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -30,7 +35,7 @@ class DurableRegisterProcessCrashTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             database = Path(tmp) / f"{register_kind}.sqlite3"
             if register_kind == "labour":
-                register = LabourRegister(database)
+                register = LabourRegister(database, bootstrap_authorizer=allow_test_bootstrap)
                 stream_id = "ENG-PROCESS-CRASH"
                 native_event_id = "LABOUR-PROCESS-CRASH"
                 txid = "TX-LABOUR-PROCESS-CRASH"
@@ -45,7 +50,7 @@ class DurableRegisterProcessCrashTests(unittest.TestCase):
                 expected_status = "OFFERED"
                 event_type = "engagement.offered"
             elif register_kind == "legal_rights":
-                register = LegalRightsRegister(database)
+                register = LegalRightsRegister(database, bootstrap_authorizer=allow_test_bootstrap)
                 stream_id = "RIGHT-PROCESS-CRASH"
                 native_event_id = "RIGHT-PROCESS-CRASH"
                 txid = "TX-RIGHTS-PROCESS-CRASH"
