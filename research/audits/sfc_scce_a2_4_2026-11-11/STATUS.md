@@ -2121,3 +2121,16 @@ The first two runs predate the workflow-only branch-filter commit and therefore 
 
 
 **Exact-head CI trigger:** the consolidation evidence above is committed on the integration branch. A follow-up Contents-API commit records this trigger so all three workflows execute against the same branch HEAD; this line is an execution marker, not a test result.
+
+
+### 13 November continuation — native Labour and Legal Rights stores
+
+Implemented on the consolidation branch:
+- prototype/durable_event_register.py: append-only SQLite event substrate, full-envelope hash chain, UTC timestamp validation, aggregate versions, replay-derived state, idempotency, ACL event history and native prepare/commit/abort participant methods.
+- prototype/labour_register.py: consent-gated engagement lifecycle, accepted/scheduled/delivered/verified/disputed/settled states, explicit stop/withdrawal, capability assessment history, non-overlapping time allocations and compensating hours corrections.
+- prototype/legal_rights_register.py: claim/title lifecycle with optional obligor, evidence, transfer, encumbrance/release, dispute/adjudication, correction and separately evidenced extinguishment.
+- prototype/test_durable_labour_legal_registers.py: lifecycle, authorization, version conflict, immutability/tamper, correction, idempotency and native coordinator participant tests.
+
+The new unit tests have passed in the isolated local test harness. The full coordinator integration test is wired against the repository's actual CrossRegisterCoordinator and will be judged by exact-HEAD GitHub CI after this commit. Until then it is NOT CI-verified. The coordinator test deliberately uses four protocol conformance participants alongside the two native domain stores; the other four native adapters remain OPEN.
+
+Still OPEN: common canonical event stream across all six stores; production privacy/evidence integrations; period-close T/V/O reconciliation over actual register events; remote Object Lock/KMS deployment and restore drill; cross-host consensus and production RPO/RTO.

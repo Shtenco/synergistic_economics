@@ -27,7 +27,7 @@ Consolidation does **not** mean that every subsystem is already one production-g
 1. **Canonical event format:** P6 canonical envelopes and A2.4 financial event groups are both present. A single repository-wide command/event schema and migration policy still need to be ratified.
 2. **Atomic transaction:** P6 SQLite commits events, one aggregate projection, receipt and outbox in one local transaction. Its durable LotInventory adapter serializes lot/reservation state under one inventory-book root. A2.4 financial/SFC stores remain separate. There is not yet one atomic transaction spanning all six economic registers.
 3. **Accounting authority:** UEB is retained as a research accounting kernel. It is not silently substituted for the typed EntityJournal/FinancialEventStore, and its sequential two-entry loan helper is not a cross-ledger atomic loan transaction.
-4. **Domain registers:** physical flow, product, capital and financial components exist in durable or audited slices. Labour and legal-rights components still need their own authoritative durable stores, reducers, versioning, access policy and recovery tests. A bridge or evidence contract is not itself a register.
+4. **Domain registers:** physical flow, product, capital and financial components exist in durable or audited slices. Labour and legal-rights now have independent authoritative SQLite event stores, replay reducers, aggregate versioning, append-only ACL and native coordinator participant methods. Their production deployment, privacy controls, external custody and full six-register cross-domain recovery remain open. A bridge or evidence contract is not itself a register.
 5. **SFC/GOLD:** sector and instrument oracles, projection replay and multi-period physical/capital fixtures exist. A single common event stream feeding all physical, labour, legal, capital, product and financial positions with period-close reconciliation is still an integration gate.
 6. **Disaster recovery:** local SQLite crash tests, coordinator crash matrices, signed checkpoint fixtures and checkpoint storage code exist. External immutable/WORM custody, independently managed signing keys, restore drills across real domain stores and a production retention/rotation policy are not yet proven.
 
@@ -38,8 +38,8 @@ Consolidation does **not** mean that every subsystem is already one production-g
 | Physical / inventory | P6 durable LotInventory SQLite adapter; A2.4 physical-flow store and crash/replay fixtures | One canonical command path; reconcile production, custody, stock and movement across all periods |
 | Product / commodity | Typed product dimensions, valuation and durable product register | Connect actual production, shipment, inventory and valuation events without double counting |
 | Capital | Cohort lifecycle, durable capital store and SCCE bridge | Periodic authoritative lifecycle from acquisition through service, depreciation, impairment and retirement |
-| Labour / capability | Consent/time/capability contracts and audit fixtures | Durable authoritative Labour Register, consent revocation, time evidence, claims, correction lineage and recovery |
-| Legal rights / claims | Claim projections, SEC/SPER evidence policy, entity journal claim identity | Durable Legal Rights Register, title/obligation state machine, evidence provenance, transfer/encumbrance and dispute lifecycle |
+| Labour / capability | New LabourRegister: immutable event chain, consent/engagement lifecycle, capability assessments, non-overlapping time allocations, correction lineage, ACL and native coordinator prepare/commit | Bind actual identity/evidence providers; define privacy retention and compensation interfaces; run full six-register disaster recovery |
+| Legal rights / claims | New LegalRightsRegister: immutable event chain, optional-obligor title/claim identity, evidence, transfer, encumbrance/release, dispute/adjudication, correction and extinguishment | Bind actual legal evidence/authority sources; define jurisdiction-specific controls and full six-register recovery |
 | Financial / monetary | EntityJournal, FinancialEventStore, journal adapter, UEB primitives and SFC projection stores | One idempotent atomic command boundary with all counterparties, receipts, projections and SFC effects |
 
 The six labels describe target domains, not a claim that six production adapters have already been completed.
@@ -79,3 +79,10 @@ This consolidation record does not certify production readiness, legal validity 
 - [PR #3 — Unified Economic Balance](https://github.com/Shtenco/synergistic_economics/pull/3)
 - [PR #4 — A2.4 SFC/SCCE and GOLD](https://github.com/Shtenco/synergistic_economics/pull/4)
 - [PR #5 — Prototype 6 real-economy integration](https://github.com/Shtenco/synergistic_economics/pull/5)
+
+
+## Implementation continuation — Labour/Legal native stores
+
+The integration branch now adds durable_event_register.py, labour_register.py and legal_rights_register.py. Labour and Legal Rights implement the coordinator participant interface against their own authoritative event database; their participant inbox and event append are colocated. Prepared aggregates are reserved, authorization is checked before prepare, ACL mutations are serialized behind outstanding prepares, and commit retry repairs the event/receipt boundary idempotently. The event hash chain binds event identity, aggregate version, timestamps, actor, authority and payload digest.
+
+A coordinator integration test composes these two native stores with four existing protocol conformance participants. This proves only the two native adapters; it does not complete the physical, capital, product and financial native adapters or certify six-register production atomicity. See prototype/DURABLE_LABOUR_LEGAL_REGISTERS.md.

@@ -296,3 +296,14 @@ accounts after process restart, with crash injection and idempotent duplicate
 delivery. A multi-period SFC-GOLD-2 corpus must separately model opening
 snapshots and explicit overdraft/credit policy rather than inherit v1
 assumptions.
+
+
+## 15. New native Labour and Legal Rights participant implementation
+
+The integration branch now contains two durable domain event stores rather than treating Labour and Legal Rights as only audit fixtures. Both use replay-derived state, per-aggregate optimistic versions, append-only ACL events, default-deny access, immutable correction lineage and a full-envelope SHA-256 chain. Their SQLite participant inbox is colocated with the native event log. Prepare reserves the aggregate and validates both authority and transition; outstanding prepares block ACL mutations; commit appends the domain event and then records an idempotent receipt, allowing recovery after a crash between those steps.
+
+Labour preserves offered/accepted/scheduled/started/delivered/verified/disputed/settled distinctions, explicit consent references, actual delivered hours, stop/withdrawal, capability assessments and mutually exclusive time intervals. Legal Rights supports title without a debtor, claim holder/obligor, evidence, transfer, encumbrance/release, dispute/adjudication, correction and legal extinguishment. A creditor write-off is not represented as legal forgiveness.
+
+A coordinator integration test uses these two native stores plus four existing SQLite protocol participants. Therefore only Labour and Legal Rights are now native participants. Physical, capital, product and financial adapters must still be bound to their authoritative stores before the six-register command can be certified.
+
+The next acceptance gate is exact-HEAD CI for the new tests, followed by native adapters for the remaining four stores and a six-native-participant crash/restart matrix. The shared multi-period reconciliation kernel and remote WORM/KMS deployment are separate gates, not implied by these stores.

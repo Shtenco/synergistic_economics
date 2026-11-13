@@ -284,3 +284,8 @@ python -m unittest discover -s prototype -p 'test_sqlite_lot_inventory_adapter.p
 ## Consolidated implementation map
 
 See [repository integration and consolidation record](../research/INTEGRATION_CONSOLIDATION_2026-11-13.md) for branch provenance, canonical authority boundaries, completed component slices and remaining integration gates.
+
+
+## Durable Labour and Legal Rights registers
+
+The independent Labour and Legal Rights implementation contract (DURABLE_LABOUR_LEGAL_REGISTERS.md) documents the event-sourced SQLite registers, append-only ACL, aggregate versions, correction lineage and native coordinator participant protocol. The SFC/GOLD period reconciliation kernel (SFC_CROSS_REGISTER_PERIOD_RECONCILIATION.md) defines full-key Decimal T/V/O and adjacent-period carry-forward checks. These are partial native integrations: physical, capital, product and financial still need native participant adapters; common-stream production reconciliation remains open.
