@@ -87,7 +87,7 @@ Next:
 - central-bank refinancing advance/repayment and reserve/claim reconciliation in the dedicated register tests;
 - synthetic six-sector projection with explicit opening rows and two-period reserve/refinancing roll-forward.
 
-The remaining required tests include durable-history integration of interbank and refinancing events through the adapter, evidence-backed loan/refinancing opening exporters, multi-currency sector reporting, signed period-close completeness, native projection-store recovery, and crash-atomicity.
+The durable-history integration test for interbank and refinancing events through the adapter is now present and exercises a real register history across periods 3 and 4. It must remain in the regression suite. Remaining tests include evidence-backed loan/refinancing opening exporters, broader multi-currency sector reporting, signed period-close completeness, normalized projection-row recovery, and process-kill/restart crash testing beyond the current SQLite transaction failpoints.
 
 ## Implementation sequence
 
