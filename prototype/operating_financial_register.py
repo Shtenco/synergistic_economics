@@ -304,7 +304,12 @@ class OperatingFinancialRegister(DurableEventRegister):
         expected = wage_stock_flow_movement_specs(events)
         if envelope.get("stock_flow_movements") != expected:
             raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
-        return super().prepare(txid, operation)
+        try:
+            return super().prepare(txid, operation)
+        except OperatingFinancialRegisterError:
+            raise
+        except RegisterError as exc:
+            raise OperatingFinancialRegisterError(str(exc)) from exc
 
     def append_event(self, **kwargs):
         if kwargs.get("event_type") == "wage.event_group_committed":
