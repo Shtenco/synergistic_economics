@@ -132,6 +132,33 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
             self.assertEqual(con.execute("SELECT COUNT(*) FROM banking_sfc_snapshots").fetchone()[0], 0)
             self.assertEqual(con.execute("SELECT COUNT(*) FROM banking_sfc_checkpoints").fetchone()[0], 0)
 
+
+    def test_unknown_failpoint_is_rejected_before_any_database_write(self):
+        with self.assertRaisesRegex(BankingSFCStoreError, "unsupported persistence failpoint"):
+            self.append(fault_at="after_snapshop")
+        self.assertIsNone(self.store.latest_checkpoint(self.pins["source_register_id"]))
+
+    def test_recovery_rejects_invalid_cursor_and_unpinned_metadata(self):
+        self.append()
+        with self.assertRaisesRegex(BankingSFCStoreError, "source_sequence"):
+            self.store.recover(
+                sample_projection(),
+                source_register_id=self.pins["source_register_id"],
+                source_sequence=True,
+                instrument_registry_digest=self.pins["instrument_registry_digest"],
+                sector_registry_digest=self.pins["sector_registry_digest"],
+                opening_snapshot_digest=self.pins["opening_snapshot_digest"],
+            )
+        with self.assertRaisesRegex(BankingSFCStoreError, "sector_registry_digest"):
+            self.store.recover(
+                sample_projection(),
+                source_register_id=self.pins["source_register_id"],
+                source_sequence=4,
+                instrument_registry_digest=self.pins["instrument_registry_digest"],
+                sector_registry_digest=" ",
+                opening_snapshot_digest=self.pins["opening_snapshot_digest"],
+            )
+
     def test_persisted_rows_are_immutable(self):
         self.append()
         with sqlite3.connect(self.path) as con:
