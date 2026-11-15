@@ -288,9 +288,9 @@ class OperatingWageJournalTests(unittest.TestCase):
         for identity in identities:
             if identity.instrument_id.startswith("WAGE:"):
                 initial = D("0")
-            elif identity.instrument_id == "DEPOSIT:employer-1:LCU":
+            elif identity.instrument_id == "DEPOSIT:employer-1:bank-1:LCU":
                 initial = D("1000")
-            elif identity.instrument_id == "DEPOSIT:worker-1:LCU":
+            elif identity.instrument_id == "DEPOSIT:worker-1:bank-1:LCU":
                 initial = D("10")
             else:
                 self.fail("unexpected instrument identity")
