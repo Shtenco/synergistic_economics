@@ -153,9 +153,14 @@ class OperatingWageJournalTests(unittest.TestCase):
 
     def test_payment_requires_minor_unit_and_causal_order(self):
         journal = self.journal()
+        later_contract = WageContract(
+            worker_id="worker-1", employer_id="employer-1", period_label="P1",
+            period_index=2, currency="LCU", hourly_rate=D("20"),
+            contract_ref="LATER-PERIOD-CONTRACT", evidence_ref="PAYROLL-RULE-1",
+        )
         accrual = journal.accrue_verified_wage(
             event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
-            contract=self.contract, causation_id="L5",
+            contract=later_contract, causation_id="L5",
             labour_register=self.labour, principal_id="coordinator",
         )
         with self.assertRaisesRegex(OperatingWageError, "minor unit"):
@@ -165,7 +170,7 @@ class OperatingWageJournalTests(unittest.TestCase):
         with self.assertRaisesRegex(OperatingWageError, "cannot precede"):
             journal.pay_wage(event_id="BAD-PERIOD", claim_id=accrual.claim_id,
                              amount="1", causation_id=accrual.event_id,
-                             evidence_ref="BANK-BAD-PERIOD", period_index=0)
+                             evidence_ref="BANK-BAD-PERIOD", period_index=1)
         with self.assertRaisesRegex(OperatingWageError, "causation"):
             journal.pay_wage(event_id="BAD-CAUSE", claim_id=accrual.claim_id,
                              amount="1", causation_id="UNRELATED",
