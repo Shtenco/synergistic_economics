@@ -89,13 +89,13 @@ Next:
 - central-bank refinancing advance/repayment and reserve/claim reconciliation in the dedicated register tests;
 - synthetic six-sector projection with explicit opening rows and two-period reserve/refinancing roll-forward.
 
-The durable-history integration test for interbank and refinancing events through the adapter is now present and exercises a real register history across periods 3 and 4. It must remain in the regression suite. Remaining tests include evidence-backed loan/refinancing opening exporters, broader multi-currency sector reporting, signed period-close completeness, normalized projection-row recovery, and process-kill/restart crash testing beyond the current SQLite transaction failpoints.
+The durable-history integration test for interbank and refinancing events through the adapter is present and exercises a real register history across periods 3 and 4. Historical loan/refinancing and deposit/reserve opening exporters are also implemented and covered by dedicated tests. Remaining tests include broader multi-currency sector reporting, signed period-close completeness, normalized projection-row recovery, and process-kill/restart crash testing beyond the current SQLite transaction failpoints.
 
 ## Implementation sequence
 
 1. **Done, partial scope:** versioned instrument terms and explicit financial position identity resolution.
 2. **Done, partial scope:** effective-dated sector registry with digest pinning at projection.
-3. **Partially done:** complete explicit opening snapshot contract; durable loan/refinancing opening exporters remain.
+3. **Partially done:** historical loan/refinancing and deposit/reserve opening exporters exist; composing all exports into a registry-resolved, checkpoint-pinned `OpeningStockSnapshot` with signed completeness remains.
 4. **Done, supported events only:** separate native financial SFC adapter and movement mapper.
 5. **Done, limited scope:** native financial SQLite projection snapshot/checkpoint with atomic persistence; normalized per-event/per-movement relational coverage tables remain future work.
 6. **Partially done:** deterministic mapping/replay, hash-chain verification, real-register persistence/recovery integration and transaction failpoint tests; subprocess kill/restart testing at filesystem boundaries remains.
@@ -125,7 +125,7 @@ The earlier “Not implemented” wording for durable financial projection persi
 
 A real-register integration test has now been added to ensure the durable `OperatingFinancialRegister` (not only a fake source) flows through `project_and_persist()` and `rebuild_and_verify()`. It asserts deterministic source replay and equality of the persisted/recovered projection digest. This test is committed but not yet confirmed by CI.
 
-Still open: authoritative evidence-backed opening exports for all loan/refinancing positions; signed completeness declarations for all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
+Still open: automatic composition of all historical opening exports into a registry-resolved, source-checkpoint-pinned SFC snapshot; signed completeness declarations for all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
 
 ## Addendum — source-history cursor validation hardening (2026-11-15)
 
@@ -133,13 +133,13 @@ The pure `OperatingFinancialSFCAdapter.build()` boundary previously sorted suppl
 
 Adversarial coverage now includes non-mapping rows, missing/null/zero/string/boolean cursors, duplicate cursors, and out-of-order input with unique cursors. Changes are committed in `90d235e7ad847f9a9a2946eb691a36e57a785f10` and `7e01bfe93d46e444342c6122d5de3134d15a5a88`.
 
-These are source-contract hardening changes, not evidence of full SFC closure. Evidence-backed loan/refinancing opening exports, signed per-register period completeness, native non-financial adapters, capital-account reconciliation, lifecycle cashflows and exact-HEAD green CI remain open. The new commits have not yet received a confirmed CI result.
+These are source-contract hardening changes, not evidence of full SFC closure. At that point, evidence-backed loan/refinancing opening exporters had not yet been completed; they have since been added, together with historical deposit/reserve reconstruction. Signed per-register period completeness, native non-financial adapters, capital-account reconciliation, lifecycle cashflows and exact-HEAD green CI remain open.
 
 ## Addendum — origination-period state metadata (2026-11-15)
 
 The durable financial reducer now retains `origination_period_index` explicitly in both loan and central-bank refinancing facility state, alongside the existing immutable source event history. This value is copied from the validated period field on the origination/advance event; it is not inferred from the latest state or wall-clock timestamps. Regression tests now assert that both a loan's origination period and a refinancing facility's advance period remain unchanged after later principal repayments.
 
-This is a necessary provenance prerequisite for period-boundary opening exports, **not** an opening-position exporter. It does not yet reconstruct period-p opening balances from all events with effective periods before p, produce SFCIdentity rows, attest snapshot completeness, or bind snapshots to a source checkpoint. The opening-stock blocker remains open until those behaviors are implemented and tested against durable history, including newly originated instruments (explicit zero opening only when the origination event proves that the instrument did not yet exist at the opening boundary).
+This was a provenance prerequisite before the subsequent history-derived opening exporters were added. The later loan/refinancing exporter implementation is documented below; the remaining gaps are composition into registry-resolved SFC identities, source-checkpoint binding and signed completeness attestation.
 
 
 ## Addendum — history-derived debt opening positions (2026-11-15)
