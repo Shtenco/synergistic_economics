@@ -381,6 +381,8 @@ class InputOutputEconomy:
             )
         except (FixedAssetError, ArithmeticError, ValueError) as exc:
             raise EconomyError(str(exc)) from exc
+        if order.order_period != self.current_period + 1:
+            raise EconomyError("capex orders must be paid in the next unstarted IO period")
         acquisition_cost = order.acquisition_cost
         payment = cash(acquisition_cost)
         if payment != acquisition_cost:
@@ -680,6 +682,9 @@ class InputOutputEconomy:
                 "traded": actual_traded, "shortage": shortage, "price": clearing_price}
 
     def step(self, period):
+        if (not isinstance(period, int) or isinstance(period, bool)
+                or period != self.current_period + 1):
+            raise EconomyError("IO periods must advance exactly one step from the current period")
         for household in self.households.values():
             household.period_wage_income = ZERO
             household.period_labour_hours = ZERO
@@ -873,7 +878,8 @@ class InputOutputEconomy:
     def run(self, periods=12):
         if periods < 1:
             raise EconomyError("periods must be positive")
-        for period in range(1, periods + 1):
+        start_period = self.current_period + 1
+        for period in range(start_period, start_period + periods):
             self.step(period)
         return self.summary()
 
