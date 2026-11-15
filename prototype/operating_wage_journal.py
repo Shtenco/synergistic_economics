@@ -323,6 +323,8 @@ class OperatingWageJournal:
         prior_claim_events = [event for event in self.events.values() if event.claim_id == claim_id]
         if not prior_claim_events or causation_id != prior_claim_events[-1].event_id:
             raise OperatingWageError("payment causation must reference the immediately preceding claim event")
+        if period_index < prior_claim_events[-1].period_index:
+            raise OperatingWageError("payment period cannot move backwards within a wage claim")
         outstanding = self.outstanding[claim_id]
         if amount > outstanding:
             raise OperatingWageError("wage payment exceeds outstanding claim")
