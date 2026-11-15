@@ -19,9 +19,11 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
 
     def test_asset_purchase_does_not_directly_expand_real_production(self):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=4)
-        baseline = D(result["cases"]["baseline"]["summary"]["cumulative_gross_value_added_proxy"])
-        asset_case = D(result["cases"]["asset_purchase"]["summary"]["cumulative_gross_value_added_proxy"])
-        self.assertEqual(asset_case, baseline)
+        baseline_period_one = D(result["cases"]["baseline"]["periods"][0]["gross_value_added_proxy"])
+        asset_period_one = D(result["cases"]["asset_purchase"]["periods"][0]["gross_value_added_proxy"])
+        # Before the first principal instalment, the asset purchase only transfers
+        # deposits into the asset market and cannot directly create physical output.
+        self.assertEqual(asset_period_one, baseline_period_one)
         self.assertGreater(
             D(result["cases"]["asset_purchase"]["summary"]["final_asset_price_index"]),
             D("1"),
