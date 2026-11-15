@@ -673,7 +673,7 @@ class InputOutputEconomyTests(unittest.TestCase):
 
         sellers = [
             FirmConfig(
-                f"seller-{index}", "widgets", {}, D("0"), D("0"), D("0"),
+                f"seller-{index}", "widgets", {}, D("1"), D("0"), D("0"),
                 D("0"), D("0"), {"widgets": D("0.005")},
             )
             for index in range(5)
