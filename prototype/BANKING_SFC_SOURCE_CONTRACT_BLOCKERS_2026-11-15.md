@@ -171,3 +171,12 @@ The banking SFC pipeline no longer trusts a caller-selected source identifier. I
 Regression tests now cover stable instance identity across restart, tail-hash advancement, caller-ID substitution, same-cursor source-tail changes, and checkpoint-copy verification. The metadata identifier is a durable local identity, not a cryptographic hardware identity or proof of independent custody; copying a database also copies its instance ID. The source hash chain and exact tail checkpoint detect changed history, but do not by themselves prove external issuer authority or signed period completeness.
 
 The projection-store schema change intentionally rejects an older persisted store schema with an explicit-migration error rather than silently treating legacy checkpoints as source-tail-pinned. Remaining opening-snapshot composition and signed six-register completeness blockers are unchanged. Exact-HEAD CI is still required.
+
+
+## Addendum — stable source snapshots and checkpoint ancestry (2026-11-15)
+
+The projection boundary now reads the verified register checkpoint both before and after the authorized financial-history read. If the source changes during that interval, projection fails closed and asks for a retry rather than sealing a cursor that is newer than the projected history.
+
+The durable register also exposes `chain_hash_at(global_sequence)`, which re-verifies the complete event chain before returning a historical ancestor hash. Before appending or recovering a projection, the pipeline compares the currently observed hash at the previously sealed cursor with the hash stored in the prior checkpoint. This rejects a copied-register fork that reuses the same instance ID but diverges after the last sealed cursor. New regression tests cover both a concurrent append during history retrieval and a forked source attempting to advance the checkpoint.
+
+This closes the local source-lineage and snapshot-race gap for the financial-only pipeline. It does not turn a copied local database into independently authenticated custody, nor does it supply signed external authority or period-completeness attestations. Composed opening snapshots are still externally supplied and their digest is pinned, but their individual positions are not yet automatically derived and bound to the same source checkpoint.
