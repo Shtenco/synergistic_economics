@@ -5,7 +5,7 @@ protocol. It is intentionally not an EntityJournal and does not alter GOLD-2A.
 """
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Mapping
 
 from durable_event_register import DurableEventRegister, RegisterError
@@ -197,13 +197,24 @@ class OperatingFinancialRegister(DurableEventRegister):
         period = event.get("period_index")
         if not isinstance(period, int) or isinstance(period, bool) or period < 1:
             raise OperatingFinancialRegisterError("period_index must be a positive integer")
-        for field in ("causation_id", "evidence_ref", "delivery_evidence_ref",
+        for field in ("engagement_id", "period_label", "delivery_event_id",
+                      "causation_id", "evidence_ref", "delivery_evidence_ref",
                       "verification_ref", "contract_ref", "contract_evidence_ref"):
             _text(event.get(field), field)
         labour_version = event.get("labour_aggregate_version")
         if not isinstance(labour_version, int) or isinstance(labour_version, bool) or labour_version < 1:
             raise OperatingFinancialRegisterError("labour_aggregate_version must be positive")
+        engagement_id = _text(event.get("engagement_id"), "engagement_id")
+        period_label = _text(event.get("period_label"), "period_label")
+        delivered_hours = _decimal(event.get("delivered_hours"), "delivered_hours", positive=True)
+        hourly_rate = _decimal(event.get("hourly_rate"), "hourly_rate", positive=True)
         self._validate_postings(event)
+        if event_type := event.get("event_type") == "wage_accrual":
+            calculated = (delivered_hours * hourly_rate / minor_unit).quantize(
+                D("1"), rounding=ROUND_HALF_UP
+            ) * minor_unit
+            if calculated != amount:
+                raise OperatingFinancialRegisterError("wage amount differs from delivered hours times contract rate")
         if event_type == "wage_accrual":
             if state is not None:
                 raise OperatingFinancialRegisterError("wage claim already has an accrual")
@@ -211,7 +222,9 @@ class OperatingFinancialRegister(DurableEventRegister):
             if event["causation_id"] != delivery_id:
                 raise OperatingFinancialRegisterError("wage accrual must causally reference the verified labour delivery")
             return {
-                "claim_id": claim_id, "worker_id": worker, "employer_id": employer,
+                "claim_id": claim_id, "engagement_id": engagement_id, "period_label": period_label,
+                "delivered_hours": str(delivered_hours), "hourly_rate": str(hourly_rate),
+                "worker_id": worker, "employer_id": employer,
                 "bank_id": bank, "currency": currency, "minor_unit": str(minor_unit),
                 "original_amount": str(amount), "outstanding_amount": str(amount),
                 "last_event_id": event_id, "last_period_index": period,
@@ -230,7 +243,11 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("wage payment identity differs from the accrued claim")
         if str(minor_unit) != state["minor_unit"]:
             raise OperatingFinancialRegisterError("wage payment currency minor unit differs from the claim")
-        if (event["delivery_event_id"] != state["delivery_event_id"]
+        if (event["engagement_id"] != state["engagement_id"]
+                or event["period_label"] != state["period_label"]
+                or delivered_hours != D(state["delivered_hours"])
+                or hourly_rate != D(state["hourly_rate"])
+                or event["delivery_event_id"] != state["delivery_event_id"]
                 or event["delivery_evidence_ref"] != state["delivery_evidence_ref"]
                 or event["verification_ref"] != state["verification_ref"]
                 or event["contract_ref"] != state["contract_ref"]
