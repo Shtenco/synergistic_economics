@@ -147,6 +147,7 @@ class OperatingEvent:
     event_type: str
     period_index: int
     engagement_id: str
+    period_label: str
     delivered_hours: Decimal
     hourly_rate: Decimal
     claim_id: str
@@ -173,6 +174,7 @@ class OperatingEvent:
             "event_type": self.event_type,
             "period_index": self.period_index,
             "engagement_id": self.engagement_id,
+            "period_label": self.period_label,
             "delivered_hours": str(self.delivered_hours),
             "hourly_rate": str(self.hourly_rate),
             "claim_id": self.claim_id,
@@ -333,7 +335,8 @@ class OperatingWageJournal:
             movement["period_index"] = contract.period_index
         event = OperatingEvent(
             event_id=event_id, event_type="wage_accrual", period_index=contract.period_index,
-            engagement_id=delivery.engagement_id, delivered_hours=delivery.delivered_hours,
+            engagement_id=delivery.engagement_id, period_label=delivery.period_label,
+            delivered_hours=delivery.delivered_hours,
             hourly_rate=contract.hourly_rate, claim_id=claim_id, worker_id=contract.worker_id, employer_id=contract.employer_id,
             bank_id=self.bank_id, currency=contract.currency, amount=amount,
             causation_id=causation_id, evidence_ref=contract.evidence_ref,
@@ -415,7 +418,8 @@ class OperatingWageJournal:
             ])
         event = OperatingEvent(
             event_id=event_id, event_type="wage_payment", period_index=period_index,
-            engagement_id=accrued.engagement_id, delivered_hours=accrued.delivered_hours,
+            engagement_id=accrued.engagement_id, period_label=accrued.period_label,
+            delivered_hours=accrued.delivered_hours,
             hourly_rate=accrued.hourly_rate, claim_id=claim_id, worker_id=accrued.worker_id, employer_id=accrued.employer_id,
             bank_id=self.bank_id, currency=accrued.currency, amount=amount,
             causation_id=causation_id, evidence_ref=evidence_ref,
