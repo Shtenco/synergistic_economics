@@ -61,6 +61,9 @@ class FixedAssetLedgerTests(unittest.TestCase):
         with self.assertRaises(FixedAssetError):
             ledger.place_paid_order(order(), payment_amount="2000", payment_currency="USD",
                                     order_currency="KZT", payment_evidence_ref="payment:1")
+        with self.assertRaises(FixedAssetError):
+            ledger.place_paid_order(order(), payment_amount="2000", payment_currency="",
+                                    order_currency="", payment_evidence_ref="payment:1")
         item = order()
         ledger.place_paid_order(item, payment_amount="2000", payment_currency="KZT",
                                 order_currency="KZT", payment_evidence_ref="payment:1")
