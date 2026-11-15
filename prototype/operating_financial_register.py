@@ -65,7 +65,7 @@ def bank_credit_stock_flow_movement_specs(event):
         raise OperatingFinancialRegisterError("period_index must be a positive integer")
     if borrower == bank:
         raise OperatingFinancialRegisterError("bank and borrower must be distinct")
-    if event_type != "bank.interbank_payment_settled":
+    if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid"}:
         raise OperatingFinancialRegisterError("unsupported bank credit event type")
     evidence = _text(event.get("evidence_ref"), "evidence_ref")
     signed = amount if event_type == "bank.loan_originated" else -amount
@@ -117,6 +117,8 @@ def interbank_payment_stock_flow_movement_specs(event):
     amount = _decimal(event.get("amount"), "amount", positive=True)
     period = event.get("period_index")
     evidence = _text(event.get("evidence_ref"), "evidence_ref")
+    if event.get("event_type") != "bank.interbank_payment_settled":
+        raise OperatingFinancialRegisterError("unsupported interbank payment event type")
     if not isinstance(period, int) or isinstance(period, bool) or period < 1:
         raise OperatingFinancialRegisterError("period_index must be a positive integer")
     if len({payer, payee, payer_bank, payee_bank, central_bank}) != 5:
@@ -744,6 +746,105 @@ class OperatingFinancialRegister(DurableEventRegister):
         }
         token = self.prepare(event_id, operation)
         return self.commit(event_id, token)
+
+
+    def open_bank_reserve_account(self, *, event_id, bank_id, central_bank_id,
+                                  currency, account_ref, opening_balance, evidence_ref,
+                                  actor_id, authority_ref, effective_at, recorded_at,
+                                  expected_revision, minor_unit="0.01"):
+        event_id = _text(event_id, "event_id")
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision,
+            "payload": {
+                "event_type": "bank.reserve_account_opened",
+                "effective_at": effective_at, "recorded_at": recorded_at,
+                "actor_id": actor_id, "authority_ref": authority_ref,
+                "idempotency_key": event_id,
+                "payload": {
+                    "bank_id": bank_id, "central_bank_id": central_bank_id,
+                    "currency": currency, "account_ref": account_ref,
+                    "opening_balance": str(_decimal(opening_balance, "opening_balance")),
+                    "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+                    "evidence_ref": evidence_ref,
+                },
+                "no_stock_flow_effect": "reserve account opening establishes an opening stock, not a period transaction movement",
+            },
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def reserve_opening_positions(self, *, period_index, principal_id):
+        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index != 1:
+            raise OperatingFinancialRegisterError("reserve opening positions currently support only the initial period")
+        state, _ = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+        from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
+        positions = []
+        for account in state.get("reserves", {}).values():
+            bank, central_bank, currency = account["bank_id"], account["central_bank_id"], account["currency"]
+            instrument = f"RESERVE:{bank}:{central_bank}:{currency}"
+            amount, evidence = D(account["opening_balance"]), account["opening_evidence_ref"]
+            asset = PositionIdentity("financial", f"{instrument}:ASSET", "monetary",
+                                      currency, currency, "NOMINAL", bank, central_bank, instrument)
+            liability = PositionIdentity("financial", f"{instrument}:LIABILITY", "monetary",
+                                          currency, currency, "NOMINAL", central_bank, bank, instrument)
+            positions.extend((OpeningPosition(asset, period_index, amount, evidence),
+                              OpeningPosition(liability, period_index, amount, evidence)))
+        return tuple(positions)
+
+    def settle_interbank_payment(self, *, event_id, payment_id, payer_id, payee_id,
+                                 payer_bank_id, payee_bank_id, central_bank_id,
+                                 currency, amount, period_index, evidence_ref,
+                                 actor_id, authority_ref, effective_at, recorded_at,
+                                 expected_revision, minor_unit="0.01"):
+        event_id = _text(event_id, "event_id")
+        payload = {
+            "payment_id": _text(payment_id, "payment_id"),
+            "payer_id": _text(payer_id, "payer_id"),
+            "payee_id": _text(payee_id, "payee_id"),
+            "payer_bank_id": _text(payer_bank_id, "payer_bank_id"),
+            "payee_bank_id": _text(payee_bank_id, "payee_bank_id"),
+            "central_bank_id": _text(central_bank_id, "central_bank_id"),
+            "currency": _text(currency, "currency"),
+            "amount": str(_decimal(amount, "amount", positive=True)),
+            "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+            "period_index": period_index,
+            "evidence_ref": _text(evidence_ref, "evidence_ref"),
+        }
+        envelope = {
+            "event_type": "bank.interbank_payment_settled",
+            "effective_at": effective_at, "recorded_at": recorded_at,
+            "actor_id": actor_id, "authority_ref": authority_ref,
+            "idempotency_key": event_id, "payload": payload,
+            "stock_flow_movements": interbank_payment_stock_flow_movement_specs(
+                {"event_id": event_id, **payload,
+                 "event_type": "bank.interbank_payment_settled"}
+            ),
+        }
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision, "payload": envelope,
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def interbank_payment_state(self, payment_id, *, principal_id):
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            return None, version
+        return state.get("interbank_payments", {}).get(payment_id), version
+
+    def bank_reserve_snapshot(self, bank_id, central_bank_id, currency, *, principal_id):
+        key = self._reserve_key(bank_id, central_bank_id, currency)
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None or key not in state.get("reserves", {}):
+            raise OperatingFinancialRegisterError("durable bank reserve account does not exist")
+        account = state["reserves"][key]
+        return {"bank_id": bank_id, "central_bank_id": central_bank_id,
+                "currency": currency, "reserve_balance": D(account["balance"]),
+                "revision": version}
 
     def deposit_opening_positions(self, *, period_index, principal_id):
         """Export opening deposit assets/liabilities from the durable account-opening events."""
