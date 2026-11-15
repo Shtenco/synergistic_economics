@@ -55,6 +55,7 @@ class HouseholdConfig:
     initial_cash: D
     basket: dict
     consumption_propensity: D = D("0.35")
+    labour_supply_hours: D = D("25")
 
 @dataclass
 class FirmState:
@@ -74,6 +75,8 @@ class HouseholdState:
     wage_income: D = ZERO
     period_wage_income: D = ZERO
     period_labour_hours: D = ZERO
+    period_unemployment_hours: D = ZERO
+    cumulative_unemployment_hours: D = ZERO
     expenditure: D = ZERO
 
 @dataclass
@@ -96,6 +99,9 @@ class PeriodResult:
     wages: D
     household_wage_income: dict
     household_labour_hours: dict
+    household_labour_supply_hours: dict
+    household_unemployment_hours: dict
+    household_employment_rate: dict
     household_expenditure: D
     import_expenditure: D
     gross_value_added_proxy: D
@@ -222,9 +228,10 @@ class InputOutputEconomy:
             if set(h.basket) - known or any(not v.is_finite() or v < 0 for v in h.basket.values()):
                 raise EconomyError("invalid household basket")
             if (not h.initial_cash.is_finite() or not h.consumption_propensity.is_finite()
-                    or h.initial_cash < 0
+                    or not h.labour_supply_hours.is_finite()
+                    or h.initial_cash < 0 or h.labour_supply_hours < 0
                     or not D("0") <= h.consumption_propensity <= D("1")):
-                raise EconomyError("invalid household budget")
+                raise EconomyError("invalid household budget or labour supply")
 
     def _labour_shares(self, firm_config):
         if firm_config.household_labour_shares:
@@ -258,6 +265,47 @@ class InputOutputEconomy:
             inventory_gap = max(ZERO, c.output_capacity - output_stock)
             plans[firm_id] = min(c.output_capacity, labour_limited, inventory_gap)
         return plans
+
+    def _allocate_labour(self, plans):
+        """Allocate scarce household hours to firms using declared hiring weights.
+
+        Firm-level household shares are hiring preferences, not wage entitlements.
+        Actual wage income is paid only for hours used in production.
+        """
+        requested = {household_id: ZERO for household_id in self.households}
+        firm_requests = {}
+        for firm_id, state in sorted(self.firms.items()):
+            demand = min(plans[firm_id] * state.config.labour_per_unit,
+                         state.config.labour_capacity)
+            shares = self._labour_shares(state.config)
+            firm_requests[firm_id] = {h: demand * share for h, share in shares.items()}
+            for household_id, hours in firm_requests[firm_id].items():
+                requested[household_id] += hours
+        scale = {}
+        for household_id, state in self.households.items():
+            supply = state.config.labour_supply_hours
+            scale[household_id] = min(D("1"), supply / requested[household_id]) if requested[household_id] > 0 else ZERO
+        allocations = {}
+        firm_hired = {firm_id: ZERO for firm_id in self.firms}
+        household_hired = {household_id: ZERO for household_id in self.households}
+        for firm_id, rows in firm_requests.items():
+            allocations[firm_id] = {}
+            for household_id, hours in rows.items():
+                allocated = qty(hours * scale[household_id])
+                allocations[firm_id][household_id] = allocated
+                firm_hired[firm_id] += allocated
+                household_hired[household_id] += allocated
+        # Keep rounded allocations within each household's hard hour limit.
+        for household_id, state in self.households.items():
+            excess = household_hired[household_id] - state.config.labour_supply_hours
+            if excess > 0:
+                candidates = [(firm_id, allocations[firm_id].get(household_id, ZERO))
+                              for firm_id in sorted(allocations)]
+                firm_id, amount = max(candidates, key=lambda item: (item[1], item[0]))
+                allocations[firm_id][household_id] -= excess
+                firm_hired[firm_id] -= excess
+                household_hired[household_id] -= excess
+        return allocations, firm_hired, household_hired, requested
 
     def _build_orders(self, plans):
         orders = []
@@ -445,13 +493,14 @@ class InputOutputEconomy:
         market = {}
         for product_id in sorted(self.product_by_id):
             market[product_id] = self._clear_product(product_id, orders, period, budgets)
+        labour_allocations, firm_hired_hours, household_hired_hours, household_labour_demand = self._allocate_labour(plans)
         production = {p.product_id: ZERO for p in self.products}
         input_consumption = {p.product_id: ZERO for p in self.products}
         wages_total = ZERO
         gross_value_added = ZERO
         for firm_id, state in sorted(self.firms.items()):
             c = state.config
-            possible = plans[firm_id]
+            possible = min(plans[firm_id], firm_hired_hours[firm_id] / c.labour_per_unit)
             for product_id, coefficient in c.recipe.items():
                 possible = min(possible, state.inventory.get(product_id, ZERO) / coefficient)
             wage_per_output = c.labour_per_unit * c.wage_per_labour
@@ -478,19 +527,20 @@ class InputOutputEconomy:
             gross_value_added += actual * self.prices[c.output_product] - input_value
             # Allocate wages and paid labour hours through explicit firm-level
             # employment shares; cash and hour residuals are assigned exactly.
-            wage_shares = self._labour_shares(c)
             labour_hours = actual * c.labour_per_unit
-            wage_by_household = {key: cash(wage * share) for key, share in wage_shares.items()}
-            hours_by_household = {key: qty(labour_hours * share) for key, share in wage_shares.items()}
-            if wage_by_household:
-                # Put any quantization residual on the largest allocation so
-                # a tiny/zero-share participant can never receive a negative
-                # residual merely because of lexical ordering.
-                residual_household = max(
-                    wage_shares, key=lambda key: (wage_shares[key], key)
-                )
-                wage_by_household[residual_household] += wage - sum(wage_by_household.values(), ZERO)
+            hired = firm_hired_hours[firm_id]
+            hours_by_household = {
+                key: qty(labour_hours * allocation / hired)
+                for key, allocation in labour_allocations[firm_id].items()
+            } if hired > 0 else {}
+            if hours_by_household:
+                residual_household = max(hours_by_household, key=lambda key: (hours_by_household[key], key))
                 hours_by_household[residual_household] += labour_hours - sum(hours_by_household.values(), ZERO)
+            wage_by_household = {key: cash(hours * c.wage_per_labour)
+                                 for key, hours in hours_by_household.items()}
+            if wage_by_household:
+                residual_household = max(wage_by_household, key=lambda key: (wage_by_household[key], key))
+                wage_by_household[residual_household] += wage - sum(wage_by_household.values(), ZERO)
             for household_id, share in wage_by_household.items():
                 household = self.households[household_id]
                 household.cash += share
@@ -502,8 +552,20 @@ class InputOutputEconomy:
                 "intermediate_input_value": str(input_value), "wages": str(wage),
                 "labour_hours": str(labour_hours),
                 "wage_by_household": {k: str(v) for k, v in wage_by_household.items()},
-                "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()}
+                "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()},
+                "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()}
             })
+        for household_id, household in self.households.items():
+            used_hours = household.period_labour_hours
+            household.period_unemployment_hours = max(ZERO, household.config.labour_supply_hours - used_hours)
+            household.cumulative_unemployment_hours += household.period_unemployment_hours
+        self._event(f"p{period}:labour_market", "labour_market_clearing", {
+            "household_supply_hours": {k: str(v.config.labour_supply_hours) for k, v in self.households.items()},
+            "household_requested_hours": {k: str(v) for k, v in household_labour_demand.items()},
+            "household_hired_hours": {k: str(v) for k, v in household_hired_hours.items()},
+            "household_worked_hours": {k: str(v.period_labour_hours) for k, v in self.households.items()},
+            "household_unemployment_hours": {k: str(v.period_unemployment_hours) for k, v in self.households.items()},
+        })
         household_consumption = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
             - household_consumption_open[p.product_id]
@@ -545,6 +607,9 @@ class InputOutputEconomy:
             wages=wages_total,
             household_wage_income={k: str(v.period_wage_income) for k, v in self.households.items()},
             household_labour_hours={k: str(v.period_labour_hours) for k, v in self.households.items()},
+            household_labour_supply_hours={k: str(v.config.labour_supply_hours) for k, v in self.households.items()},
+            household_unemployment_hours={k: str(v.period_unemployment_hours) for k, v in self.households.items()},
+            household_employment_rate={k: str((v.period_labour_hours / v.config.labour_supply_hours) if v.config.labour_supply_hours > 0 else ZERO) for k, v in self.households.items()},
             household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
@@ -580,6 +645,8 @@ class InputOutputEconomy:
             "cash_conservation_error": str(final.cash_error),
             "max_abs_physical_balance_error": str(max((abs(dec(x)) for r in self.period_results for x in r.physical_balance_error.values()), default=ZERO)),
             "cumulative_wages": str(sum((r.wages for r in self.period_results), ZERO)),
+            "final_household_unemployment_hours": final.household_unemployment_hours,
+            "final_household_employment_rate": final.household_employment_rate,
             "cumulative_household_expenditure": str(sum((r.household_expenditure for r in self.period_results), ZERO)),
             "cumulative_import_expenditure": str(sum((r.import_expenditure for r in self.period_results), ZERO)),
             "cumulative_gross_value_added_proxy": str(sum((r.gross_value_added_proxy for r in self.period_results), ZERO)),
