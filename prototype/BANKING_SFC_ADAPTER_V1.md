@@ -99,9 +99,8 @@ A register's absence of events is not automatically proof of zero activity. Peri
 
 ## 7. Atomicity, idempotency and recovery
 
-The implemented financial-only SQLite projection store atomically persists a deterministic projection snapshot and source checkpoint, pins registry/opening digests, rejects stale or changed-content replay, and supports deterministic rebuild/verification. This is a single-host persistence boundary, not a distributed close protocol. Remaining requirements for the broader system are:
-- bind each composed opening snapshot to the exact durable source-register instance, sequence and chain digest (the current pipeline still accepts caller-supplied `source_register_id`; durable register metadata does not yet expose a verified instance identifier);
-- source-event checkpoint / source-chain cursor;
+The implemented financial-only SQLite projection store atomically persists a deterministic projection snapshot and source checkpoint, pins registry/opening digests, and now binds both snapshot and checkpoint rows to the verified source-chain tail hash. The durable register persists a per-database instance ID and exposes it together with the global event count and verified tail hash. The pipeline derives its source namespace from that identity and principal scope; a conflicting caller-supplied ID is rejected. This is a single-host persistence boundary, not a distributed close protocol. Remaining requirements for the broader system are:
+- bind each composed opening snapshot itself to the exact durable source-register instance, sequence and chain digest; current snapshots are still supplied externally and only their digest is pinned by the projection store;
 - canonical movement coverage;
 - projected positions and T/V/O totals;
 - sector transaction asset/liability totals and financial net lending;
@@ -109,7 +108,7 @@ The implemented financial-only SQLite projection store atomically persists a det
 
 Use source event identity plus movement identity as unique keys. Replaying the same source history must be idempotent. A changed mapper version requires an explicit rebuild/reprojection path; never silently reinterpret already projected history.
 
-The current financial-only recovery path re-reads and verifies source history, deterministically rebuilds the projection, and compares the persisted checkpoint, registry digests and opening-snapshot digest. The broader exit criteria below still require complete source-instance provenance, composed checkpoint-pinned openings, signed period completeness and native non-financial registers. Any mismatch must fail closed without partially advancing the projection cursor.
+The current financial-only recovery path re-reads and verifies source history and the source-chain tail, deterministically rebuilds the projection, and compares the persisted checkpoint, registry digests and opening-snapshot digest. The broader exit criteria below still require source-checkpoint-pinned composed openings, signed period completeness and native non-financial registers. Any mismatch must fail closed without partially advancing the projection cursor.
 
 SQLite atomicity is a single-host persistence guarantee only; do not describe it as distributed consensus or production-grade multi-node durability.
 
