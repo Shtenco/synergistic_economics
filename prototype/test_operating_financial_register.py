@@ -109,6 +109,29 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
         self.assertTrue(self.register.verify())
 
+
+    def test_accrual_and_later_settlement_are_separate_durable_revisions(self):
+        accrual_operation = self.operation((self.accrual,))
+        accrual_token = self.register.prepare("TX-WAGE-ACCRUAL", accrual_operation)
+        self.register.commit("TX-WAGE-ACCRUAL", accrual_token)
+        state, version = self.register.state(accrual_operation["stream_id"], principal_id="financial-root")
+        self.assertEqual(version, 1)
+        self.assertEqual(state["status"], "OUTSTANDING")
+        self.assertEqual(state["outstanding_amount"], "40.00")
+
+        payment_operation = native_financial_operation(
+            (self.payment,), actor_id="financial-root", authority_ref="AUTH:PAYROLL",
+            effective_at=T, recorded_at=T, expected_revision=1,
+        )
+        payment_token = self.register.prepare("TX-WAGE-PAYMENT", payment_operation)
+        self.register.commit("TX-WAGE-PAYMENT", payment_token)
+        state, version = self.register.state(payment_operation["stream_id"], principal_id="financial-root")
+        self.assertEqual(version, 2)
+        self.assertEqual(state["status"], "PAID")
+        self.assertEqual(state["outstanding_amount"], "0.00")
+        self.assertEqual(state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
+        self.assertTrue(self.register.verify())
+
     def test_restart_replays_claim_and_preserves_commit_receipt(self):
         operation = self.operation()
         token = self.register.prepare("TX-WAGE-RESTART", operation)
