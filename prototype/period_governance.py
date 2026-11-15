@@ -692,6 +692,9 @@ class PeriodGovernance:
                 if request is None:
                     raise PeriodGovernanceError("unknown reopen request")
                 if request["state"] == "PUBLISHED":
+                    declarations = self._verify_register_completeness(
+                        manifest, request["period"], request["new_generation"],
+                    )
                     published = con.execute(
                         "SELECT period,old_generation,new_generation,global_reconciliation_hash,checkpoint_ref,checkpoint_digest "
                         "FROM generation_publications WHERE request_id=?", (request_id,)
@@ -700,6 +703,10 @@ class PeriodGovernance:
                                 global_reconcile, ref, digest)
                     if published is None or tuple(published) != expected:
                         raise PeriodGovernanceError("published generation retry changed immutable publication content")
+                    self._assert_or_insert_register_attestations(
+                        con, request["period"], request["new_generation"],
+                        declarations, insert_if_missing=False,
+                    )
                     con.execute("COMMIT")
                     return False
                 if request["state"] != "REBUILDING":
@@ -708,6 +715,9 @@ class PeriodGovernance:
                         or manifest.get("projection_generation") != request["new_generation"]
                         or manifest.get("period_closed") is not True):
                     raise PeriodGovernanceError("publication checkpoint does not identify the rebuilt generation")
+                declarations = self._verify_register_completeness(
+                    manifest, request["period"], request["new_generation"],
+                )
                 receipts = con.execute(
                     "SELECT * FROM rebuild_receipts WHERE request_id=? ORDER BY register_name",
                     (request_id,)
@@ -764,6 +774,10 @@ class PeriodGovernance:
                 ).fetchone()
                 if active is None or active["generation"] != request["old_generation"]:
                     raise PeriodGovernanceError("active generation changed during rebuild")
+                self._assert_or_insert_register_attestations(
+                    con, request["period"], request["new_generation"],
+                    declarations, insert_if_missing=True,
+                )
                 con.execute("INSERT INTO generation_publications VALUES(?,?,?,?,?,?,?,?)",
                             (request_id, request["period"], request["old_generation"],
                              request["new_generation"], root, global_reconcile, ref, digest))
