@@ -535,6 +535,75 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(len({row.evidence_ref for row in reserve_opening_after_repayment}), 1)
         self.assertTrue(register.verify())
 
+    def test_interbank_settlement_replays_shared_deposit_and_reserve_openings(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "interbank-openings.sqlite3",
+            sectors={
+                "payer-1": "H", "payee-1": "H",
+                "bank-1": "CB", "bank-2": "CB",
+                "central-bank-1": "CBank",
+            },
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_deposit_account(
+            event_id="IB-PAYER-DEPOSIT", entity_id="payer-1", bank_id="bank-1",
+            currency="LCU", account_ref="IB-PAYER-ACCOUNT", opening_balance="100",
+            evidence_ref="IB-PAYER-OPEN", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+        register.open_deposit_account(
+            event_id="IB-PAYEE-DEPOSIT", entity_id="payee-1", bank_id="bank-2",
+            currency="LCU", account_ref="IB-PAYEE-ACCOUNT", opening_balance="5",
+            evidence_ref="IB-PAYEE-OPEN", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        register.open_bank_reserve_account(
+            event_id="IB-PAYER-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="IB-PAYER-RESERVE-ACCOUNT", opening_balance="50",
+            evidence_ref="IB-PAYER-RESERVE-OPEN", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        register.open_bank_reserve_account(
+            event_id="IB-PAYEE-RESERVE", bank_id="bank-2",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="IB-PAYEE-RESERVE-ACCOUNT", opening_balance="20",
+            evidence_ref="IB-PAYEE-RESERVE-OPEN", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+        register.settle_interbank_payment(
+            event_id="IB-SETTLEMENT-1", payment_id="PAYMENT-1",
+            payer_id="payer-1", payee_id="payee-1",
+            payer_bank_id="bank-1", payee_bank_id="bank-2",
+            central_bank_id="central-bank-1", currency="LCU",
+            amount="30", period_index=2, evidence_ref="IB-SETTLEMENT-EVIDENCE",
+            actor_id="financial-root", authority_ref="INTERBANK-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=4,
+        )
+        deposits = register.deposit_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        reserves = register.reserve_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        deposit_balances = {
+            row.identity.position_id: row.amount for row in deposits
+        }
+        reserve_balances = {
+            row.identity.position_id: row.amount for row in reserves
+        }
+        self.assertEqual(deposit_balances["DEPOSIT:payer-1:bank-1:LCU:ASSET"], D("70"))
+        self.assertEqual(deposit_balances["DEPOSIT:payee-1:bank-2:LCU:ASSET"], D("35"))
+        self.assertEqual(reserve_balances["RESERVE:bank-1:central-bank-1:LCU:ASSET"], D("20"))
+        self.assertEqual(reserve_balances["RESERVE:bank-2:central-bank-1:LCU:ASSET"], D("50"))
+        self.assertTrue(register.verify())
+
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
         self.register.sectors["other-bank"] = "CB"
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
