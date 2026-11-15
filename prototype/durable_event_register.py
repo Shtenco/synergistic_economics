@@ -351,6 +351,7 @@ class DurableEventRegister:
                 if source["aggregate_id"] != aggregate_id:
                     continue
                 item = dict(source)
+                item["payload"] = json.loads(source["payload_json"])
                 # Native prepare/commit stores the complete immutable envelope,
                 # including SFC movement specs, in the durable participant inbox.
                 # The event log itself stores only the domain payload. Reattach
