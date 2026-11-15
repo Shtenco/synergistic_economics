@@ -175,6 +175,7 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
                     "holder_id": delivery.worker_id, "obligor_id": delivery.employer_id,
                     "right_type": "wage_claim", "scope": claim_id, "jurisdiction": "KZ",
                     "legal_instrument_ref": contract.contract_ref, "effective_from": T,
+                    "claim_amount": str(accrual.amount), "currency": accrual.currency,
                     "evidence_refs": evidence,
                     **({
                         "settlement_event_id": events[-1].event_id,
@@ -357,6 +358,29 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(legal_version, 1)
             self.assertTrue(coordinator.is_visible("TX-WAGE-PARTIAL"))
             self.assertTrue(participants["financial"].verify())
+
+
+    def test_legal_claim_principal_and_currency_must_match_financial_accrual(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labour = labour_fixture(root / "labour.sqlite3")
+            delivery, contract, _, events = build_wage_events(labour)
+            participants = make_participants(root)
+            coordinator = OperatingWageCoordinator(
+                root / "coordinator.sqlite3", participants,
+                require_authoritative_adapters=True,
+            )
+            operations = make_operations(delivery, contract, events)
+            operations["legal_rights"]["payload"]["payload"]["claim_amount"] = "39.99"
+            from cross_register_coordinator import CoordinatorError
+            with self.assertRaisesRegex(CoordinatorError, "principal or currency"):
+                coordinator.submit("TX-WAGE-LEGAL-AMOUNT", "SCENARIO-LEGAL-AMOUNT",
+                                   "CAUSE-LEGAL-AMOUNT", operations)
+            operations = make_operations(delivery, contract, events)
+            operations["legal_rights"]["payload"]["payload"]["currency"] = "USD"
+            with self.assertRaisesRegex(CoordinatorError, "principal or currency"):
+                coordinator.submit("TX-WAGE-LEGAL-CURRENCY", "SCENARIO-LEGAL-CURRENCY",
+                                   "CAUSE-LEGAL-CURRENCY", operations)
 
     def test_fully_paid_wage_claim_cannot_remain_legally_active(self):
         with tempfile.TemporaryDirectory() as tmp:
