@@ -363,12 +363,14 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             ))
             self.assertEqual(coordinator.execute("TX-WAGE-PARTIAL"), "COMMITTED")
             claim_id = events[0].claim_id
-            financial_state, financial_version = participants["financial"].state(
-                f"wage:{claim_id}", principal_id="coordinator",
+            financial_state, financial_version = participants["financial"].claim_state(
+                claim_id, principal_id="coordinator",
             )
             self.assertEqual(financial_state["status"], "OUTSTANDING")
             self.assertEqual(financial_state["outstanding_amount"], "25.00")
-            self.assertEqual(financial_version, 1)
+            self.assertEqual(financial_version, 3)
+            self.assertEqual(participants["financial"].deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("985.00"))
+            self.assertEqual(participants["financial"].deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("25.00"))
             legal_state, legal_version = participants["legal_rights"].state(
                 f"WAGE-RIGHT:{claim_id}", principal_id="coordinator",
             )
