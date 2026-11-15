@@ -580,6 +580,24 @@ class DurableEventRegister:
                 "tail_hash": row["tail_hash"],
             }
 
+    def chain_hash_at(self, commit_sequence):
+        """Return a verified hash-chain ancestor at a global commit cursor."""
+        if (not isinstance(commit_sequence, int) or isinstance(commit_sequence, bool)
+                or commit_sequence < 0):
+            raise RegisterError("commit_sequence must be a non-negative integer")
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            self._load(con)
+            if commit_sequence == 0:
+                return GENESIS
+            row = con.execute(
+                "SELECT chain_hash FROM register_events WHERE commit_sequence=?",
+                (commit_sequence,),
+            ).fetchone()
+            if row is None:
+                raise RegisterError("requested source-chain ancestor cursor does not exist")
+            return row["chain_hash"]
+
     @property
     def register_instance_id(self):
         return self.source_checkpoint()["register_instance_id"]
