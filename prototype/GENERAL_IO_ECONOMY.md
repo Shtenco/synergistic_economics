@@ -139,6 +139,7 @@ opening_stock[i]
 + production[i]
 = intermediate_inputs_consumed[i]
 + household_consumption[i]
++ capital_formation[i]
 + closing_stock[i]
 ```
 
@@ -228,7 +229,7 @@ The following are deliberately not claimed as completed:
 - a consolidated fiscal/pension/banking income-source balance sheet; non-wage income is currently limited to explicitly funded firm payments or pre-funded source accounts, with arrears tracked;
 - the connection of paid capital investment orders to machinery inventory, physical delivery, commissioned firm capacity and subsequent IO production;
 
-**Important integration boundary (verified 2026-11-15):** the repository separately contains the B8.1 physical capital-cohort lifecycle (`capital_cohort_bridge.py`) and durable append-only cohort register (`capital_cohort_store.py`), with synthetic SCCE integration/audit scripts under `research/audits/sfc_scce_a2_4_2026-11-11/`. These track physical units, operating/repair/storage states, utilization, service quality, additions, physical losses and retirement. They are **not yet connected** to this IO economy's firm inventories, machinery purchases, bank-credit experiment or `FirmConfig.output_capacity`. The current cohort service bridge also does not by itself provide a complete fixed-asset accounting schedule for acquisition cost, commissioning lag, depreciation, residual value, impairment and disposal proceeds. Therefore the IO model still has no implemented capital formation or capacity-expansion mechanism; the separate SCCE cohort subsystem must not be presented as if it closes that gap.
+**Capital formation integration boundary (updated 2026-11-15):** the separate B8.1 physical capital-cohort lifecycle (`capital_cohort_bridge.py`) and durable append-only cohort register (`capital_cohort_store.py`) remain independent SCCE infrastructure. The IO model now also has a dedicated fixed-asset ledger (`firm_fixed_assets.py`) and an initial paid-capex bridge. `InputOutputEconomy.place_capex_order()` debits a firm buyer, credits a machinery-producing supplier, requires fully paid purchase and unreserved supplier inventory, and records the credit-event and payment-event identifiers. The physical unit is reserved from ordinary market offers, leaves supplier inventory only on its delivery period, and enters the physical balance as capital formation rather than intermediate consumption. The asset creates additional firm output capacity only from its commissioning period; before that it is work in progress. Production events record active cohort IDs and commissioned capacity. The initial complementarity rule adds labour capacity in proportion to the new machine service capacity, while household labour supply can still bind. The bank-credit experiment now includes a separate `productive_capex` case: one machinery unit is paid for in period 1, delivered in period 2, and commissioned in period 3. This is a controlled vertical slice, not a complete capital-accounting system: impairment, revaluation, disposal proceeds, partial-delivery integration into the IO model, maintenance/repair cost, taxes, and full bank SFC posting remain outside this layer. The B8.1 SCCE cohort subsystem is not implicitly substituted for this fixed-asset ledger.
 - multiple outputs per firm, joint production, by-products and transformation technologies;
 - product quality, geographic transport networks, delivery delays and spoilage;
 - strategic bidding, market power, collusion, entry and exit;
@@ -249,6 +250,9 @@ The separate `firm_fixed_assets.py` module now records fully paid investment ord
 
 The test suite is designed to check:
 - deterministic repeatability;
+- labour supply constraints, hiring rationing, unemployment hours and employment rates;
+- separately funded wage, dividend, interest, pension, transfer, rental and self-employment income flows with arrears;
+- paid machinery capex, physical delivery, capital-formation stock balance and commissioning lag;
 - multiple suppliers per product;
 - cash conservation;
 - physical stock conservation product by product;
