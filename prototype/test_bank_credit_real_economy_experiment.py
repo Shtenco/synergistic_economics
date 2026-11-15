@@ -17,6 +17,27 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
             self.assertEqual(case["deposit_money_created"], "12000.00")
         self.assertEqual(result["cases"]["baseline"]["credit_principal_issued"], "0")
 
+    def test_baseline_does_not_report_unissued_credit_as_new_deposit_money(self):
+        result = run_credit_allocation_experiment(credit_amount="12000", periods=4)
+        baseline = result["cases"]["baseline"]
+        self.assertEqual(baseline["deposit_money_created"], "0")
+        self.assertEqual(baseline["net_new_deposit_money"], "0")
+        for row in baseline["periods"]:
+            self.assertEqual(D(row["net_new_deposit_money"]), D("0"))
+
+    def test_net_new_deposit_money_tracks_origination_less_repayment(self):
+        result = run_credit_allocation_experiment(credit_amount="12000", periods=5)
+        for scenario in ("productive", "consumption", "asset_purchase"):
+            case = result["cases"][scenario]
+            for row in case["periods"]:
+                self.assertEqual(
+                    D(row["net_new_deposit_money"]),
+                    D("12000.00") - sum(
+                        (D(item["principal_repaid"]) for item in case["periods"][:row["period"]]),
+                        D("0"),
+                    ),
+                )
+
     def test_asset_purchase_does_not_directly_expand_real_production(self):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=4)
         baseline_period_one = D(result["cases"]["baseline"]["periods"][0]["gross_value_added_proxy"])
