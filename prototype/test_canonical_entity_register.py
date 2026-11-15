@@ -282,6 +282,46 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
             )
 
 
+
+    def test_future_lifecycle_events_are_rejected_before_status_changes(self):
+        self._register()
+        with self.assertRaisesRegex(
+            EconomicEntityRegisterError, "only effective-dated sector membership"
+        ):
+            self._event(
+                event_id="FUTURE-SUSPEND", event_type="entity.suspended",
+                payload={"reason": "future suspension", "evidence_ref": "evidence:future"},
+                version=1, actor="admin",
+                effective_at="2026-11-16T00:00:00Z",
+                recorded_at=RECORDED, signed_at=RECORDED,
+            )
+        snapshot = self.store.resolve_entity(
+            "tenant-kz", "entity-001", principal_id="auditor"
+        )
+        self.assertEqual(snapshot["status"], "ACTIVE")
+
+    def test_wrong_tenant_key_and_wrong_authority_scope_cannot_verify_history(self):
+        self._register()
+        wrong_tenant = SignedAuthority(tenant_id="tenant-other")
+        self.store.authority_verifier = wrong_tenant.verifier
+        with self.assertRaises(EconomicEntityRegisterError):
+            self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+
+        wrong_scope = SignedAuthority(
+            tenant_id="tenant-kz", authority_refs=("AUTHORITY:OTHER",)
+        )
+        self.store.authority_verifier = wrong_scope.verifier
+        with self.assertRaises(EconomicEntityRegisterError):
+            self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+
+    def test_tenant_authorizer_service_failure_denies_reads(self):
+        self._register()
+        def unavailable(*_args):
+            raise RuntimeError("policy backend unavailable")
+        self.store.tenant_authorizer = unavailable
+        with self.assertRaisesRegex(EconomicEntityRegisterError, "service unavailable"):
+            self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+
     def test_tenant_policy_denial_blocks_writes_before_event_append(self):
         self._register()
         before = self.store.total_event_count
