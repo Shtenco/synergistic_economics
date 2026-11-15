@@ -269,6 +269,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             raise EconomicEntityRegisterError("tenant/entity identity is immutable")
 
         if typ == "entity.updated":
+            if set(payload) != {"tenant_id", "entity_id", "changes", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.updated contains unknown fields")
             if state["status"] == "RETIRED":
                 raise EconomicEntityRegisterError("retired entity cannot be updated")
             changes = payload.get("changes")
@@ -282,6 +284,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
                 state["display_name"] = required_text(changes["display_name"], "display_name")
 
         elif typ == "entity.external_reference_added":
+            if set(payload) != {"tenant_id", "entity_id", "external_ref", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.external_reference_added contains unknown fields")
             if state["status"] == "RETIRED":
                 raise EconomicEntityRegisterError("retired entity cannot receive new external references")
             reference = self._validate_external_reference(payload.get("external_ref"))
@@ -292,6 +296,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             state["external_refs"] = list(state["external_refs"]) + [reference]
 
         elif typ == "entity.sector_changed":
+            if set(payload) != {"tenant_id", "entity_id", "institutional_sector", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.sector_changed contains unknown fields")
             if state["status"] == "RETIRED":
                 raise EconomicEntityRegisterError("retired entity cannot change sector")
             sector = required_text(payload.get("institutional_sector"), "institutional_sector")
@@ -313,6 +319,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             state["institutional_sector"] = sector
 
         elif typ == "entity.suspended":
+            if set(payload) != {"tenant_id", "entity_id", "reason", "evidence_ref", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.suspended contains unknown fields")
             if state["status"] != "ACTIVE":
                 raise EconomicEntityRegisterError("only an active entity can be suspended")
             state["status"] = "SUSPENDED"
@@ -321,6 +329,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             state["lifecycle_reason"] = required_text(payload.get("reason"), "reason")
 
         elif typ == "entity.reactivated":
+            if set(payload) != {"tenant_id", "entity_id", "reason", "evidence_ref", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.reactivated contains unknown fields")
             if state["status"] != "SUSPENDED":
                 raise EconomicEntityRegisterError("only a suspended entity can be reactivated")
             state["status"] = "ACTIVE"
@@ -329,6 +339,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             state["lifecycle_reason"] = required_text(payload.get("reason"), "reason")
 
         elif typ == "entity.retired":
+            if set(payload) != {"tenant_id", "entity_id", "reason", "evidence_ref", "authority_attestation"}:
+                raise EconomicEntityRegisterError("entity.retired contains unknown fields")
             if state["status"] not in {"ACTIVE", "SUSPENDED"}:
                 raise EconomicEntityRegisterError("entity can be retired only once")
             state["status"] = "RETIRED"
