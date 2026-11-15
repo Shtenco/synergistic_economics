@@ -363,7 +363,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
                 sector_registry=sectors,
                 opening_snapshots=[snapshot],
                 store=store,
-                source_register_id="financial-register:integration-test",
+                source_register_id=f"financial:{register.register_instance_id}:financial-root",
             )
             rebuilt_projection, checkpoint = rebuild_and_verify(
                 register,
