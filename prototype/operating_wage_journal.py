@@ -446,11 +446,11 @@ def native_financial_operation(events, *, actor_id, authority_ref, effective_at,
     for value, field in ((actor_id, "actor_id"), (authority_ref, "authority_ref"),
                          (effective_at, "effective_at"), (recorded_at, "recorded_at")):
         _text(value, field)
+    if any(not isinstance(event, OperatingEvent) for event in events):
+        raise OperatingWageError("native wage group requires OperatingEvent values")
     claim_ids = {event.claim_id for event in events}
     if len(claim_ids) != 1:
         raise OperatingWageError("one native financial group may contain only one wage claim")
-    if any(not isinstance(event, OperatingEvent) for event in events):
-        raise OperatingWageError("native wage group requires OperatingEvent values")
     from operating_financial_register import wage_stock_flow_movement_specs
     payload_events = [event.to_native_payload() for event in events]
     movements = wage_stock_flow_movement_specs(payload_events)
