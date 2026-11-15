@@ -397,6 +397,47 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(snapshot["loan_assets"], D("65"))
         self.assertTrue(self.register.verify())
 
+    def test_refinancing_state_retains_original_advance_period_after_repayment(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "refinancing-period.sqlite3",
+            sectors={"bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_bank_reserve_account(
+            event_id="OPEN-RESERVE-REFI", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="RESERVE-ACCOUNT-1", opening_balance="0",
+            evidence_ref="RESERVE-OPENING-EVIDENCE", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        register.commit_central_bank_refinancing(
+            event_id="REFI-ADVANCE-1", event_type="central_bank.refinancing_advanced",
+            facility_id="FACILITY-1", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="100",
+            period_index=2, evidence_ref="REFI-ADVANCE-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=2,
+        )
+        register.commit_central_bank_refinancing(
+            event_id="REFI-REPAY-1", event_type="central_bank.refinancing_principal_repaid",
+            facility_id="FACILITY-1", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="40",
+            period_index=3, evidence_ref="REFI-REPAY-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=3,
+            causation_id="REFI-ADVANCE-1",
+        )
+        facility, version = register.refinancing_state(
+            "FACILITY-1", principal_id="financial-root",
+        )
+        self.assertEqual(version, 4)
+        self.assertEqual(facility["origination_period_index"], 2)
+        self.assertEqual(facility["outstanding_principal"], "60")
+        self.assertTrue(register.verify())
+
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
         self.register.sectors["other-bank"] = "CB"
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
