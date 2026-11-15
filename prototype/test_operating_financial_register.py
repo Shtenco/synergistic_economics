@@ -1006,6 +1006,86 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         loan, _ = self.register.loan_state("LEGACY-LOAN-1", principal_id="financial-root")
         self.assertEqual(loan["outstanding_principal"], "95")
 
+    def test_existing_refinancing_opening_binds_exact_reserve_account_and_principal_bounds(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "legacy-refinancing-guards.sqlite3",
+            sectors={"bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_bank_reserve_account(
+            event_id="REFI-GUARD-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="REFI-GUARD-ACCOUNT", opening_balance="200",
+            evidence_ref="REFI-GUARD-RESERVE-CERT", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "source account reference differs from the bank's durable reserve account",
+        ):
+            register.record_existing_refinancing_facility(
+                event_id="REFI-GUARD-WRONG-ACCOUNT", facility_id="REFI-GUARD-WRONG-ACCOUNT",
+                bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="80",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="SOME-OTHER-RESERVE",
+                contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+                evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=1,
+            )
+        self.assertIsNone(register.status("REFI-GUARD-WRONG-ACCOUNT"))
+        self.assertEqual(
+            register.state("operating-financial", principal_id="financial-root")[1], 1,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "outstanding principal must be between zero and original principal",
+        ):
+            register.record_existing_refinancing_facility(
+                event_id="REFI-GUARD-OVER-ORIGINAL", facility_id="REFI-GUARD-OVER-ORIGINAL",
+                bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="100.01",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="REFI-GUARD-ACCOUNT",
+                contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+                evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=1,
+            )
+        self.assertIsNone(register.status("REFI-GUARD-OVER-ORIGINAL"))
+        self.assertEqual(
+            register.state("operating-financial", principal_id="financial-root")[1], 1,
+        )
+
+        register.record_existing_refinancing_facility(
+            event_id="REFI-GUARD-VALID", facility_id="REFI-GUARD-VALID",
+            bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="80",
+            origination_period_index=0, opening_period_index=3,
+            source_account_ref="REFI-GUARD-ACCOUNT",
+            contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+            evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        facility, version = register.refinancing_state(
+            "REFI-GUARD-VALID", principal_id="financial-root",
+        )
+        self.assertEqual(version, 2)
+        self.assertEqual(facility["outstanding_principal"], "80")
+        self.assertEqual(
+            register.bank_reserve_snapshot(
+                "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+            )["reserve_balance"],
+            D("200"),
+        )
+
     def test_preexisting_refinancing_opening_is_not_a_reserve_issuance(self):
         register = OperatingFinancialRegister(
             Path(self.tmp.name) / "legacy-refinancing.sqlite3",
