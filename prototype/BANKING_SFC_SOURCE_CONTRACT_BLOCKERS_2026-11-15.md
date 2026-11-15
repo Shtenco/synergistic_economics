@@ -45,12 +45,14 @@ Next:
 
 ### B3. Opening-stock lifecycle
 
-**Partially implemented.** The snapshot contract requires explicit expected identities and explicit positions, pins both registry versions/digests, and rejects missing or ambiguous openings. The adapter can replay multi-period balances when a complete opening snapshot is supplied for each period. The durable register exports deposit and reserve opening positions for period 1. It does not yet export a complete set of loan and refinancing opening positions from durable opening events; the multi-period six-sector test currently supplies an explicit synthetic snapshot for those instrument identities.
+**Partially implemented.** The snapshot contract requires explicit expected identities and explicit positions, pins both registry versions/digests, and rejects missing or ambiguous openings. The durable register now reconstructs bilateral loan/refinancing principal openings from immutable originations and repayments, and reconstructs deposit/reserve openings by replaying all prior native transaction movements that touch those shared accounts. This includes bank-credit money creation/repayment, wage settlement, interbank deposit/reserve transfers and central-bank refinancing. Openings are period-boundary values: movements in the requested period are excluded, while earlier-period movements are included. The exporter's evidence digest binds the account-opening event and each prior affecting event-chain row.
+
+Important boundary: deposit/reserve opening events do not yet carry a period index, so their explicit opening balances are treated as the initial-period baseline. The exporter verifies the native register chain and envelope digest, but its digest is not a signed completeness attestation or a source-checkpoint binding. Complete OpeningStockSnapshot composition across every financial instrument is still not automatic.
 
 Next:
-- add evidence-backed loan and refinancing opening-position exports;
-- support first-active-period openings for newly introduced instruments;
-- ensure every snapshot has a source checkpoint and attestation, not merely a caller-supplied row;
+- add period semantics to account-opening records (or a separately governed first-active-period contract) before treating later-created accounts as period-1 openings;
+- compose loan, refinancing, deposit, reserve, wage claims/payables and all other supported positions into one complete snapshot with duplicate/mirror/currency checks;
+- bind each snapshot to the exact durable register checkpoint (register identity, sequence and digest) and require signed period-completeness declarations, including explicit zero-activity declarations;
 - test restart/recovery using snapshots derived from actual durable history.
 
 ### B4. Sector-flow mapping and mirror integrity
