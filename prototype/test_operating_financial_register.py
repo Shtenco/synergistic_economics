@@ -12,6 +12,7 @@ from operating_wage_journal import (
 from economic_stock_flow_reconciliation import (
     OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
 )
+from durable_event_register import RegisterError
 from operating_financial_register import (
     OperatingFinancialRegister, OperatingFinancialRegisterError,
     wage_stock_flow_movement_specs,
@@ -130,7 +131,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertGreater(advanced["event_count"], initial["event_count"])
         self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
         self.assertEqual(reopened.chain_hash_at(initial["event_count"]), initial["tail_hash"])
-        with self.assertRaisesRegex(OperatingFinancialRegisterError, "non-negative integer"):
+        with self.assertRaisesRegex(RegisterError, "non-negative integer"):
             reopened.chain_hash_at(True)
 
     def test_legacy_v2_register_metadata_receives_persistent_instance_id(self):
