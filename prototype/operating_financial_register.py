@@ -209,7 +209,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         delivered_hours = _decimal(event.get("delivered_hours"), "delivered_hours", positive=True)
         hourly_rate = _decimal(event.get("hourly_rate"), "hourly_rate", positive=True)
         self._validate_postings(event)
-        if event_type := event.get("event_type") == "wage_accrual":
+        if event.get("event_type") == "wage_accrual":
             calculated = (delivered_hours * hourly_rate / minor_unit).quantize(
                 D("1"), rounding=ROUND_HALF_UP
             ) * minor_unit
