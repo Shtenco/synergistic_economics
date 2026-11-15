@@ -94,34 +94,67 @@ class InterbankSettlementTests(unittest.TestCase):
         self.assertTrue(self.register.verify())
 
     def test_insufficient_reserves_reject_without_any_partial_posting(self):
-        self.register.open_bank_reserve_account(
-            event_id="OPEN-RESERVE-A-LOW", bank_id="bank-a", central_bank_id="central-bank",
-            currency="USD", account_ref="RESERVE-A-USD", opening_balance="0.00",
-            evidence_ref="RESERVE-A-USD-OPENING", actor_id="root",
-            authority_ref="CB-OPENING", effective_at=T, recorded_at=T,
-            expected_revision=4,
+        low = OperatingFinancialRegister(
+            Path(self.tmp.name) / "low-reserves.sqlite3",
+            sectors={
+                "payer": "H", "payee": "H",
+                "bank-a": "CBank", "bank-b": "CBank", "central-bank": "CB",
+            },
         )
-        before_payer = self.register.deposit_balance(
+        low.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP", occurred_at=T)
+        low.open_deposit_account(
+            event_id="LOW-OPEN-PAYER", entity_id="payer", bank_id="bank-a",
+            currency="LCU", account_ref="LOW-PAYER", opening_balance="100.00",
+            evidence_ref="LOW-PAYER-OPEN", actor_id="root", authority_ref="OPEN",
+            effective_at=T, recorded_at=T, expected_revision=0,
+        )
+        low.open_deposit_account(
+            event_id="LOW-OPEN-PAYEE", entity_id="payee", bank_id="bank-b",
+            currency="LCU", account_ref="LOW-PAYEE", opening_balance="30.00",
+            evidence_ref="LOW-PAYEE-OPEN", actor_id="root", authority_ref="OPEN",
+            effective_at=T, recorded_at=T, expected_revision=1,
+        )
+        low.open_bank_reserve_account(
+            event_id="LOW-RESERVE-A", bank_id="bank-a", central_bank_id="central-bank",
+            currency="LCU", account_ref="LOW-RESERVE-A", opening_balance="10.00",
+            evidence_ref="LOW-RESERVE-A-OPEN", actor_id="root", authority_ref="CB-OPEN",
+            effective_at=T, recorded_at=T, expected_revision=2,
+        )
+        low.open_bank_reserve_account(
+            event_id="LOW-RESERVE-B", bank_id="bank-b", central_bank_id="central-bank",
+            currency="LCU", account_ref="LOW-RESERVE-B", opening_balance="100.00",
+            evidence_ref="LOW-RESERVE-B-OPEN", actor_id="root", authority_ref="CB-OPEN",
+            effective_at=T, recorded_at=T, expected_revision=3,
+        )
+        before_payer = low.deposit_balance(
             "payer", "LCU", bank_id="bank-a", principal_id="root"
         )[0]
-        before_payee = self.register.deposit_balance(
+        before_payee = low.deposit_balance(
             "payee", "LCU", bank_id="bank-b", principal_id="root"
         )[0]
         with self.assertRaisesRegex(
             OperatingFinancialRegisterError, "insufficient payer bank reserves"
         ):
-            self.settle(event_id="PAYMENT-LOW-RESERVES", payment_id="PAYMENT-LOW",
-                        amount="70.00", expected_revision=5)
-        self.assertIsNone(self.register.status("PAYMENT-LOW-RESERVES"))
-        self.assertEqual(self.register.deposit_balance(
+            low.settle_interbank_payment(
+                event_id="PAYMENT-LOW-RESERVES", payment_id="PAYMENT-LOW",
+                payer_id="payer", payee_id="payee", payer_bank_id="bank-a",
+                payee_bank_id="bank-b", central_bank_id="central-bank",
+                currency="LCU", amount="70.00", period_index=2,
+                evidence_ref="PAYMENT-LOW-EVIDENCE", actor_id="root",
+                authority_ref="INTERBANK-SETTLEMENT", effective_at=T,
+                recorded_at=T, expected_revision=4,
+            )
+        self.assertIsNone(low.status("PAYMENT-LOW-RESERVES"))
+        self.assertEqual(low.deposit_balance(
             "payer", "LCU", bank_id="bank-a", principal_id="root"
         )[0], before_payer)
-        self.assertEqual(self.register.deposit_balance(
+        self.assertEqual(low.deposit_balance(
             "payee", "LCU", bank_id="bank-b", principal_id="root"
         )[0], before_payee)
-        self.assertEqual(self.register.bank_reserve_snapshot(
+        self.assertEqual(low.bank_reserve_snapshot(
             "bank-a", "central-bank", "LCU", principal_id="root"
-        )["reserve_balance"], D("500.00"))
+        )["reserve_balance"], D("10.00"))
+        self.assertTrue(low.verify())
 
     def test_duplicate_payment_id_is_rejected_without_commit(self):
         self.settle()
