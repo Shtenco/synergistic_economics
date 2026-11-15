@@ -308,13 +308,34 @@ class BankCreditAllocationExperiment:
         destroyed = ZERO
         credit_events = [{
             "event": "credit_origination",
+            "event_id": f"CREDIT-ORIGINATION:{scenario}",
             "scenario": scenario,
             "principal": str(self.credit_amount if debt else ZERO),
             "borrowers": [list(key) for key in sorted(debt)],
         }]
+        if capex_order is not None:
+            credit_events.append({
+                "event": "capex_payment",
+                "event_id": capex_order.payment_event_id,
+                "credit_event_id": capex_order.credit_event_id,
+                "order_id": capex_order.order_id,
+                "amount": str(capex_order.acquisition_cost),
+                "buyer_id": capex_order.borrower_id,
+                "supplier_id": capex_order.supplier_id,
+            })
         metrics = []
         for period in range(1, self.periods + 1):
             result = model.step(period)
+            if capex_order is not None and period == capex_order.delivery_period:
+                credit_events.append({
+                    "event": "capex_physical_delivery",
+                    "event_id": f"delivery:{capex_order.order_id}",
+                    "credit_event_id": capex_order.credit_event_id,
+                    "payment_event_id": capex_order.payment_event_id,
+                    "order_id": capex_order.order_id,
+                    "period": period,
+                    "quantity": str(capex_order.quantity),
+                })
             period_due = period_repaid = ZERO
             if period > 1:
                 for key, outstanding in sorted(debt.items()):
@@ -352,8 +373,11 @@ class BankCreditAllocationExperiment:
                 asset_price_index, original_cash, period_repaid, period_due, destroyed,
             ))
 
+        io_event_log_digest = model.period_results[-1].event_digest
         event_digest = sha256(json.dumps(
-            credit_events, sort_keys=True, separators=(",", ":")
+            {"credit_events": credit_events,
+             "io_event_log_digest": io_event_log_digest},
+            sort_keys=True, separators=(",", ":")
         ).encode("utf-8")).hexdigest()
         final = metrics[-1]
         return {
@@ -397,6 +421,7 @@ class BankCreditAllocationExperiment:
                     (abs(D(item.monetary_conservation_error)) for item in metrics), default=ZERO
                 )),
                 "credit_event_digest": event_digest,
+                "io_event_log_digest": io_event_log_digest,
             },
             "periods": [item.__dict__ for item in metrics],
         }
