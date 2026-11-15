@@ -13,6 +13,7 @@ from operating_financial_register import (
 )
 from test_operating_financial_sfc_adapter import fixture, history_row, instrument
 from sfc_source_contracts import EffectiveDatedSectorRegistry, InstrumentTermsRegistry, SectorMembership
+from test_operating_wage_cross_register import build_wage_events, labour_fixture
 
 
 class FakeFinancialRegister:
@@ -491,3 +492,90 @@ class BankingSFCPipelineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_opening_builder_includes_bilateral_wage_claim_positions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            labour = labour_fixture(root / "labour.sqlite3")
+            _delivery, _contract, _journal, wage_events = build_wage_events(labour)
+            accrual = wage_events[0]
+            register = OperatingFinancialRegister(
+                root / "financial.sqlite3",
+                sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            event_payload = accrual.to_native_payload()
+            financial_payload = {
+                "claim_id": accrual.claim_id,
+                "events": [event_payload],
+            }
+            movements = [
+                dict(movement) for movement in accrual.stock_flow_movements
+            ]
+            event_id = "WAGE-GROUP-OPENING-1"
+            operation = {
+                "stream_id": "operating-financial",
+                "native_event_id": event_id,
+                "expected_revision": 0,
+                "payload": {
+                    "event_type": "wage.event_group_committed",
+                    "effective_at": "2026-11-15T00:00:01Z",
+                    "recorded_at": "2026-11-15T00:00:01Z",
+                    "actor_id": "financial-root",
+                    "authority_ref": "WAGE-ACCRUAL-AUTHORITY",
+                    "idempotency_key": event_id,
+                    "payload": financial_payload,
+                    "stock_flow_movements": movements,
+                },
+            }
+            token = register.prepare(event_id, operation)
+            register.commit(event_id, token)
+
+            wage_instrument_id = f"WAGE:{accrual.claim_id}"
+            terms = InstrumentTermsRegistry(
+                "terms-wage-v1", (instrument(wage_instrument_id, "WAGE"),),
+            )
+            sectors = EffectiveDatedSectorRegistry(
+                "sectors-wage-v1",
+                frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+                (
+                    SectorMembership("worker-1", "H", 1, None),
+                    SectorMembership("employer-1", "NFC", 1, None),
+                ),
+            )
+            snapshots = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[1, 2],
+                instrument_registry=terms, sector_registry=sectors,
+            )
+            self.assertEqual(len(snapshots[0].positions), 2)
+            self.assertEqual(len(snapshots[1].positions), 2)
+            opening_period_1 = {
+                (row.identity.holder_entity_id, row.identity.issuer_entity_id): row.balance
+                for row in snapshots[0].positions
+            }
+            opening_period_2 = {
+                (row.identity.holder_entity_id, row.identity.issuer_entity_id): row.balance
+                for row in snapshots[1].positions
+            }
+            self.assertEqual(
+                opening_period_1[("worker-1", "employer-1")], "0",
+            )
+            self.assertEqual(
+                opening_period_1[("employer-1", "worker-1")], "0",
+            )
+            self.assertEqual(
+                opening_period_2[("worker-1", "employer-1")], str(accrual.amount),
+            )
+            self.assertEqual(
+                opening_period_2[("employer-1", "worker-1")], str(accrual.amount),
+            )
+            self.assertTrue(all(
+                row.source_ref.startswith(
+                    f"financial:{register.register_instance_id}:financial-root@"
+                )
+                for row in snapshots[1].positions
+            ))
+
