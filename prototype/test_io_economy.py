@@ -579,5 +579,33 @@ class InputOutputEconomyTests(unittest.TestCase):
             )
 
 
+    def test_recipe_rounding_never_consumes_more_than_available_input_stock(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+
+        model = InputOutputEconomy(
+            products=[
+                Product("input", "unit", D("1"), D("1"), D("0")),
+                Product("output", "unit", D("1"), D("1"), D("0")),
+            ],
+            firms=[
+                FirmConfig(
+                    "producer", "output", {"input": D("3")},
+                    D("1"), D("1"), D("1"), D("0"), D("0"),
+                    {"input": D("1.00000001")},
+                )
+            ],
+            households=[
+                HouseholdConfig("household", D("0"), {}, D("0"), D("10"))
+            ],
+        )
+
+        result = model.step(1)
+
+        self.assertEqual(D(result.physical_balance_error["input"]), D("0"))
+        self.assertEqual(D(result.intermediate_consumption["input"]), D("0.99999999"))
+        self.assertEqual(D(result.closing_inventory["input"]), D("0.00000002"))
+        self.assertEqual(D(result.production["output"]), D("0.33333333"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
