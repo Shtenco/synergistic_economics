@@ -8,7 +8,9 @@ from banking_sfc_projection_pipeline import (
     build_opening_snapshots_from_register, project_and_persist, rebuild_and_verify,
 )
 from banking_sfc_projection_store import BankingSFCProjectionStore
-from operating_financial_register import OperatingFinancialRegister
+from operating_financial_register import (
+    OperatingFinancialRegister, wage_stock_flow_movement_specs,
+)
 from test_operating_financial_sfc_adapter import fixture, history_row, instrument
 from sfc_source_contracts import EffectiveDatedSectorRegistry, InstrumentTermsRegistry, SectorMembership
 
@@ -240,6 +242,91 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertEqual(opening4[("DEPOSIT:household-1:bank-1:LCU", "household-1")], "100")
             self.assertEqual(snapshots[0].source_sequence, 5)
             self.assertEqual(snapshots[1].source_chain_hash, snapshots[0].source_chain_hash)
+
+    def test_opening_builder_includes_unpaid_wage_claim_and_payable_stocks(self):
+        claim_id = "ENGAGEMENT-1:DELIVERY-1"
+        wage_instrument = f"WAGE:{claim_id}"
+        base_terms, _base_sectors, _identities, _snapshot = fixture()
+        wage_terms = instrument(wage_instrument, "WAGE_CLAIM")
+        terms = InstrumentTermsRegistry("terms-wage-v1", base_terms.terms + (wage_terms,))
+        sectors = EffectiveDatedSectorRegistry(
+            "sectors-wage-v1", frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+            (
+                SectorMembership("worker-1", "H", 1, None),
+                SectorMembership("employer-1", "NFC", 1, None),
+                SectorMembership("bank-1", "CB", 1, None),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            subevent = {
+                "event_id": "WAGE-ACCRUAL-1", "event_type": "wage_accrual",
+                "claim_id": claim_id, "engagement_id": "ENGAGEMENT-1",
+                "worker_id": "worker-1", "employer_id": "employer-1",
+                "bank_id": "bank-1", "currency": "LCU", "amount": "100",
+                "minor_unit": "0.01", "period_index": 3,
+                "period_label": "P3", "delivery_event_id": "DELIVERY-1",
+                "causation_id": "DELIVERY-1", "evidence_ref": "WAGE-EVIDENCE",
+                "delivery_evidence_ref": "DELIVERY-EVIDENCE",
+                "verification_ref": "SUPERVISOR-VERIFICATION",
+                "contract_ref": "SIGNED-CONTRACT",
+                "contract_evidence_ref": "CONTRACT-EVIDENCE",
+                "labour_aggregate_version": 7, "delivered_hours": "10",
+                "hourly_rate": "10",
+            }
+            posting_template = (
+                ("wage_expense", "D", "employer-1", "worker-1", claim_id, "NFC"),
+                ("wage_payable", "C", "employer-1", "worker-1", claim_id, "NFC"),
+                ("wage_receivable", "D", "worker-1", "employer-1", claim_id, "H"),
+                ("wage_income", "C", "worker-1", "employer-1", claim_id, "H"),
+            )
+            subevent["postings"] = [
+                {
+                    "account": account, "side": side, "entity_id": entity,
+                    "counterparty_id": counterparty, "instrument_id": instrument_id,
+                    "currency": "LCU", "sector": sector, "amount": "100",
+                }
+                for account, side, entity, counterparty, instrument_id, sector
+                in posting_template
+            ]
+            event_id = "WAGE-GROUP-1"
+            envelope = {
+                "event_type": "wage.event_group_committed",
+                "effective_at": "2026-11-15T00:00:01Z",
+                "recorded_at": "2026-11-15T00:00:01Z",
+                "actor_id": "financial-root", "authority_ref": "WAGE-POLICY",
+                "idempotency_key": event_id,
+                "payload": {"claim_id": claim_id, "events": [subevent]},
+                "stock_flow_movements": wage_stock_flow_movement_specs([subevent]),
+            }
+            operation = {
+                "stream_id": "operating-financial", "native_event_id": event_id,
+                "expected_revision": 0, "payload": envelope,
+            }
+            token = register.prepare(event_id, operation)
+            register.commit(event_id, token)
+            snapshots = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[3, 4],
+                instrument_registry=terms, sector_registry=sectors,
+            )
+            self.assertEqual(len(snapshots[0].positions), 2)
+            self.assertEqual({item.balance for item in snapshots[0].positions}, {"0"})
+            self.assertEqual({item.balance for item in snapshots[1].positions}, {"100"})
+            self.assertEqual(
+                {item.identity.instrument_id for item in snapshots[1].positions},
+                {wage_instrument},
+            )
+            self.assertEqual(
+                {item.identity.holder_entity_id for item in snapshots[1].positions},
+                {"worker-1", "employer-1"},
+            )
 
     def test_opening_builder_fails_if_source_changes_during_export(self):
         terms, sectors, _identities, _fixture_snapshot = fixture()
