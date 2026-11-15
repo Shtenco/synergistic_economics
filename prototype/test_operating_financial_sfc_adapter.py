@@ -389,6 +389,16 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             "event_type": "central_bank.refinancing_advanced",
             **refinancing_payload,
         }
+        refinancing_repayment_payload = {
+            "facility_id": "FACILITY-1", "bank_id": "bank-1",
+            "central_bank_id": "central-bank", "currency": "LCU",
+            "amount": "20", "period_index": 4, "evidence_ref": "REFINANCING-REPAYMENT-EVIDENCE",
+        }
+        refinancing_repayment_event = {
+            "event_id": "REFINANCING-REPAY-1",
+            "event_type": "central_bank.refinancing_principal_repaid",
+            **refinancing_repayment_payload,
+        }
         government_loan = self.loan_event(
             "GOV-LOAN-1", "bank.loan_originated", "30", 3, 1
         )
@@ -448,6 +458,9 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             native_row("REFINANCING-1", "central_bank.refinancing_advanced",
                        refinancing_payload,
                        central_bank_refinancing_movement_specs(refinancing_event), 5),
+            native_row("REFINANCING-REPAY-1", "central_bank.refinancing_principal_repaid",
+                       refinancing_repayment_payload,
+                       central_bank_refinancing_movement_specs(refinancing_repayment_event), 6),
         ]
 
         from operating_financial_sfc_adapter import _resolve_identity
@@ -477,16 +490,32 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             if mirror not in identities:
                 raise AssertionError(f"test fixture missing mirror for {identity.instrument_id}")
             initial_balances[mirror] = initial_balances[identity]
-        snapshot = OpeningStockSnapshot(
+        snapshot3 = OpeningStockSnapshot(
             "six-sector-opening-v3", 3, terms.version, terms.digest,
             sectors.version, sectors.digest, tuple(identities),
             tuple(OpeningPosition(identity, initial_balances[identity],
-                                  f"OPEN-EVIDENCE-{i}", f"OPEN-SOURCE-{i}")
+                                  f"OPEN-EVIDENCE-3-{i}", f"OPEN-SOURCE-3-{i}")
+                  for i, identity in enumerate(identities)),
+        )
+        period3_closing = dict(initial_balances)
+        for row in rows[:-1]:
+            envelope = json.loads(row["payload_json"])
+            for movement in envelope["stock_flow_movements"]:
+                identity = _resolve_identity(movement["identity"], 3, terms, sectors)
+                period3_closing[identity] = (
+                    __import__("decimal").Decimal(period3_closing[identity])
+                    + __import__("decimal").Decimal(movement["amount"])
+                )
+        snapshot4 = OpeningStockSnapshot(
+            "six-sector-opening-v4", 4, terms.version, terms.digest,
+            sectors.version, sectors.digest, tuple(identities),
+            tuple(OpeningPosition(identity, str(period3_closing[identity]),
+                                  f"OPEN-EVIDENCE-4-{i}", f"OPEN-SOURCE-4-{i}")
                   for i, identity in enumerate(identities)),
         )
         result = OperatingFinancialSFCAdapter.build(
             rows, instrument_registry=terms, sector_registry=sectors,
-            opening_snapshots=[snapshot],
+            opening_snapshots=[snapshot3, snapshot4],
         )
         active_sectors = {key[1] for key in result.sector_financial_net_lending}
         self.assertEqual(active_sectors, {"H", "NFC", "CB", "CBank", "GOV", "ROW"})
@@ -505,7 +534,18 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.roll_forward[(reserve_1, 3)].closing, 130)
         self.assertEqual(result.roll_forward[(reserve_2, 3)].closing, 20)
-        self.assertEqual(result.mapped_source_event_count, 5)
+        self.assertEqual(result.mapped_source_event_count, 6)
+        reserve_1_period4 = result.roll_forward[(reserve_1, 4)]
+        reserve_2_period4 = result.roll_forward[(reserve_2, 4)]
+        self.assertEqual(reserve_1_period4.opening, 130)
+        self.assertEqual(reserve_1_period4.transactions, -20)
+        self.assertEqual(reserve_1_period4.closing, 110)
+        self.assertEqual(reserve_2_period4.closing, 20)
+        self.assertEqual(reserve_1_period4.closing + reserve_2_period4.closing, 130)
+        refi_claim = next(identity for identity in identities
+                          if identity.instrument_id == "CBREFI:FACILITY-1"
+                          and identity.holder_entity_id == "central-bank")
+        self.assertEqual(result.roll_forward[(refi_claim, 4)].closing, 30)
 
     def test_snapshot_period_gap_is_rejected(self):
         terms, sectors, _, first = fixture(3)
