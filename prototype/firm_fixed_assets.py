@@ -189,16 +189,16 @@ class FixedAssetLedger:
         self._event_ids.add(event_id)
         self.events.append(AssetEvent(event_id, order_id, "asset_delivered",
                                       period, quantity, evidence_ref))
-        if self._delivered[order_id] == order.quantity:
-            cohort_id = f"cohort:{order_id}"
-            if cohort_id in self.cohorts:
-                raise FixedAssetError("duplicate cohort identity")
-            self.cohorts[cohort_id] = AssetCohort(
-                cohort_id, order.order_id, order.borrower_id, order.asset_type,
-                order.quantity, order.unit_cost, order.residual_value_per_unit,
-                order.service_capacity_per_unit, order.commissioning_period,
-                order.useful_life_periods,
-            )
+        # Each evidenced delivery becomes its own physical cohort. A partial
+        # shipment can therefore enter service on the contracted commissioning
+        # date without waiting for unrelated remaining units.
+        cohort_id = f"cohort:{order_id}:{event_id}"
+        self.cohorts[cohort_id] = AssetCohort(
+            cohort_id, order.order_id, order.borrower_id, order.asset_type,
+            quantity, order.unit_cost, order.residual_value_per_unit,
+            order.service_capacity_per_unit, order.commissioning_period,
+            order.useful_life_periods,
+        )
         return self._delivered[order_id]
 
     def retire(self, *, event_id, cohort_id, quantity, period, evidence_ref):
