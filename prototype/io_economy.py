@@ -769,6 +769,20 @@ class InputOutputEconomy:
                     cohort.cohort_id for cohort in self.fixed_asset_ledger.cohorts.values()
                     if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
                 ],
+                "capital_asset_order_ids": [
+                    cohort.order_id for cohort in self.fixed_asset_ledger.cohorts.values()
+                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+                ],
+                "capital_asset_credit_event_ids": [
+                    self.capex_orders[cohort.order_id].credit_event_id
+                    for cohort in self.fixed_asset_ledger.cohorts.values()
+                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+                ],
+                "capital_asset_payment_event_ids": [
+                    self.capex_orders[cohort.order_id].payment_event_id
+                    for cohort in self.fixed_asset_ledger.cohorts.values()
+                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+                ],
             })
         self._settle_household_income(period)
         for household_id, household in self.households.items():
