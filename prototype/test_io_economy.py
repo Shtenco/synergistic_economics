@@ -215,7 +215,7 @@ class InputOutputEconomyTests(unittest.TestCase):
             sum((state.production * state.config.labour_per_unit for state in model.firms.values()), D("0")),
         )
 
-    def test_unconstrained_household_supply_does_not_create_artificial_unemployment(self):
+    def test_abundant_household_supply_does_not_constrain_firm_production(self):
         from dataclasses import replace
         households = [
             replace(item, labour_supply_hours=D("1000"))
@@ -223,11 +223,16 @@ class InputOutputEconomyTests(unittest.TestCase):
         ]
         model = InputOutputEconomy(households=households)
         result = model.step(1)
-        self.assertTrue(all(D(x) == 0 for x in result.household_unemployment_hours.values()))
+        worked = sum((D(x) for x in result.household_labour_hours.values()), D("0"))
         self.assertEqual(
-            sum((D(x) for x in result.household_labour_hours.values()), D("0")),
+            worked,
             sum((state.production * state.config.labour_per_unit for state in model.firms.values()), D("0")),
         )
+        self.assertGreater(
+            sum((D(x) for x in result.household_unemployment_hours.values()), D("0")),
+            0,
+        )
+        self.assertTrue(all(D(result.household_labour_supply_hours[k]) >= D(result.household_labour_hours[k]) for k in model.households))
 
     def test_labour_supply_must_be_finite_and_nonnegative(self):
         from dataclasses import replace
