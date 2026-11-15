@@ -1838,7 +1838,7 @@ class OperatingFinancialRegister(DurableEventRegister):
     def record_existing_bank_loan(
         self, *, event_id, loan_id, borrower_id, bank_id, currency,
         original_principal, outstanding_principal, origination_period_index,
-        opening_period_index, contract_ref, contract_evidence_ref, evidence_ref,
+        opening_period_index, source_account_ref, contract_ref, contract_evidence_ref, evidence_ref,
         actor_id, authority_ref, effective_at, recorded_at, expected_revision,
         minor_unit="0.01",
     ):
@@ -1854,6 +1854,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
             "origination_period_index": origination_period_index,
             "period_index": opening_period_index,
+            "source_account_ref": _text(source_account_ref, "source_account_ref"),
             "contract_ref": _text(contract_ref, "contract_ref"),
             "contract_evidence_ref": _text(contract_evidence_ref, "contract_evidence_ref"),
             "evidence_ref": _text(evidence_ref, "evidence_ref"),
