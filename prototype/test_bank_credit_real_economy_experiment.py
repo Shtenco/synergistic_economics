@@ -77,7 +77,7 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
         self.assertEqual(periods[1]["capital_formation_by_product"]["machinery"], "1")
         self.assertEqual(periods[2]["capital_formation_by_product"]["machinery"], "0")
         self.assertEqual(case["credit_principal_issued"], "12000.00")
-        self.assertEqual(case["capex_order"]["credit_event_id"], "CREDIT-ORIGINATION-PRODUCTIVE-CAPEX")
+        self.assertEqual(case["capex_order"]["credit_event_id"], "CREDIT-ORIGINATION:productive_capex:firm:farm-north")
 
     def test_ci_scale_credit_experiment_preserves_physical_stocks(self):
         # The CI scenario is intentionally larger than the small unit fixtures.
