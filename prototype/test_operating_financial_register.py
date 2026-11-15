@@ -370,6 +370,10 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(version, 3)
         self.assertEqual(loan["outstanding_principal"], "100")
         self.assertEqual(loan["bank_id"], "bank-1")
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root")
+        self.assertEqual(snapshot["deposit_liabilities"], D("1110.00"))
+        self.assertEqual(snapshot["loan_assets"], D("100"))
 
         self.register.commit_bank_credit(
             event_id="BANK-LOAN-REPAY-1", event_type="bank.loan_principal_repaid",
@@ -385,6 +389,10 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(version, 4)
         self.assertEqual(loan["outstanding_principal"], "65")
         self.assertEqual(loan["status"], "OUTSTANDING")
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root")
+        self.assertEqual(snapshot["deposit_liabilities"], D("1075.00"))
+        self.assertEqual(snapshot["loan_assets"], D("65"))
         self.assertTrue(self.register.verify())
 
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
