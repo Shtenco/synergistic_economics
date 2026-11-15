@@ -122,7 +122,8 @@ class OperatingWageJournalTests(unittest.TestCase):
         journal = self.journal()
         with self.assertRaisesRegex(OperatingWageError, "authorized labour-register reader"):
             journal.accrue_verified_wage(event_id="W1", delivery=forged,
-                                         contract=self.contract, causation_id="ENG-1")
+                                         contract=self.contract, causation_id="L5",
+                                     labour_register=self.labour, principal_id="coordinator")
 
     def test_stale_delivery_snapshot_is_rejected_after_hours_correction(self):
         append_labour(self.labour, "L7", "hours.corrected", {
@@ -184,7 +185,8 @@ class OperatingWageJournalTests(unittest.TestCase):
         journal = self.journal()
         accrual = journal.accrue_verified_wage(
             event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
-            contract=self.contract, causation_id="ENG-1",
+            contract=self.contract, causation_id="L5",
+            labour_register=self.labour, principal_id="coordinator",
         )
         first = journal.pay_wage(
             event_id="WAGE-PAYMENT-1", claim_id=accrual.claim_id, amount="15",
@@ -206,7 +208,8 @@ class OperatingWageJournalTests(unittest.TestCase):
         journal = self.journal(employer_cash="20")
         accrual = journal.accrue_verified_wage(
             event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
-            contract=self.contract, causation_id="ENG-1",
+            contract=self.contract, causation_id="L5",
+            labour_register=self.labour, principal_id="coordinator",
         )
         with self.assertRaisesRegex(OperatingWageError, "deposit balance"):
             journal.pay_wage(event_id="P1", claim_id=accrual.claim_id, amount="21",
@@ -218,16 +221,17 @@ class OperatingWageJournalTests(unittest.TestCase):
     def test_duplicate_delivery_cannot_be_accrued_twice(self):
         journal = self.journal()
         journal.accrue_verified_wage(event_id="W1", delivery=self.delivery,
-                                     contract=self.contract, causation_id="ENG-1")
+                                     contract=self.contract, causation_id="L5",
+                                         labour_register=self.labour, principal_id="coordinator")
         with self.assertRaisesRegex(OperatingWageError, "already been accrued"):
             journal.accrue_verified_wage(event_id="W2", delivery=self.delivery,
-                                         contract=self.contract, causation_id="ENG-1")
+                                         contract=self.contract, causation_id="L5", labour_register=self.labour, principal_id="coordinator")
 
     def test_wage_accrual_and_payment_movements_reconcile_across_periods(self):
         journal = self.journal()
         accrual = journal.accrue_verified_wage(
             event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
-            contract=self.contract, causation_id="ENG-1",
+            contract=self.contract, causation_id="L5", labour_register=self.labour, principal_id="coordinator",
         )
         payment = journal.pay_wage(
             event_id="WAGE-PAYMENT-1", claim_id=accrual.claim_id, amount="40",
