@@ -138,6 +138,9 @@ class BankingSFCProjectionStore:
                             (sector_registry_digest, "sector_registry_digest"),
                             (opening_snapshot_digest, "opening_snapshot_digest")):
             self._required(value, name)
+        if (len(source_chain_hash) != 64
+                or any(char not in "0123456789abcdef" for char in source_chain_hash)):
+            raise BankingSFCStoreError("source_chain_hash must be a lowercase SHA-256 digest")
         if not isinstance(source_sequence, int) or isinstance(source_sequence, bool) or source_sequence < 0:
             raise BankingSFCStoreError("source_sequence must be a non-negative integer")
         mapping_version = self._required(getattr(projection, "mapping_version", None), "mapping_version")
@@ -215,6 +218,9 @@ class BankingSFCProjectionStore:
                         raise BankingSFCStoreError("latest projection snapshot/checkpoint integrity verification failed")
                     if source_sequence < latest["source_sequence"]:
                         raise BankingSFCStoreError("stale source cursor")
+                    if (source_sequence > latest["source_sequence"]
+                            and source_chain_hash == latest["source_chain_hash"]):
+                        raise BankingSFCStoreError("source chain tail hash did not advance with source cursor")
                     if source_sequence == latest["source_sequence"]:
                         if (snapshot_id, source_chain_hash, source_digest, mapping_version, projection_digest,
                             instrument_registry_digest, sector_registry_digest, opening_snapshot_digest,
