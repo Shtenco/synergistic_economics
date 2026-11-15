@@ -316,6 +316,27 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 100)
             self.assertEqual(result.roll_forward[(identities[1], 3)].closing, 100)
 
+    def test_nonzero_position_cannot_disappear_from_next_period_snapshot(self):
+        terms, sectors, identities, first = fixture(3)
+        deposit_only = OpeningStockSnapshot(
+            "opening-v4", 4,
+            terms.version, terms.digest,
+            sectors.version, sectors.digest,
+            identities[2:],
+            (
+                OpeningPosition(identities[2], "100", "CERT-4-A", "SOURCE-4-A"),
+                OpeningPosition(identities[3], "100", "CERT-4-B", "SOURCE-4-B"),
+            ),
+        )
+        row = self.loan_event("LOAN-ORIG-1", "bank.loan_originated", "100", 3)
+        with self.assertRaisesRegex(OperatingFinancialSFCAdapterError, "disappears"):
+            OperatingFinancialSFCAdapter.build(
+                [row],
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[first, deposit_only],
+            )
+
     def test_snapshot_period_gap_is_rejected(self):
         terms, sectors, _, first = fixture(3)
         _, _, _, third = fixture(5, ["100", "100", "100", "100"])
