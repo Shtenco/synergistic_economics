@@ -35,6 +35,13 @@ class LegalRightsRegister(DurableEventRegister):
                 raise LegalRightsRegisterError("right creation requires evidence references")
             if p.get("obligor_id") is not None and p["holder_id"] == p["obligor_id"]:
                 raise LegalRightsRegisterError("holder and obligor must be distinct identities")
+            wage_claim_amount = None
+            wage_claim_currency = None
+            if p["right_type"] == "wage_claim":
+                wage_claim_amount = finite_decimal(p.get("claim_amount"), "claim_amount", minimum=0)
+                if wage_claim_amount <= 0:
+                    raise LegalRightsRegisterError("wage claim amount must be positive")
+                wage_claim_currency = required_text(p.get("currency"), "currency")
             state = {"holder_id":p["holder_id"],"obligor_id":p.get("obligor_id"),
                      "right_type":p["right_type"],"scope":p["scope"],
                      "jurisdiction":p["jurisdiction"],"legal_instrument_ref":p["legal_instrument_ref"],
@@ -42,6 +49,9 @@ class LegalRightsRegister(DurableEventRegister):
                      "status":"ACTIVE" if typ == "right.created" else "EXTINGUISHED",
                      "evidence_refs":list(dict.fromkeys(evidence)),"encumbrances":[],
                      "dispute_ref":None,"adjudication":None,"correction_event_ids":[]}
+            if p["right_type"] == "wage_claim":
+                state["claim_amount"] = str(wage_claim_amount)
+                state["currency"] = wage_claim_currency
             if typ == "right.created_and_extinguished":
                 if p["right_type"] != "wage_claim":
                     raise LegalRightsRegisterError("create-and-extinguish is reserved for wage claims settled at creation")
@@ -50,6 +60,8 @@ class LegalRightsRegister(DurableEventRegister):
                 settled_amount = finite_decimal(p.get("settled_amount"), "settled_amount", minimum=0)
                 if settled_amount <= 0:
                     raise LegalRightsRegisterError("settled_amount must be positive")
+                if settled_amount != wage_claim_amount:
+                    raise LegalRightsRegisterError("wage claim cannot be extinguished for an amount different from its principal")
                 if settlement_evidence_ref not in evidence:
                     raise LegalRightsRegisterError("settlement evidence must be included in right evidence references")
                 state["extinguishment"] = {
