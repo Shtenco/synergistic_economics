@@ -6,7 +6,7 @@ with balanced postings and explicit stock-flow movement metadata.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Mapping
 from types import MappingProxyType
@@ -49,6 +49,7 @@ def _minor_unit(value):
 class WageContract:
     worker_id: str
     employer_id: str
+    delivery_evidence_ref: str
     period_label: str
     period_index: int
     currency: str
@@ -85,7 +86,7 @@ class VerifiedLabourDelivery:
 
     def validate(self):
         for field in ("engagement_id", "delivery_event_id", "verification_ref",
-                      "worker_id", "employer_id", "period_label"):
+                      "worker_id", "employer_id", "delivery_evidence_ref", "period_label"):
             _text(getattr(self, field), field)
         _positive(self.delivered_hours, "delivered_hours")
         if self._authority_token is not _VERIFIED_TOKEN:
@@ -120,6 +121,7 @@ def verified_delivery_from_register(labour_register, engagement_id, principal_id
         verification_ref=verification_ref,
         worker_id=_text(state.get("person_ref"), "person_ref"),
         employer_id=_text(state.get("activity_id"), "activity_id"),
+        delivery_evidence_ref=_text(state.get("delivery_evidence_ref"), "delivery_evidence_ref"),
         period_label=_text(state.get("period"), "period"),
         delivered_hours=_positive(state.get("delivered_hours"), "delivered_hours"),
         aggregate_version=version,
@@ -152,8 +154,39 @@ class OperatingEvent:
     amount: Decimal
     causation_id: str
     evidence_ref: str
+    delivery_evidence_ref: str
+    verification_ref: str
+    contract_ref: str
+    contract_evidence_ref: str
+    labour_aggregate_version: int
+    minor_unit: Decimal
     lines: tuple[OperatingPosting, ...]
     stock_flow_movements: tuple[dict, ...]
+
+    def to_native_payload(self):
+        return {
+            "event_id": self.event_id,
+            "event_type": self.event_type,
+            "period_index": self.period_index,
+            "claim_id": self.claim_id,
+            "worker_id": self.worker_id,
+            "employer_id": self.employer_id,
+            "bank_id": self.bank_id,
+            "currency": self.currency,
+            "amount": str(self.amount),
+            "minor_unit": str(self.minor_unit),
+            "causation_id": self.causation_id,
+            "evidence_ref": self.evidence_ref,
+            "delivery_evidence_ref": self.delivery_evidence_ref,
+            "verification_ref": self.verification_ref,
+            "contract_ref": self.contract_ref,
+            "contract_evidence_ref": self.contract_evidence_ref,
+            "labour_aggregate_version": self.labour_aggregate_version,
+            "postings": [
+                {**asdict(line), "amount": str(line.amount)}
+                for line in self.lines
+            ],
+        }
 
 
 class OperatingWageJournal:
@@ -216,13 +249,13 @@ class OperatingWageJournal:
             "instrument_id": instrument_id,
         }
 
-    def _claim_movements(self, event_id, claim_id, worker, employer, currency, amount):
+    def _claim_movements(self, event_id, claim_id, worker, employer, currency, amount, evidence_ref):
         instrument = f"WAGE:{claim_id}"
         common = {
             "period_index": None,
             "movement_class": "T",
             "amount": str(amount),
-            "evidence_ref": event_id,
+            "evidence_ref": evidence_ref,
             "mirror_group_id": event_id,
             "mirror_policy": "equal",
         }
@@ -286,12 +319,21 @@ class OperatingWageJournal:
         )
         self._balanced(lines)
         movements = self._claim_movements(event_id, claim_id, contract.worker_id,
-                                          contract.employer_id, contract.currency, amount)
+                                          contract.employer_id, contract.currency, amount,
+                                          delivery.verification_ref)
         for movement in movements:
             movement["period_index"] = contract.period_index
-        event = OperatingEvent(event_id, "wage_accrual", contract.period_index, claim_id,
-            contract.worker_id, contract.employer_id, self.bank_id, contract.currency,
-            amount, causation_id, contract.evidence_ref, lines, tuple(MappingProxyType(x) for x in movements))
+        event = OperatingEvent(
+            event_id=event_id, event_type="wage_accrual", period_index=contract.period_index,
+            claim_id=claim_id, worker_id=contract.worker_id, employer_id=contract.employer_id,
+            bank_id=self.bank_id, currency=contract.currency, amount=amount,
+            causation_id=causation_id, evidence_ref=contract.evidence_ref,
+            delivery_evidence_ref=delivery.delivery_evidence_ref,
+            verification_ref=delivery.verification_ref, contract_ref=contract.contract_ref,
+            contract_evidence_ref=contract.evidence_ref,
+            labour_aggregate_version=delivery.aggregate_version, minor_unit=contract.minor_unit,
+            lines=lines, stock_flow_movements=tuple(MappingProxyType(x) for x in movements),
+        )
         self.events[event_id] = event
         self.outstanding[claim_id] = amount
         self._delivery_claims.add(delivery_key)
@@ -343,7 +385,7 @@ class OperatingWageJournal:
         )
         self._balanced(lines)
         movements = self._claim_movements(event_id, claim_id, accrued.worker_id,
-                                          accrued.employer_id, accrued.currency, -amount)
+                                          accrued.employer_id, accrued.currency, -amount, evidence_ref)
         for movement in movements:
             movement["period_index"] = period_index
         for entity, delta, side in ((accrued.employer_id, -amount, "employer"),
@@ -361,9 +403,18 @@ class OperatingWageJournal:
                  "evidence_ref": evidence_ref, "mirror_group_id": f"{event_id}:DEPOSIT:{side}",
                  "mirror_side": "liability_issuer", "mirror_policy": "equal"},
             ])
-        event = OperatingEvent(event_id, "wage_payment", period_index, claim_id,
-            accrued.worker_id, accrued.employer_id, self.bank_id, accrued.currency,
-            amount, causation_id, evidence_ref, lines, tuple(MappingProxyType(x) for x in movements))
+        event = OperatingEvent(
+            event_id=event_id, event_type="wage_payment", period_index=period_index,
+            claim_id=claim_id, worker_id=accrued.worker_id, employer_id=accrued.employer_id,
+            bank_id=self.bank_id, currency=accrued.currency, amount=amount,
+            causation_id=causation_id, evidence_ref=evidence_ref,
+            delivery_evidence_ref=accrued.delivery_evidence_ref,
+            verification_ref=accrued.verification_ref, contract_ref=accrued.contract_ref,
+            contract_evidence_ref=accrued.contract_evidence_ref,
+            labour_aggregate_version=accrued.labour_aggregate_version,
+            minor_unit=accrued.minor_unit,
+            lines=lines, stock_flow_movements=tuple(MappingProxyType(x) for x in movements),
+        )
         self.events[event_id] = event
         self.outstanding[claim_id] = outstanding - amount
         self.deposits[employer_key] = employer_cash - amount
