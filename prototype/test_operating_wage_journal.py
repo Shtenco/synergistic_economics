@@ -65,7 +65,7 @@ class OperatingWageJournalTests(unittest.TestCase):
     def journal(self, employer_cash="1000"):
         return OperatingWageJournal(
             bank_id="bank-1",
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
             opening_deposits={("employer-1","LCU"):D(employer_cash), ("worker-1","LCU"):D("10")},
         )
 
@@ -306,6 +306,13 @@ class OperatingWageJournalTests(unittest.TestCase):
         self.assertEqual(result.mirror_group_count, 4)
         wage_positions = [p for p in result.periods if p.identity.instrument_id.startswith("WAGE:")]
         self.assertTrue(all(p.closing == D("0.00") for p in wage_positions if p.period_index == 2))
+
+    def test_wage_journal_rejects_non_commercial_bank_sector(self):
+        with self.assertRaisesRegex(OperatingWageError, "commercial bank"):
+            OperatingWageJournal(
+                bank_id="bank-1", sectors={"bank-1": "CBank"},
+                opening_deposits={},
+            )
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ class BankCreditLifecycleTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / "financial.sqlite3"
         self.register = OperatingFinancialRegister(
             self.path,
-            sectors={"borrower": "H", "bank": "CBank"},
+            sectors={"borrower": "H", "bank": "CB"},
         )
         self.register.bootstrap_admin(
             principal_id="root", authority_ref="BOOTSTRAP", occurred_at=T,
@@ -49,6 +49,36 @@ class BankCreditLifecycleTests(unittest.TestCase):
             minor_unit="0.01", causation_id=causation_id,
         )
 
+    def test_bank_credit_rejects_non_commercial_issuer_atomically(self):
+        self.register.sectors["bank"] = "CBank"
+        before = self.register.deposit_balance("borrower", "LCU", principal_id="root")[0]
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "commercial bank"):
+            self.post("NONBANK-LOAN", "bank.loan_originated", "5.00", 2, 1)
+        self.assertIsNone(self.register.status("NONBANK-LOAN"))
+        self.assertEqual(
+            self.register.deposit_balance("borrower", "LCU", principal_id="root")[0],
+            before,
+        )
+        self.assertTrue(self.register.verify())
+
+    def test_deposit_opening_requires_commercial_bank_issuer(self):
+        bad_path = Path(self.tmp.name) / "nonbank.sqlite3"
+        bad = OperatingFinancialRegister(
+            bad_path, sectors={"borrower": "H", "bank": "CBank"},
+        )
+        bad.bootstrap_admin(
+            principal_id="root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "commercial bank"):
+            bad.open_deposit_account(
+                event_id="BAD-DEPOSIT", entity_id="borrower", bank_id="bank",
+                currency="LCU", account_ref="BAD-ACCOUNT", opening_balance="1.00",
+                evidence_ref="BAD-OPENING", actor_id="root", authority_ref="BANK-OPENING",
+                effective_at=T, recorded_at=T, expected_revision=0, minor_unit="0.01",
+            )
+        self.assertIsNone(bad.status("BAD-DEPOSIT"))
+        self.assertTrue(bad.verify())
+
     def test_full_repayment_closes_loan_and_replay_survives_restart(self):
         self.post("LOAN-ORIGINATE", "bank.loan_originated", "100.00", 2, 1)
         self.post("LOAN-REPAY-FULL", "bank.loan_principal_repaid", "100.00", 3, 2,
@@ -64,7 +94,7 @@ class BankCreditLifecycleTests(unittest.TestCase):
         )
 
         reopened = OperatingFinancialRegister(
-            self.path, sectors={"borrower": "H", "bank": "CBank"},
+            self.path, sectors={"borrower": "H", "bank": "CB"},
         )
         replayed, replay_revision = reopened.loan_state("LOAN-1", principal_id="root")
         self.assertEqual(replay_revision, 3)
@@ -117,7 +147,7 @@ class BankCreditLifecycleTests(unittest.TestCase):
 
 
     def test_borrower_can_hold_deposits_at_two_banks_without_aliasing(self):
-        self.register.sectors["bank-2"] = "CBank"
+        self.register.sectors["bank-2"] = "CB"
         self.register.open_deposit_account(
             event_id="OPEN-BORROWER-BANK-2", entity_id="borrower", bank_id="bank-2",
             currency="LCU", account_ref="BORROWER-ACCOUNT-BANK-2",

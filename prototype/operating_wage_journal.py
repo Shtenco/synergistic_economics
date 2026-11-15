@@ -11,6 +11,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Mapping
 from types import MappingProxyType
 
+from institutional_sectors import ALLOWED_SECTOR_CODES, SECTOR_COMMERCIAL_BANKS
+
 
 class OperatingWageError(ValueError):
     pass
@@ -207,10 +209,12 @@ class OperatingWageJournal:
         if not isinstance(sectors, Mapping) or not isinstance(opening_deposits, Mapping):
             raise OperatingWageError("sectors and opening_deposits mappings are required")
         self.sectors = dict(sectors)
-        self.sectors.setdefault(self.bank_id, "CBank")
+        self.sectors.setdefault(self.bank_id, SECTOR_COMMERCIAL_BANKS)
+        if self.sectors[self.bank_id] != SECTOR_COMMERCIAL_BANKS:
+            raise OperatingWageError("wage settlement bank must be a configured commercial bank")
         for entity, sector in self.sectors.items():
             _text(entity, "sector entity")
-            if sector not in {"H", "NFC", "CB", "CBank", "GOV", "ROW"}:
+            if sector not in ALLOWED_SECTOR_CODES:
                 raise OperatingWageError(f"unsupported institutional sector for {entity}")
         self.deposits = {}
         for key, value in opening_deposits.items():

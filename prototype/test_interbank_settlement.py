@@ -22,7 +22,7 @@ class InterbankSettlementTests(unittest.TestCase):
             self.path,
             sectors={
                 "payer": "H", "payee": "H",
-                "bank-a": "CBank", "bank-b": "CBank", "central-bank": "CB",
+                "bank-a": "CB", "bank-b": "CB", "central-bank": "CBank",
             },
         )
         self.register.bootstrap_admin(
@@ -113,7 +113,7 @@ class InterbankSettlementTests(unittest.TestCase):
             Path(self.tmp.name) / "low-reserves.sqlite3",
             sectors={
                 "payer": "H", "payee": "H",
-                "bank-a": "CBank", "bank-b": "CBank", "central-bank": "CB",
+                "bank-a": "CB", "bank-b": "CB", "central-bank": "CBank",
             },
         )
         low.bootstrap_admin(principal_id="root", authority_ref="BOOTSTRAP", occurred_at=T)
@@ -283,7 +283,7 @@ class InterbankSettlementTests(unittest.TestCase):
             self.path,
             sectors={
                 "payer": "H", "payee": "H",
-                "bank-a": "CBank", "bank-b": "CBank", "central-bank": "CB",
+                "bank-a": "CB", "bank-b": "CB", "central-bank": "CBank",
             },
         )
         self.assertEqual(

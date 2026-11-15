@@ -65,7 +65,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         self.journal = OperatingWageJournal(
             bank_id="bank-1",
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
             opening_deposits={("employer-1","LCU"):D("1000"), ("worker-1","LCU"):D("10")},
         )
         self.accrual = self.journal.accrue_verified_wage(
@@ -79,7 +79,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.register_path = root / "financial.sqlite3"
         self.register = OperatingFinancialRegister(
             self.register_path,
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         self.register.bootstrap_admin(
             principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
@@ -157,7 +157,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         receipt = self.register.commit("TX-WAGE-RESTART", token)
         reopened = OperatingFinancialRegister(
             self.register_path,
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         self.assertEqual(reopened.status("TX-WAGE-RESTART")["state"], "COMMITTED")
         self.assertEqual(reopened.commit("TX-WAGE-RESTART", token), receipt)
@@ -228,7 +228,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "unsupported institutional sector"):
             OperatingFinancialRegister(
                 Path(self.tmp.name) / "bad-sector.sqlite3",
-                sectors={"worker-1":"HOUSEHOLD", "employer-1":"NFC", "bank-1":"CBank"},
+                sectors={"worker-1":"HOUSEHOLD", "employer-1":"NFC", "bank-1":"CB"},
             )
 
     def test_prepare_requires_explicit_bank_sector_and_distinct_entities(self):
@@ -293,7 +293,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
     def test_payment_minor_unit_must_match_both_durable_deposit_accounts(self):
         mismatch_path = Path(self.tmp.name) / "minor-mismatch.sqlite3"
         mismatch = OperatingFinancialRegister(
-            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         mismatch.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
         mismatch.open_deposit_account(
@@ -318,7 +318,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
     def test_durable_deposit_balance_blocks_overdraw_after_memory_precheck(self):
         low_path = Path(self.tmp.name) / "low-balance.sqlite3"
         low = OperatingFinancialRegister(
-            low_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            low_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         low.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
         low.open_deposit_account(
@@ -396,7 +396,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertTrue(self.register.verify())
 
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
-        self.register.sectors["other-bank"] = "CBank"
+        self.register.sectors["other-bank"] = "CB"
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
             self.register.commit_bank_credit(
                 event_id="BANK-LOAN-WRONG-BANK", event_type="bank.loan_originated",

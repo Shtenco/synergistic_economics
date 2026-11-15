@@ -10,6 +10,9 @@ from typing import Mapping
 
 from durable_event_register import DurableEventRegister, RegisterError
 from register_event_contract import normalize_event_envelope
+from institutional_sectors import (
+    ALLOWED_SECTOR_CODES, SECTOR_COMMERCIAL_BANKS, SECTOR_CENTRAL_BANK,
+)
 
 
 class OperatingFinancialRegisterError(RegisterError):
@@ -229,7 +232,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         if not isinstance(sectors, Mapping):
             raise OperatingFinancialRegisterError("explicit institutional sector mapping is required")
         self.sectors = dict(sectors)
-        allowed_sectors = {"H", "NFC", "CB", "CBank", "GOV", "ROW"}
+        allowed_sectors = ALLOWED_SECTOR_CODES
         if not self.sectors:
             raise OperatingFinancialRegisterError("at least one explicit institutional sector mapping is required")
         for entity, sector in self.sectors.items():
@@ -259,6 +262,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         for entity in (worker, employer, bank):
             if entity not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
+        if self.sectors[bank] != SECTOR_COMMERCIAL_BANKS:
+            raise OperatingFinancialRegisterError("wage settlement bank must be a configured commercial bank")
         event_type = event.get("event_type")
         if event_type == "wage_accrual":
             expected = [
@@ -422,6 +427,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         for entity in (borrower, bank):
             if entity not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
+        if self.sectors[bank] != SECTOR_COMMERCIAL_BANKS:
+            raise OperatingFinancialRegisterError("bank credit issuer must be a configured commercial bank")
         key = self._deposit_key(borrower, bank, currency)
         account = state["deposits"].get(key)
         if account is None:
@@ -494,9 +501,9 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("reserve minor_unit must be a positive fraction no greater than one")
         if balance / minor_unit != (balance / minor_unit).to_integral_value():
             raise OperatingFinancialRegisterError("reserve opening balance is not an exact multiple of its minor unit")
-        if bank not in self.sectors or self.sectors[bank] != "CBank":
+        if bank not in self.sectors or self.sectors[bank] != SECTOR_COMMERCIAL_BANKS:
             raise OperatingFinancialRegisterError("reserve account holder must be a configured commercial bank")
-        if central_bank not in self.sectors or self.sectors[central_bank] != "CB":
+        if central_bank not in self.sectors or self.sectors[central_bank] != SECTOR_CENTRAL_BANK:
             raise OperatingFinancialRegisterError("reserve issuer must be an explicitly configured central bank sector")
         key = self._reserve_key(bank, central_bank, currency)
         if key in state["reserves"]:
@@ -540,9 +547,9 @@ class OperatingFinancialRegister(DurableEventRegister):
         for entity in (payer, payee, payer_bank, payee_bank, central_bank):
             if entity not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
-        if self.sectors[central_bank] != "CB":
+        if self.sectors[central_bank] != SECTOR_CENTRAL_BANK:
             raise OperatingFinancialRegisterError("interbank reserve issuer must be a central bank")
-        if self.sectors[payer_bank] != "CBank" or self.sectors[payee_bank] != "CBank":
+        if self.sectors[payer_bank] != SECTOR_COMMERCIAL_BANKS or self.sectors[payee_bank] != SECTOR_COMMERCIAL_BANKS:
             raise OperatingFinancialRegisterError("interbank participants must be commercial banks")
         payer_key = self._deposit_key(payer, payer_bank, currency)
         payee_key = self._deposit_key(payee, payee_bank, currency)
@@ -598,6 +605,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         for participant in (entity, bank):
             if participant not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {participant}")
+        if self.sectors[bank] != SECTOR_COMMERCIAL_BANKS:
+            raise OperatingFinancialRegisterError("deposit issuer must be a configured commercial bank")
         key = self._deposit_key(entity, bank, currency)
         if key in state["deposits"]:
             raise OperatingFinancialRegisterError("deposit account already has an opening record")
