@@ -518,7 +518,10 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
         elif envelope["event_type"] in {"bank.loan_originated", "bank.loan_principal_repaid"}:
             payload = envelope["payload"]
-            expected = bank_credit_stock_flow_movement_specs(payload)
+            expected = bank_credit_stock_flow_movement_specs(
+                {"event_id": envelope["idempotency_key"], **payload,
+                 "event_type": envelope["event_type"]}
+            )
             if envelope.get("stock_flow_movements") != expected:
                 raise OperatingFinancialRegisterError("bank credit stock-flow movements differ from canonical mapper")
         elif envelope["event_type"] == "deposit.account_opened":
