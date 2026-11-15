@@ -354,5 +354,64 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertIsNone(self.register.status("TX-WAGE-UNAUTHORIZED"))
 
 
+    def test_bank_loan_origination_and_repayment_are_durable_and_change_deposit_stock(self):
+        receipt = self.register.commit_bank_credit(
+            event_id="BANK-LOAN-1", event_type="bank.loan_originated",
+            loan_id="LOAN-1", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="100", period_index=3,
+            evidence_ref="SIGNED-LOAN-1", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        self.assertEqual(receipt["participant"], "financial")
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("110.00"))
+        loan, version = self.register.loan_state("LOAN-1", principal_id="financial-root")
+        self.assertEqual(version, 3)
+        self.assertEqual(loan["outstanding_principal"], "100")
+        self.assertEqual(loan["bank_id"], "bank-1")
+
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-REPAY-1", event_type="bank.loan_principal_repaid",
+            loan_id="LOAN-1", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="35", period_index=4,
+            evidence_ref="BANK-REPAYMENT-1", causation_id="BANK-LOAN-1",
+            actor_id="financial-root", authority_ref="BANK-CREDIT-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=3,
+        )
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("75.00"))
+        loan, version = self.register.loan_state("LOAN-1", principal_id="financial-root")
+        self.assertEqual(version, 4)
+        self.assertEqual(loan["outstanding_principal"], "65")
+        self.assertEqual(loan["status"], "OUTSTANDING")
+        self.assertTrue(self.register.verify())
+
+    def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
+            self.register.commit_bank_credit(
+                event_id="BANK-LOAN-WRONG-BANK", event_type="bank.loan_originated",
+                loan_id="LOAN-WRONG-BANK", borrower_id="worker-1", bank_id="other-bank",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-LOAN-WRONG-BANK", actor_id="financial-root",
+                authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("BANK-LOAN-WRONG-BANK"))
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "existing durable loan"):
+            self.register.commit_bank_credit(
+                event_id="BANK-LOAN-REPAY-NO-LOAN", event_type="bank.loan_principal_repaid",
+                loan_id="NO-LOAN", borrower_id="worker-1", bank_id="bank-1",
+                currency="LCU", amount="11", period_index=3,
+                evidence_ref="REPAYMENT-NO-LOAN", causation_id="NO-LOAN",
+                actor_id="financial-root", authority_ref="BANK-CREDIT-POLICY",
+                effective_at=T, recorded_at=T, expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("BANK-LOAN-REPAY-NO-LOAN"))
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("10.00"))
+
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
