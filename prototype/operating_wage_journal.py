@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Mapping
+from types import MappingProxyType
 
 
 class OperatingWageError(ValueError):
@@ -64,6 +65,8 @@ class WageContract:
             raise OperatingWageError("worker and employer must be distinct")
         if not isinstance(self.period_index, int) or isinstance(self.period_index, bool) or self.period_index < 1:
             raise OperatingWageError("period_index must be a positive integer")
+        if not isinstance(self.hourly_rate, D) or not isinstance(self.minor_unit, D):
+            raise OperatingWageError("hourly_rate and minor_unit must be Decimal values")
         _positive(self.hourly_rate, "hourly_rate")
         _minor_unit(self.minor_unit)
 
@@ -86,6 +89,8 @@ class VerifiedLabourDelivery:
         _positive(self.delivered_hours, "delivered_hours")
         if self._authority_token is not _VERIFIED_TOKEN:
             raise OperatingWageError("labour delivery must originate from the authorized labour-register reader")
+        if not isinstance(self.delivered_hours, D):
+            raise OperatingWageError("delivered_hours must be a Decimal value")
         if not isinstance(self.aggregate_version, int) or isinstance(self.aggregate_version, bool) or self.aggregate_version < 1:
             raise OperatingWageError("aggregate_version must be positive")
 
@@ -260,7 +265,7 @@ class OperatingWageJournal:
             movement["period_index"] = contract.period_index
         event = OperatingEvent(event_id, "wage_accrual", contract.period_index, claim_id,
             contract.worker_id, contract.employer_id, self.bank_id, contract.currency,
-            amount, causation_id, contract.evidence_ref, lines, tuple(movements))
+            amount, causation_id, contract.evidence_ref, lines, tuple(MappingProxyType(x) for x in movements))
         self.events[event_id] = event
         self.outstanding[claim_id] = amount
         self._delivery_claims.add(delivery.delivery_event_id)
@@ -320,7 +325,7 @@ class OperatingWageJournal:
             ])
         event = OperatingEvent(event_id, "wage_payment", period_index, claim_id,
             accrued.worker_id, accrued.employer_id, self.bank_id, accrued.currency,
-            amount, causation_id, evidence_ref, lines, tuple(movements))
+            amount, causation_id, evidence_ref, lines, tuple(MappingProxyType(x) for x in movements))
         self.events[event_id] = event
         self.outstanding[claim_id] = outstanding - amount
         self.deposits[employer_key] = employer_cash - amount
