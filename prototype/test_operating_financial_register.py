@@ -395,6 +395,19 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             "bank-1", "LCU", principal_id="financial-root")
         self.assertEqual(snapshot["deposit_liabilities"], D("1075.00"))
         self.assertEqual(snapshot["loan_assets"], D("65"))
+        opening_at_origination = self.register.loan_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        opening_before_repayment = self.register.loan_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        opening_after_repayment = self.register.loan_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_at_origination], [D("0"), D("0")])
+        self.assertEqual([row.amount for row in opening_before_repayment], [D("100"), D("100")])
+        self.assertEqual([row.amount for row in opening_after_repayment], [D("65"), D("65")])
+        self.assertEqual(len({row.evidence_ref for row in opening_after_repayment}), 1)
         self.assertTrue(self.register.verify())
 
     def test_refinancing_state_retains_original_advance_period_after_repayment(self):
@@ -436,6 +449,18 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(version, 3)
         self.assertEqual(facility["origination_period_index"], 2)
         self.assertEqual(facility["outstanding_principal"], "60")
+        opening_at_advance = register.refinancing_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        opening_before_repayment = register.refinancing_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        opening_after_repayment = register.refinancing_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_at_advance], [D("0"), D("0")])
+        self.assertEqual([row.amount for row in opening_before_repayment], [D("100"), D("100")])
+        self.assertEqual([row.amount for row in opening_after_repayment], [D("60"), D("60")])
         self.assertTrue(register.verify())
 
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
