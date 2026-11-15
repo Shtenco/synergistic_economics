@@ -652,15 +652,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_bank = _text(p.get("payee_bank_id"), "payee_bank_id")
         central_bank = _text(p.get("central_bank_id"), "central_bank_id")
         currency = _text(p.get("currency"), "currency")
-        amount_field = (
-            "outstanding_principal"
-            if event_type == "central_bank.refinancing_opening_recorded"
-            else "amount"
-        )
-        amount = _decimal(
-            p.get(amount_field), amount_field,
-            positive=(event_type != "central_bank.refinancing_opening_recorded"),
-        )
+        amount = _decimal(p.get("amount"), "amount", positive=True)
         minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
         period = p.get("period_index")
         evidence = _text(p.get("evidence_ref"), "evidence_ref")
