@@ -254,13 +254,16 @@ class OperatingFinancialSFCAdapter:
             if native_id in native_ids:
                 raise OperatingFinancialSFCAdapterError("duplicate native financial event ID")
             native_ids.add(native_id)
+            envelope_json = row.get("native_envelope_json") or row.get("payload_json")
             try:
-                envelope = json.loads(row.get("payload_json"))
+                envelope = json.loads(envelope_json)
             except (TypeError, json.JSONDecodeError) as exc:
-                raise OperatingFinancialSFCAdapterError("history payload_json is invalid") from exc
+                raise OperatingFinancialSFCAdapterError("immutable native envelope JSON is invalid") from exc
             if not isinstance(envelope, Mapping) or envelope.get("event_type") != row.get("event_type"):
-                raise OperatingFinancialSFCAdapterError("history event type differs from immutable payload")
-            if envelope.get("idempotency_key") != native_id:
+                raise OperatingFinancialSFCAdapterError("history event type differs from immutable envelope")
+            if "native_envelope_json" in row and envelope.get("payload") != row.get("payload"):
+                raise OperatingFinancialSFCAdapterError("immutable envelope payload differs from committed history payload")
+            if envelope.get("idempotency_key") != row.get("idempotency_key", native_id):
                 raise OperatingFinancialSFCAdapterError("history event ID differs from immutable idempotency key")
             if row.get("aggregate_id") not in (None, "operating-financial"):
                 raise OperatingFinancialSFCAdapterError("history row belongs to a different aggregate")
