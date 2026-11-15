@@ -166,11 +166,14 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
         "legal_rights": {
             "stream_id": f"WAGE-RIGHT:{claim_id}", "native_event_id": f"WAGE-RIGHT:{claim_id}",
             "expected_revision": 0,
-            "payload": envelope("right.created", {
+            "payload": envelope("right.created_and_extinguished", {
                 "holder_id": delivery.worker_id, "obligor_id": delivery.employer_id,
                 "right_type": "wage_claim", "scope": claim_id, "jurisdiction": "KZ",
                 "legal_instrument_ref": contract.contract_ref, "effective_from": T,
-                "evidence_refs": evidence,
+                "evidence_refs": evidence + [events[-1].evidence_ref],
+                "settlement_event_id": events[-1].event_id,
+                "settlement_evidence_ref": events[-1].evidence_ref,
+                "settled_amount": str(accrual.amount),
             }, f"WAGE-RIGHT:{claim_id}") | {
                 "no_stock_flow_effect": "legal claim is mirrored in the financial wage receivable/payable positions",
             },
@@ -260,6 +263,14 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(financial_version, 1)
             self.assertTrue(financial.verify())
 
+            rights_state, rights_version = participants["legal_rights"].state(
+                f"WAGE-RIGHT:{events[0].claim_id}", principal_id="coordinator",
+            )
+            self.assertEqual(rights_state["status"], "EXTINGUISHED")
+            self.assertEqual(rights_state["extinguishment"]["settlement_event_id"], "WAGE-PAYMENT-1")
+            self.assertEqual(rights_state["extinguishment"]["settled_amount"], "40.00")
+            self.assertEqual(rights_version, 1)
+
             group = coordinator.committed_event_group("TX-WAGE-1")
             self.assertEqual({event["register_id"] for event in group["events"]}, set(PARTICIPANTS))
             movements = movements_from_event_groups((group,))
@@ -304,6 +315,59 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             )
             self.assertEqual(replayed["outstanding_amount"], "0.00")
             self.assertTrue(reopened["financial"].verify())
+
+
+    def test_fully_paid_wage_claim_cannot_remain_legally_active(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labour = labour_fixture(root / "labour.sqlite3")
+            delivery, contract, _, events = build_wage_events(labour)
+            participants = make_participants(root)
+            coordinator = OperatingWageCoordinator(
+                root / "coordinator.sqlite3", participants,
+                require_authoritative_adapters=True,
+            )
+            operations = make_operations(delivery, contract, events)
+            operations["legal_rights"]["payload"]["event_type"] = "right.created"
+            from cross_register_coordinator import CoordinatorError
+            with self.assertRaisesRegex(CoordinatorError, "legal wage claim state"):
+                coordinator.submit("TX-WAGE-LIVE-RIGHT", "SCENARIO-WAGE-LIVE", "CAUSE-WAGE-LIVE", operations)
+            self.assertIsNone(coordinator.state("TX-WAGE-LIVE-RIGHT"))
+
+    def test_labour_change_after_submit_aborts_all_six_register_prepares(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labour = labour_fixture(root / "labour.sqlite3")
+            delivery, contract, _, events = build_wage_events(labour)
+            participants = make_participants(root)
+            coordinator = OperatingWageCoordinator(
+                root / "coordinator.sqlite3", participants,
+                require_authoritative_adapters=True,
+            )
+            operations = make_operations(delivery, contract, events)
+            coordinator.submit("TX-WAGE-STALE", "SCENARIO-WAGE-STALE", "CAUSE-WAGE-STALE", operations)
+
+            append_labour(participants["labour"], "L7", "hours.corrected", {
+                "corrects_event_id":"L5", "reason":"Corrected verified timesheet before prepare",
+                "delta_hours":"-0.5",
+            }, 6)
+            with self.assertRaisesRegex(ValueError, "revision conflict"):
+                coordinator.execute("TX-WAGE-STALE")
+            self.assertEqual(coordinator.state("TX-WAGE-STALE"), "ABORTED")
+            self.assertFalse(coordinator.is_visible("TX-WAGE-STALE"))
+            labour_state, labour_version = participants["labour"].state(
+                "ENG-1", principal_id="coordinator",
+            )
+            self.assertEqual(labour_version, 7)
+            self.assertEqual(labour_state["status"], "VERIFIED")
+            self.assertEqual(labour_state["delivered_hours"], "1.5")
+            self.assertEqual(participants["financial"].state(
+                f"wage:{events[0].claim_id}", principal_id="coordinator",
+            ), (None, 0))
+            self.assertEqual(participants["financial"].status("TX-WAGE-STALE"), None)
+            self.assertEqual(participants["legal_rights"].status("TX-WAGE-STALE"), None)
+            self.assertEqual(participants["physical"].status("TX-WAGE-STALE")["state"], "ABORTED")
+            self.assertEqual(participants["capital"].status("TX-WAGE-STALE")["state"], "ABORTED")
 
     def test_coordinator_rejects_mismatched_labour_hours_before_prepare(self):
         with tempfile.TemporaryDirectory() as tmp:
