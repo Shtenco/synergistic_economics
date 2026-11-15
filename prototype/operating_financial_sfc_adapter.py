@@ -421,11 +421,22 @@ class OperatingFinancialSFCAdapter:
         snapshot_period_set = set(periods)
         for (identity, period), roll in roll_forward.items():
             next_period = period + 1
-            if next_period in snapshot_period_set and (identity, next_period) not in openings:
+            if next_period not in snapshot_period_set:
+                continue
+            next_key = (identity, next_period)
+            if next_key not in openings:
                 if roll.closing != 0:
                     raise OperatingFinancialSFCAdapterError(
                         f"non-zero position {identity.instrument_id} disappears from period {next_period} opening"
                     )
+                continue
+            next_opening = canonical_decimal(openings[next_key])
+            if next_opening != roll.closing:
+                raise OperatingFinancialSFCAdapterError(
+                    f"opening balance differs from prior-period closing for "
+                    f"{identity.instrument_id} in period {next_period}: "
+                    f"opening={next_opening}, prior_closing={roll.closing}"
+                )
 
         nl = {}
         keys = set(transaction_assets) | set(transaction_liabilities)
