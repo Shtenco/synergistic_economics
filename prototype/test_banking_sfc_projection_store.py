@@ -93,12 +93,16 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(BankingSFCStoreError, "reused with changed"):
             self.append(sample_projection(amount="11"))
 
-    def test_stale_and_gapped_cursors_are_rejected(self):
+    def test_stale_cursor_is_rejected_but_global_sequence_gaps_are_allowed(self):
         self.append()
         with self.assertRaisesRegex(BankingSFCStoreError, "stale"):
             self.append(source_sequence=3)
-        with self.assertRaisesRegex(BankingSFCStoreError, "cursor gap"):
-            self.append(source_sequence=6)
+        # The register sequence is global; unrelated aggregate events may occupy
+        # intervening sequence numbers, so the financial projection cursor may skip.
+        advanced = self.append(source_sequence=6)
+        self.assertFalse(advanced["replayed"])
+        self.assertEqual(self.store.latest_checkpoint(self.pins["source_register_id"])
+                         ["applied_through_sequence"], 6)
 
     def test_registry_or_opening_drift_is_rejected(self):
         self.append()
