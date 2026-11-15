@@ -749,6 +749,16 @@ class InputOutputEconomy:
             if wage_by_household:
                 residual_household = max(wage_by_household, key=lambda key: (wage_by_household[key], key))
                 wage_by_household[residual_household] += wage - sum(wage_by_household.values(), ZERO)
+            wage_payment_event_ids = {}
+            active_cohorts = [
+                cohort for cohort in self.fixed_asset_ledger.cohorts.values()
+                if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+            ]
+            active_credit_event_ids = [
+                self.capex_orders[cohort.order_id].credit_event_id for cohort in active_cohorts
+            ]
+            active_asset_order_ids = [cohort.order_id for cohort in active_cohorts]
+            production_event_key = f"p{period}:production:{firm_id}"
             for household_id, share in wage_by_household.items():
                 household = self.households[household_id]
                 household.cash += share
@@ -757,31 +767,31 @@ class InputOutputEconomy:
                 household.period_labour_hours += hours_by_household[household_id]
                 household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
                 household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
-            self._event(f"p{period}:production:{firm_id}", "production", {
+                if share > 0:
+                    wage_event_id = f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
+                    wage_payment_event_ids[household_id] = wage_event_id
+                    self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "household_wage_payment", {
+                        "event_id": wage_event_id, "firm_id": firm_id,
+                        "household_id": household_id, "amount": str(share),
+                        "labour_hours": str(hours_by_household[household_id]),
+                        "production_event_key": production_event_key,
+                        "capital_asset_order_ids": active_asset_order_ids,
+                        "credit_event_ids": active_credit_event_ids,
+                    })
+            self._event(production_event_key, "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
                 "intermediate_input_value": str(input_value), "wages": str(wage),
                 "labour_hours": str(labour_hours),
                 "wage_by_household": {k: str(v) for k, v in wage_by_household.items()},
+                "wage_payment_event_ids_by_household": wage_payment_event_ids,
                 "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()},
                 "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()},
                 "commissioned_capital_capacity": str(self._commissioned_capacity(firm_id, period)),
-                "capital_asset_cohort_ids": [
-                    cohort.cohort_id for cohort in self.fixed_asset_ledger.cohorts.values()
-                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
-                ],
-                "capital_asset_order_ids": [
-                    cohort.order_id for cohort in self.fixed_asset_ledger.cohorts.values()
-                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
-                ],
-                "capital_asset_credit_event_ids": [
-                    self.capex_orders[cohort.order_id].credit_event_id
-                    for cohort in self.fixed_asset_ledger.cohorts.values()
-                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
-                ],
+                "capital_asset_cohort_ids": [cohort.cohort_id for cohort in active_cohorts],
+                "capital_asset_order_ids": active_asset_order_ids,
+                "capital_asset_credit_event_ids": active_credit_event_ids,
                 "capital_asset_payment_event_ids": [
-                    self.capex_orders[cohort.order_id].payment_event_id
-                    for cohort in self.fixed_asset_ledger.cohorts.values()
-                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+                    self.capex_orders[cohort.order_id].payment_event_id for cohort in active_cohorts
                 ],
             })
         self._settle_household_income(period)
