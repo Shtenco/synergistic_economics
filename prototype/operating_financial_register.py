@@ -65,7 +65,7 @@ def bank_credit_stock_flow_movement_specs(event):
         raise OperatingFinancialRegisterError("period_index must be a positive integer")
     if borrower == bank:
         raise OperatingFinancialRegisterError("bank and borrower must be distinct")
-    if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+    if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid",\n            "bank.reserve_account_opened", "bank.interbank_payment_settled"}:
         raise OperatingFinancialRegisterError("unsupported bank credit event type")
     evidence = _text(event.get("evidence_ref"), "evidence_ref")
     signed = amount if event_type == "bank.loan_originated" else -amount
@@ -101,6 +101,61 @@ def bank_credit_stock_flow_movement_specs(event):
             "mirror_side": "liability_issuer", "mirror_policy": "equal",
         },
     ]
+
+
+
+def interbank_payment_stock_flow_movement_specs(event):
+    """Canonical SFC movements for a reserve-settled interbank deposit transfer."""
+    event_id = _text(event.get("event_id"), "event_id")
+    payment_id = _text(event.get("payment_id"), "payment_id")
+    payer = _text(event.get("payer_id"), "payer_id")
+    payee = _text(event.get("payee_id"), "payee_id")
+    payer_bank = _text(event.get("payer_bank_id"), "payer_bank_id")
+    payee_bank = _text(event.get("payee_bank_id"), "payee_bank_id")
+    central_bank = _text(event.get("central_bank_id"), "central_bank_id")
+    currency = _text(event.get("currency"), "currency")
+    amount = _decimal(event.get("amount"), "amount", positive=True)
+    period = event.get("period_index")
+    evidence = _text(event.get("evidence_ref"), "evidence_ref")
+    if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+        raise OperatingFinancialRegisterError("period_index must be a positive integer")
+    if len({payer, payee, payer_bank, payee_bank, central_bank}) != 5:
+        raise OperatingFinancialRegisterError("interbank payment parties must be distinct")
+    if payer_bank == payee_bank:
+        raise OperatingFinancialRegisterError("interbank settlement requires two different banks")
+    signed = amount
+    movements = []
+    def add(suffix, position, holder, issuer, instrument, group, side, value):
+        movements.append({
+            "movement_id": f"{event_id}:{suffix}",
+            "identity": _identity(position, holder, issuer, instrument, currency),
+            "period_index": period, "movement_class": "T", "amount": str(value),
+            "evidence_ref": evidence, "mirror_group_id": f"{event_id}:{group}",
+            "mirror_side": side, "mirror_policy": "equal",
+        })
+    payer_deposit = f"DEPOSIT:{payer}:{payer_bank}:{currency}"
+    payee_deposit = f"DEPOSIT:{payee}:{payee_bank}:{currency}"
+    payer_reserve = f"RESERVE:{payer_bank}:{central_bank}:{currency}"
+    payee_reserve = f"RESERVE:{payee_bank}:{central_bank}:{currency}"
+    # Customer deposit assets and their issuing banks' deposit liabilities.
+    add("PAYER-DEPOSIT-ASSET", f"{payer_deposit}:ASSET", payer, payer_bank,
+        payer_deposit, "PAYER-DEPOSIT", "asset_holder", -signed)
+    add("PAYER-DEPOSIT-LIABILITY", f"{payer_deposit}:LIABILITY", payer_bank, payer,
+        payer_deposit, "PAYER-DEPOSIT", "liability_issuer", -signed)
+    add("PAYEE-DEPOSIT-ASSET", f"{payee_deposit}:ASSET", payee, payee_bank,
+        payee_deposit, "PAYEE-DEPOSIT", "asset_holder", signed)
+    add("PAYEE-DEPOSIT-LIABILITY", f"{payee_deposit}:LIABILITY", payee_bank, payee,
+        payee_deposit, "PAYEE-DEPOSIT", "liability_issuer", signed)
+    # Reserve assets of the two banks and matching central-bank liabilities.
+    add("PAYER-RESERVE-ASSET", f"{payer_reserve}:ASSET", payer_bank, central_bank,
+        payer_reserve, "PAYER-RESERVE", "asset_holder", -signed)
+    add("PAYER-RESERVE-LIABILITY", f"{payer_reserve}:LIABILITY", central_bank, payer_bank,
+        payer_reserve, "PAYER-RESERVE", "liability_issuer", -signed)
+    add("PAYEE-RESERVE-ASSET", f"{payee_reserve}:ASSET", payee_bank, central_bank,
+        payee_reserve, "PAYEE-RESERVE", "asset_holder", signed)
+    add("PAYEE-RESERVE-LIABILITY", f"{payee_reserve}:LIABILITY", central_bank, payee_bank,
+        payee_reserve, "PAYEE-RESERVE", "liability_issuer", signed)
+    return movements
 
 
 def wage_stock_flow_movement_specs(events):
