@@ -146,6 +146,9 @@ class OperatingEvent:
     event_id: str
     event_type: str
     period_index: int
+    engagement_id: str
+    delivered_hours: Decimal
+    hourly_rate: Decimal
     claim_id: str
     worker_id: str
     employer_id: str
@@ -169,6 +172,9 @@ class OperatingEvent:
             "event_id": self.event_id,
             "event_type": self.event_type,
             "period_index": self.period_index,
+            "engagement_id": self.engagement_id,
+            "delivered_hours": str(self.delivered_hours),
+            "hourly_rate": str(self.hourly_rate),
             "claim_id": self.claim_id,
             "worker_id": self.worker_id,
             "employer_id": self.employer_id,
@@ -327,7 +333,8 @@ class OperatingWageJournal:
             movement["period_index"] = contract.period_index
         event = OperatingEvent(
             event_id=event_id, event_type="wage_accrual", period_index=contract.period_index,
-            claim_id=claim_id, worker_id=contract.worker_id, employer_id=contract.employer_id,
+            engagement_id=delivery.engagement_id, delivered_hours=delivery.delivered_hours,
+            hourly_rate=contract.hourly_rate, claim_id=claim_id, worker_id=contract.worker_id, employer_id=contract.employer_id,
             bank_id=self.bank_id, currency=contract.currency, amount=amount,
             causation_id=causation_id, evidence_ref=contract.evidence_ref,
             delivery_event_id=delivery.delivery_event_id,
@@ -408,7 +415,8 @@ class OperatingWageJournal:
             ])
         event = OperatingEvent(
             event_id=event_id, event_type="wage_payment", period_index=period_index,
-            claim_id=claim_id, worker_id=accrued.worker_id, employer_id=accrued.employer_id,
+            engagement_id=accrued.engagement_id, delivered_hours=accrued.delivered_hours,
+            hourly_rate=accrued.hourly_rate, claim_id=claim_id, worker_id=accrued.worker_id, employer_id=accrued.employer_id,
             bank_id=self.bank_id, currency=accrued.currency, amount=amount,
             causation_id=causation_id, evidence_ref=evidence_ref,
             delivery_event_id=accrued.delivery_event_id,
