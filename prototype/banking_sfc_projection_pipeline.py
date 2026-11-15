@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 
 from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapter,
@@ -18,10 +19,24 @@ def _opening_digest(snapshots):
                           .encode("utf-8")).hexdigest()
 
 
+def _require_register_instance_id(register, source_register_id):
+    actual = getattr(register, "register_instance_id", None)
+    try:
+        canonical = uuid.UUID(actual).hex if isinstance(actual, str) else None
+    except (ValueError, AttributeError):
+        canonical = None
+    if canonical is None or canonical != actual or source_register_id != actual:
+        raise OperatingFinancialSFCAdapterError(
+            "source_register_id must exactly match the durable financial register instance identity"
+        )
+    return actual
+
+
 def project_and_persist(register, *, principal_id, instrument_registry,
                         sector_registry, opening_snapshots, store,
                         source_register_id):
     """Verify source chain, rebuild projection, and atomically persist its checkpoint."""
+    _require_register_instance_id(register, source_register_id)
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("verified native financial register is required")
     history = register.history("operating-financial", principal_id=principal_id)
@@ -51,6 +66,7 @@ def rebuild_and_verify(register, *, principal_id, instrument_registry,
                        sector_registry, opening_snapshots, store,
                        source_register_id):
     """Re-read and verify source truth before comparing deterministic projection state."""
+    _require_register_instance_id(register, source_register_id)
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("financial source hash-chain verification failed")
     history = register.history("operating-financial", principal_id=principal_id)
