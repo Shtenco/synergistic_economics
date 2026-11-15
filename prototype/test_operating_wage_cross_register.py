@@ -73,7 +73,7 @@ def labour_fixture(path):
     return labour
 
 
-def build_wage_events(labour, *, payment_amount="40") (
+def build_wage_events(labour, *, payment_amount="40"):
     delivery = verified_delivery_from_register(
         labour, "ENG-1", "coordinator", verification_ref="SUPERVISOR-VERIFY-1",
     )
@@ -324,6 +324,39 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(replayed["outstanding_amount"], "0.00")
             self.assertTrue(reopened["financial"].verify())
 
+
+
+    def test_partial_wage_payment_keeps_legal_claim_active_in_six_register_commit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labour = labour_fixture(root / "labour.sqlite3")
+            delivery, contract, journal, events = build_wage_events(labour, payment_amount="15")
+            participants = make_participants(root)
+            coordinator = OperatingWageCoordinator(
+                root / "coordinator.sqlite3", participants,
+                require_authoritative_adapters=True,
+            )
+            operations = make_operations(delivery, contract, events)
+            self.assertEqual(operations["legal_rights"]["payload"]["event_type"], "right.created")
+            self.assertTrue(coordinator.submit(
+                "TX-WAGE-PARTIAL", "SCENARIO-WAGE-PARTIAL", "CAUSE-WAGE-PARTIAL", operations,
+            ))
+            self.assertEqual(coordinator.execute("TX-WAGE-PARTIAL"), "COMMITTED")
+            claim_id = events[0].claim_id
+            financial_state, financial_version = participants["financial"].state(
+                f"wage:{claim_id}", principal_id="coordinator",
+            )
+            self.assertEqual(financial_state["status"], "OUTSTANDING")
+            self.assertEqual(financial_state["outstanding_amount"], "25.00")
+            self.assertEqual(financial_version, 1)
+            legal_state, legal_version = participants["legal_rights"].state(
+                f"WAGE-RIGHT:{claim_id}", principal_id="coordinator",
+            )
+            self.assertEqual(legal_state["status"], "ACTIVE")
+            self.assertNotIn("extinguishment", legal_state)
+            self.assertEqual(legal_version, 1)
+            self.assertTrue(coordinator.is_visible("TX-WAGE-PARTIAL"))
+            self.assertTrue(participants["financial"].verify())
 
     def test_fully_paid_wage_claim_cannot_remain_legally_active(self):
         with tempfile.TemporaryDirectory() as tmp:
