@@ -276,7 +276,7 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             )
             self.assertEqual(rights_state["status"], "EXTINGUISHED")
             self.assertEqual(rights_state["extinguishment"]["settlement_event_id"], "WAGE-PAYMENT-1")
-            self.assertEqual(rights_state["extinguishment"]["settled_amount"], "40.00")
+            self.assertEqual(D(rights_state["extinguishment"]["settled_amount"]), D("40.00"))
             self.assertEqual(rights_version, 1)
 
             group = coordinator.committed_event_group("TX-WAGE-1")
