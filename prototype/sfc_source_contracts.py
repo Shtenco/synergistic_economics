@@ -338,6 +338,10 @@ class OpeningStockSnapshot:
         for row in self.positions:
             identity = row.identity
             terms = instrument_registry.resolve(identity.instrument_id, self.period_index)
+            if terms.nonnegative_gross_position and Decimal(row.balance) < 0:
+                raise SFCSourceContractError(
+                    f"negative opening balance prohibited by terms for {identity.instrument_id}"
+                )
             if (
                 identity.instrument_class != terms.instrument_class
                 or identity.denomination != terms.denomination
