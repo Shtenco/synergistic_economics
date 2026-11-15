@@ -383,6 +383,9 @@ class InputOutputEconomy:
             raise EconomyError(str(exc)) from exc
         if order.order_period != self.current_period + 1:
             raise EconomyError("capex orders must be paid in the next unstarted IO period")
+        payment_event_key = f"p{order.order_period}:capex-payment:{order.order_id}"
+        if payment_event_key in self._event_keys:
+            raise EconomyError("capex payment event key already exists")
         acquisition_cost = order.acquisition_cost
         payment = cash(acquisition_cost)
         if payment != acquisition_cost:
@@ -422,6 +425,9 @@ class InputOutputEconomy:
             if supplier.inventory.get(order.asset_type, ZERO) < order.quantity:
                 raise EconomyError("reserved capex goods disappeared before physical delivery")
             event_id = f"delivery:{order.order_id}"
+            delivery_event_key = f"p{period}:capex-delivery:{order.order_id}"
+            if delivery_event_key in self._event_keys:
+                raise EconomyError("capex delivery event key already exists")
             try:
                 self.fixed_asset_ledger.deliver(
                     event_id=event_id, order_id=order.order_id,
@@ -685,6 +691,13 @@ class InputOutputEconomy:
         if (not isinstance(period, int) or isinstance(period, bool)
                 or period != self.current_period + 1):
             raise EconomyError("IO periods must advance exactly one step from the current period")
+        # Preflight all deterministic delivery event identities before changing
+        # the period, asset ledger, supplier inventory or household state.
+        for order in self.capex_orders.values():
+            if order.delivery_period == period:
+                delivery_event_key = f"p{period}:capex-delivery:{order.order_id}"
+                if delivery_event_key in self._event_keys:
+                    raise EconomyError("capex delivery event key already exists")
         for household in self.households.values():
             household.period_wage_income = ZERO
             household.period_labour_hours = ZERO
