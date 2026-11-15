@@ -1,3 +1,5 @@
+import json
+import sqlite3
 import tempfile
 import unittest
 from decimal import Decimal as D
@@ -11,6 +13,7 @@ from operating_wage_journal import (
 from economic_stock_flow_reconciliation import (
     OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
 )
+from durable_event_register import RegisterError
 from operating_financial_register import (
     OperatingFinancialRegister, OperatingFinancialRegisterError,
     wage_stock_flow_movement_specs,
@@ -65,7 +68,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         self.journal = OperatingWageJournal(
             bank_id="bank-1",
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
             opening_deposits={("employer-1","LCU"):D("1000"), ("worker-1","LCU"):D("10")},
         )
         self.accrual = self.journal.accrue_verified_wage(
@@ -79,7 +82,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.register_path = root / "financial.sqlite3"
         self.register = OperatingFinancialRegister(
             self.register_path,
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         self.register.bootstrap_admin(
             principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
@@ -108,6 +111,57 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             expected_revision=self.register.state("operating-financial", principal_id="financial-root")[1],
         )
 
+    def test_source_instance_identity_survives_restart_and_chain_cursor_advances(self):
+        initial = self.register.source_checkpoint()
+        self.assertEqual(len(initial["register_instance_id"]), 32)
+        self.assertEqual(self.register.chain_hash_at(0), "0" * 64)
+        self.assertEqual(self.register.chain_hash_at(initial["event_count"]), initial["tail_hash"])
+        reopened = OperatingFinancialRegister(
+            self.register_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        restarted = reopened.source_checkpoint()
+        self.assertEqual(restarted, initial)
+        reopened.grant_access(
+            event_id="FINANCIAL-ACL-READER", idempotency_key="FINANCIAL-ACL-READER",
+            principal_id="audit-reader", permissions=["financial:read"],
+            actor_id="financial-root", authority_ref="AUDIT-POLICY", occurred_at=T,
+        )
+        advanced = reopened.source_checkpoint()
+        self.assertEqual(advanced["register_instance_id"], initial["register_instance_id"])
+        self.assertGreater(advanced["event_count"], initial["event_count"])
+        self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
+        self.assertEqual(reopened.chain_hash_at(initial["event_count"]), initial["tail_hash"])
+        # Catch the ValueError contract rather than relying on one import path for
+        # RegisterError: unittest discovery can load this shared module under a
+        # different qualified name in composed prototype test runs.
+        with self.assertRaisesRegex(ValueError, "non-negative integer") as caught:
+            reopened.chain_hash_at(True)
+        self.assertEqual(type(caught.exception).__name__, "RegisterError")
+
+    def test_legacy_v2_register_metadata_receives_persistent_instance_id(self):
+        legacy_path = Path(self.tmp.name) / "legacy-financial.sqlite3"
+        with sqlite3.connect(legacy_path) as con:
+            con.execute(
+                "CREATE TABLE register_meta("
+                "singleton_id INTEGER PRIMARY KEY,register_name TEXT NOT NULL,"
+                "schema_version INTEGER NOT NULL,event_count INTEGER NOT NULL,tail_hash TEXT NOT NULL)"
+            )
+            con.execute(
+                "INSERT INTO register_meta VALUES(1,'financial',2,0,?)", ("0" * 64,)
+            )
+        migrated = OperatingFinancialRegister(
+            legacy_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        first = migrated.source_checkpoint()
+        reopened = OperatingFinancialRegister(
+            legacy_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        self.assertEqual(reopened.source_checkpoint(), first)
+        self.assertEqual(len(first["register_instance_id"]), 32)
+
     def test_verified_wage_group_commits_to_durable_financial_register(self):
         operation = self.operation()
         token = self.register.prepare("TX-WAGE-1", operation)
@@ -124,6 +178,18 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(claim["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
         self.assertEqual(self.register.deposit_balance("employer-1", "LCU", principal_id="financial-root")[0], D("960.00"))
         self.assertEqual(self.register.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0], D("50.00"))
+        deposit_opening_p2 = self.register.deposit_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        deposit_opening_p3 = self.register.deposit_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        p2_balances = {row.identity.position_id: row.amount for row in deposit_opening_p2}
+        p3_balances = {row.identity.position_id: row.amount for row in deposit_opening_p3}
+        self.assertEqual(p2_balances["DEPOSIT:employer-1:bank-1:LCU:ASSET"], D("1000"))
+        self.assertEqual(p2_balances["DEPOSIT:worker-1:bank-1:LCU:ASSET"], D("10"))
+        self.assertEqual(p3_balances["DEPOSIT:employer-1:bank-1:LCU:ASSET"], D("960"))
+        self.assertEqual(p3_balances["DEPOSIT:worker-1:bank-1:LCU:ASSET"], D("50"))
         self.assertTrue(self.register.verify())
 
 
@@ -157,7 +223,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         receipt = self.register.commit("TX-WAGE-RESTART", token)
         reopened = OperatingFinancialRegister(
             self.register_path,
-            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         self.assertEqual(reopened.status("TX-WAGE-RESTART")["state"], "COMMITTED")
         self.assertEqual(reopened.commit("TX-WAGE-RESTART", token), receipt)
@@ -224,11 +290,203 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertTrue(all(item.closing == D("50.00") for item in worker_positions if item.period_index == 2))
 
 
+
+    def test_wage_opening_positions_replay_prior_accruals_and_settlements(self):
+        accrual_operation = self.operation((self.accrual,))
+        accrual_token = self.register.prepare("TX-WAGE-OPENING-ACCRUAL", accrual_operation)
+        self.register.commit("TX-WAGE-OPENING-ACCRUAL", accrual_token)
+        payment_operation = native_financial_operation(
+            (self.payment,), actor_id="financial-root", authority_ref="AUTH:PAYROLL",
+            effective_at=T, recorded_at=T, expected_revision=3,
+        )
+        payment_token = self.register.prepare("TX-WAGE-OPENING-PAYMENT", payment_operation)
+        self.register.commit("TX-WAGE-OPENING-PAYMENT", payment_token)
+
+        period_one = self.register.wage_opening_positions(
+            period_index=1, principal_id="financial-root",
+        )
+        period_two = self.register.wage_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        period_three = self.register.wage_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        self.assertEqual(len(period_one), 2)
+        self.assertEqual(len(period_two), 2)
+        self.assertEqual(len(period_three), 2)
+        self.assertTrue(all(row.amount == D("0") for row in period_one))
+        self.assertTrue(all(row.amount == D("40.00") for row in period_two))
+        self.assertTrue(all(row.amount == D("0") for row in period_three))
+        self.assertEqual(
+            {row.identity.holder_id for row in period_two},
+            {"worker-1", "employer-1"},
+        )
+        self.assertEqual(len({row.evidence_ref for row in period_two}), 1)
+        self.assertTrue(all(row.evidence_ref.startswith("financial-opening-v1:wage:2:") for row in period_two))
+        self.assertTrue(self.register.verify())
+
+    def test_preexisting_loan_and_refinancing_openings_do_not_create_cashflows(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "preexisting-principal.sqlite3",
+            sectors={"worker-1": "H", "bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_deposit_account(
+            event_id="OPEN-LEGACY-BORROWER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="LEGACY-BORROWER-ACCOUNT", opening_balance="100",
+            evidence_ref="BANK-OPEN-LEGACY-BORROWER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+        register.open_bank_reserve_account(
+            event_id="OPEN-LEGACY-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="LEGACY-RESERVE-ACCOUNT", opening_balance="50",
+            evidence_ref="CB-OPEN-LEGACY-RESERVE", actor_id="financial-root",
+            authority_ref="CBANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        register.record_existing_bank_loan(
+            event_id="LEGACY-LOAN-OPEN", loan_id="LEGACY-LOAN",
+            borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="60",
+            origination_period_index=1, opening_period_index=3,
+            source_account_ref="LEGACY-BORROWER-ACCOUNT",
+            contract_ref="SIGNED-LEGACY-LOAN",
+            contract_evidence_ref="CONTRACT-ARCHIVE-LOAN",
+            evidence_ref="AUDITED-LOAN-OPENING", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T,
+            recorded_at=T, expected_revision=2,
+        )
+        register.record_existing_refinancing_facility(
+            event_id="LEGACY-REFI-OPEN", facility_id="LEGACY-REFI",
+            bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="60",
+            origination_period_index=1, opening_period_index=3,
+            source_account_ref="LEGACY-RESERVE-ACCOUNT",
+            contract_ref="SIGNED-LEGACY-REFI",
+            contract_evidence_ref="CONTRACT-ARCHIVE-REFI",
+            evidence_ref="AUDITED-REFI-OPENING", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T,
+            recorded_at=T, expected_revision=3,
+        )
+        self.assertEqual(register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root", bank_id="bank-1",
+        )[0], D("100"))
+        self.assertEqual(register.bank_reserve_snapshot(
+            "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+        )["reserve_balance"], D("50"))
+        # An origination during period 1 is a T-flow in period 1, not an
+        # opening stock at the start of period 1.
+        self.assertEqual(
+            register.loan_opening_positions(period_index=1, principal_id="financial-root"),
+            (),
+        )
+        self.assertEqual(
+            register.refinancing_opening_positions(period_index=1, principal_id="financial-root"),
+            (),
+        )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "no evidenced opening balance for the requested earlier period",
+        ):
+            register.loan_opening_positions(
+                period_index=2, principal_id="financial-root",
+            )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "no evidenced opening balance for the requested earlier period",
+        ):
+            register.refinancing_opening_positions(
+                period_index=2, principal_id="financial-root",
+            )
+        self.assertEqual({row.amount for row in register.loan_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )}, {D("60")})
+        self.assertEqual({row.amount for row in register.refinancing_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )}, {D("60")})
+
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "cannot move backwards"):
+            register.commit_bank_credit(
+                event_id="LEGACY-LOAN-REPAY-BEFORE-OPENING",
+                event_type="bank.loan_principal_repaid",
+                loan_id="LEGACY-LOAN", borrower_id="worker-1", bank_id="bank-1",
+                currency="LCU", amount="1", period_index=2,
+                evidence_ref="EARLY-LOAN-REPAYMENT", actor_id="financial-root",
+                authority_ref="CREDIT-SERVICING", effective_at=T, recorded_at=T,
+                expected_revision=4, causation_id="LEGACY-LOAN-OPEN",
+            )
+        self.assertIsNone(register.status("LEGACY-LOAN-REPAY-BEFORE-OPENING"))
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "cannot move backwards"):
+            register.commit_central_bank_refinancing(
+                event_id="LEGACY-REFI-REPAY-BEFORE-OPENING",
+                event_type="central_bank.refinancing_principal_repaid",
+                facility_id="LEGACY-REFI", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="1",
+                period_index=2, evidence_ref="EARLY-REFI-REPAYMENT",
+                actor_id="financial-root", authority_ref="CBANK-SERVICING",
+                effective_at=T, recorded_at=T, expected_revision=4,
+                causation_id="LEGACY-REFI-OPEN",
+            )
+        self.assertIsNone(register.status("LEGACY-REFI-REPAY-BEFORE-OPENING"))
+
+        register.commit_bank_credit(
+            event_id="LEGACY-LOAN-REPAY", event_type="bank.loan_principal_repaid",
+            loan_id="LEGACY-LOAN", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="10", period_index=4,
+            evidence_ref="LOAN-REPAYMENT", actor_id="financial-root",
+            authority_ref="CREDIT-SERVICING", effective_at=T, recorded_at=T,
+            expected_revision=4, causation_id="LEGACY-LOAN-OPEN",
+        )
+        register.commit_central_bank_refinancing(
+            event_id="LEGACY-REFI-REPAY",
+            event_type="central_bank.refinancing_principal_repaid",
+            facility_id="LEGACY-REFI", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="10",
+            period_index=4, evidence_ref="REFI-REPAYMENT",
+            actor_id="financial-root", authority_ref="CBANK-SERVICING",
+            effective_at=T, recorded_at=T, expected_revision=5,
+            causation_id="LEGACY-REFI-OPEN",
+        )
+        self.assertEqual({row.amount for row in register.loan_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )}, {D("60")})
+        self.assertEqual({row.amount for row in register.refinancing_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )}, {D("60")})
+        self.assertEqual({row.amount for row in register.loan_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )}, {D("50")})
+        self.assertEqual({row.amount for row in register.refinancing_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )}, {D("50")})
+        self.assertEqual(register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root", bank_id="bank-1",
+        )[0], D("90"))
+        self.assertEqual(register.bank_reserve_snapshot(
+            "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+        )["reserve_balance"], D("40"))
+        opening_rows = [
+            row for row in register.history("operating-financial", principal_id="financial-root")
+            if row["event_type"] in {
+                "bank.loan_opening_recorded", "central_bank.refinancing_opening_recorded",
+            }
+        ]
+        self.assertEqual(len(opening_rows), 2)
+        for row in opening_rows:
+            envelope = json.loads(row["native_envelope_json"])
+            self.assertIsNone(envelope["stock_flow_movements"])
+            self.assertEqual(envelope["no_stock_flow_effect"], "NO_STOCK_FLOW_EFFECT")
+        self.assertTrue(register.verify())
+
     def test_register_rejects_unknown_sector_codes(self):
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "unsupported institutional sector"):
             OperatingFinancialRegister(
                 Path(self.tmp.name) / "bad-sector.sqlite3",
-                sectors={"worker-1":"HOUSEHOLD", "employer-1":"NFC", "bank-1":"CBank"},
+                sectors={"worker-1":"HOUSEHOLD", "employer-1":"NFC", "bank-1":"CB"},
             )
 
     def test_prepare_requires_explicit_bank_sector_and_distinct_entities(self):
@@ -293,7 +551,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
     def test_payment_minor_unit_must_match_both_durable_deposit_accounts(self):
         mismatch_path = Path(self.tmp.name) / "minor-mismatch.sqlite3"
         mismatch = OperatingFinancialRegister(
-            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         mismatch.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
         mismatch.open_deposit_account(
@@ -318,7 +576,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
     def test_durable_deposit_balance_blocks_overdraw_after_memory_precheck(self):
         low_path = Path(self.tmp.name) / "low-balance.sqlite3"
         low = OperatingFinancialRegister(
-            low_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+            low_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
         )
         low.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
         low.open_deposit_account(
@@ -352,6 +610,646 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "not authorized"):
             self.register.prepare("TX-WAGE-UNAUTHORIZED", operation)
         self.assertIsNone(self.register.status("TX-WAGE-UNAUTHORIZED"))
+
+
+    def test_bank_loan_origination_and_repayment_are_durable_and_change_deposit_stock(self):
+        receipt = self.register.commit_bank_credit(
+            event_id="BANK-LOAN-1", event_type="bank.loan_originated",
+            loan_id="LOAN-1", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="100", period_index=3,
+            evidence_ref="SIGNED-LOAN-1", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        self.assertEqual(receipt["participant"], "financial")
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("110.00"))
+        loan, version = self.register.loan_state("LOAN-1", principal_id="financial-root")
+        self.assertEqual(version, 3)
+        self.assertEqual(loan["outstanding_principal"], "100")
+        self.assertEqual(loan["bank_id"], "bank-1")
+        self.assertEqual(loan["origination_period_index"], 3)
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root")
+        self.assertEqual(snapshot["deposit_liabilities"], D("1110.00"))
+        self.assertEqual(snapshot["loan_assets"], D("100"))
+
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-REPAY-1", event_type="bank.loan_principal_repaid",
+            loan_id="LOAN-1", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="35", period_index=4,
+            evidence_ref="BANK-REPAYMENT-1", causation_id="BANK-LOAN-1",
+            actor_id="financial-root", authority_ref="BANK-CREDIT-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=3,
+        )
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("75.00"))
+        loan, version = self.register.loan_state("LOAN-1", principal_id="financial-root")
+        self.assertEqual(version, 4)
+        self.assertEqual(loan["outstanding_principal"], "65")
+        self.assertEqual(loan["origination_period_index"], 3)
+        self.assertEqual(loan["status"], "OUTSTANDING")
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root")
+        self.assertEqual(snapshot["deposit_liabilities"], D("1075.00"))
+        self.assertEqual(snapshot["loan_assets"], D("65"))
+        opening_at_origination = self.register.loan_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        opening_before_repayment = self.register.loan_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        opening_after_repayment = self.register.loan_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_at_origination], [D("0"), D("0")])
+        self.assertEqual([row.amount for row in opening_before_repayment], [D("100"), D("100")])
+        self.assertEqual([row.amount for row in opening_after_repayment], [D("65"), D("65")])
+        self.assertEqual(len({row.evidence_ref for row in opening_after_repayment}), 1)
+        deposit_opening_before_loan = self.register.deposit_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        deposit_opening_before_repayment = self.register.deposit_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        deposit_opening_after_repayment = self.register.deposit_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )
+        worker_asset = next(row for row in deposit_opening_before_loan
+                            if row.identity.position_id == "DEPOSIT:worker-1:bank-1:LCU:ASSET")
+        worker_asset_p4 = next(row for row in deposit_opening_before_repayment
+                               if row.identity.position_id == "DEPOSIT:worker-1:bank-1:LCU:ASSET")
+        worker_asset_p5 = next(row for row in deposit_opening_after_repayment
+                               if row.identity.position_id == "DEPOSIT:worker-1:bank-1:LCU:ASSET")
+        self.assertEqual(worker_asset.amount, D("10.00"))
+        self.assertEqual(worker_asset_p4.amount, D("110.00"))
+        self.assertEqual(worker_asset_p5.amount, D("75.00"))
+        self.assertEqual(len({row.evidence_ref for row in deposit_opening_after_repayment
+                              if row.identity.instrument_id == "DEPOSIT:worker-1:bank-1:LCU"}), 1)
+        self.assertTrue(self.register.verify())
+
+    def test_large_principal_repayments_preserve_all_accepted_decimal_digits(self):
+        principal = "123456789012345678901234567890.00"
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-LARGE", event_type="bank.loan_originated",
+            loan_id="LOAN-LARGE", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount=principal, period_index=3,
+            evidence_ref="SIGNED-LOAN-LARGE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-LARGE-REPAY", event_type="bank.loan_principal_repaid",
+            loan_id="LOAN-LARGE", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="1.00", period_index=4,
+            evidence_ref="BANK-LOAN-LARGE-REPAYMENT",
+            causation_id="BANK-LOAN-LARGE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+        expected = D("123456789012345678901234567889.00")
+        loan, _ = self.register.loan_state(
+            "LOAN-LARGE", principal_id="financial-root",
+        )
+        self.assertEqual(D(loan["outstanding_principal"]), expected)
+        self.assertEqual(
+            self.register.deposit_balance(
+                "worker-1", "LCU", principal_id="financial-root",
+            )[0],
+            D("123456789012345678901234567899.00"),
+        )
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root",
+        )
+        self.assertEqual(snapshot["loan_assets"], expected)
+        self.assertEqual(
+            snapshot["deposit_liabilities"],
+            D("123456789012345678901234568899.00"),
+        )
+
+    def test_historical_account_openings_respect_their_period_and_prior_flows(self):
+        self.register.sectors["late-entity"] = "H"
+        self.register.sectors["central-bank-1"] = "CBank"
+        self.register.open_deposit_account(
+            event_id="OPEN-LATE-DEPOSIT", entity_id="late-entity",
+            bank_id="bank-1", currency="LCU", account_ref="LATE-ACCOUNT",
+            opening_balance="25.00", evidence_ref="LATE-OPEN-EVIDENCE",
+            actor_id="financial-root", authority_ref="BANK-OPENING",
+            effective_at=T, recorded_at=T, expected_revision=2,
+            period_index=4,
+        )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "deposit movement precedes account opening period",
+        ):
+            self.register.commit_bank_credit(
+                event_id="LATE-LOAN-RETRO", event_type="bank.loan_originated",
+                loan_id="LATE-LOAN-RETRO", borrower_id="late-entity", bank_id="bank-1",
+                currency="LCU", amount="1.00", period_index=3,
+                evidence_ref="LATE-LOAN-RETRO-EVIDENCE", actor_id="financial-root",
+                authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+                expected_revision=3,
+            )
+        self.assertIsNone(self.register.status("LATE-LOAN-RETRO"))
+        self.register.commit_bank_credit(
+            event_id="LATE-LOAN-ORIG", event_type="bank.loan_originated",
+            loan_id="LATE-LOAN", borrower_id="late-entity", bank_id="bank-1",
+            currency="LCU", amount="100.00", period_index=4,
+            evidence_ref="LATE-LOAN-EVIDENCE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+
+        def late_deposit_rows(period):
+            return [
+                row for row in self.register.deposit_opening_positions(
+                    period_index=period, principal_id="financial-root",
+                )
+                if row.identity.instrument_id == "DEPOSIT:late-entity:bank-1:LCU"
+            ]
+
+        self.assertEqual(late_deposit_rows(3), [])
+        self.assertEqual([row.amount for row in late_deposit_rows(4)], [D("25.00"), D("25.00")])
+        self.assertEqual([row.amount for row in late_deposit_rows(5)], [D("125.00"), D("125.00")])
+
+        self.register.open_bank_reserve_account(
+            event_id="OPEN-LATE-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="LATE-RESERVE", opening_balance="40.00",
+            evidence_ref="LATE-RESERVE-EVIDENCE", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=4, period_index=4,
+        )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "reserve movement precedes account opening period",
+        ):
+            self.register.commit_central_bank_refinancing(
+                event_id="LATE-REFI-RETRO",
+                event_type="central_bank.refinancing_advanced",
+                facility_id="LATE-FACILITY-RETRO", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="1.00",
+                period_index=3, evidence_ref="LATE-REFI-RETRO-EVIDENCE",
+                actor_id="financial-root", authority_ref="REFI-POLICY",
+                effective_at=T, recorded_at=T, expected_revision=5,
+            )
+        self.assertIsNone(self.register.status("LATE-REFI-RETRO"))
+        self.register.commit_central_bank_refinancing(
+            event_id="LATE-REFI-ADVANCE",
+            event_type="central_bank.refinancing_advanced",
+            facility_id="LATE-FACILITY", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="100.00",
+            period_index=4, evidence_ref="LATE-REFI-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=5,
+        )
+        self.assertEqual(
+            self.register.reserve_opening_positions(
+                period_index=3, principal_id="financial-root",
+            ),
+            (),
+        )
+        self.assertEqual(
+            [row.amount for row in self.register.reserve_opening_positions(
+                period_index=4, principal_id="financial-root",
+            )],
+            [D("40.00"), D("40.00")],
+        )
+        self.assertEqual(
+            [row.amount for row in self.register.reserve_opening_positions(
+                period_index=5, principal_id="financial-root",
+            )],
+            [D("140.00"), D("140.00")],
+        )
+
+    def test_refinancing_state_retains_original_advance_period_after_repayment(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "refinancing-period.sqlite3",
+            sectors={"bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_bank_reserve_account(
+            event_id="OPEN-RESERVE-REFI", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="RESERVE-ACCOUNT-1", opening_balance="0",
+            evidence_ref="RESERVE-OPENING-EVIDENCE", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+        register.commit_central_bank_refinancing(
+            event_id="REFI-ADVANCE-1", event_type="central_bank.refinancing_advanced",
+            facility_id="FACILITY-1", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="100",
+            period_index=2, evidence_ref="REFI-ADVANCE-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=1,
+        )
+        register.commit_central_bank_refinancing(
+            event_id="REFI-REPAY-1", event_type="central_bank.refinancing_principal_repaid",
+            facility_id="FACILITY-1", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="40",
+            period_index=3, evidence_ref="REFI-REPAY-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=2,
+            causation_id="REFI-ADVANCE-1",
+        )
+        facility, version = register.refinancing_state(
+            "FACILITY-1", principal_id="financial-root",
+        )
+        self.assertEqual(version, 3)
+        self.assertEqual(facility["origination_period_index"], 2)
+        self.assertEqual(facility["outstanding_principal"], "60")
+        opening_at_advance = register.refinancing_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        opening_before_repayment = register.refinancing_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        opening_after_repayment = register.refinancing_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_at_advance], [D("0"), D("0")])
+        self.assertEqual([row.amount for row in opening_before_repayment], [D("100"), D("100")])
+        self.assertEqual([row.amount for row in opening_after_repayment], [D("60"), D("60")])
+        reserve_opening_before_advance = register.reserve_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        reserve_opening_before_repayment = register.reserve_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        reserve_opening_after_repayment = register.reserve_opening_positions(
+            period_index=4, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in reserve_opening_before_advance], [D("0"), D("0")])
+        self.assertEqual([row.amount for row in reserve_opening_before_repayment], [D("100"), D("100")])
+        self.assertEqual([row.amount for row in reserve_opening_after_repayment], [D("60"), D("60")])
+        self.assertEqual(len({row.evidence_ref for row in reserve_opening_after_repayment}), 1)
+        self.assertTrue(register.verify())
+
+    def test_existing_loan_opening_binds_exact_borrower_account_and_principal_bounds(self):
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "source account reference differs from the borrower's durable deposit account",
+        ):
+            self.register.record_existing_bank_loan(
+                event_id="LEGACY-LOAN-WRONG-ACCOUNT", loan_id="LEGACY-LOAN-WRONG-ACCOUNT",
+                borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="80",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="SOME-OTHER-ACCOUNT",
+                contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+                evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("LEGACY-LOAN-WRONG-ACCOUNT"))
+        self.assertEqual(
+            self.register.state("operating-financial", principal_id="financial-root")[1], 2,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "outstanding principal must be between zero and original principal",
+        ):
+            self.register.record_existing_bank_loan(
+                event_id="LEGACY-LOAN-OVER-ORIGINAL", loan_id="LEGACY-LOAN-OVER-ORIGINAL",
+                borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="100.01",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="WORKER-ACCOUNT-1",
+                contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+                evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("LEGACY-LOAN-OVER-ORIGINAL"))
+        self.assertEqual(
+            self.register.state("operating-financial", principal_id="financial-root")[1], 2,
+        )
+
+        self.register.record_existing_bank_loan(
+            event_id="LEGACY-LOAN-VALID", loan_id="LEGACY-LOAN-VALID",
+            borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="80",
+            origination_period_index=0, opening_period_index=3,
+            source_account_ref="WORKER-ACCOUNT-1",
+            contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+            evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        loan, version = self.register.loan_state(
+            "LEGACY-LOAN-VALID", principal_id="financial-root",
+        )
+        self.assertEqual(version, 3)
+        self.assertEqual(loan["outstanding_principal"], "80")
+        self.assertEqual(
+            self.register.deposit_balance(
+                "worker-1", "LCU", principal_id="financial-root",
+            )[0],
+            D("10.00"),
+        )
+
+    def test_preexisting_bank_loan_opening_is_a_stock_not_a_deposit_creation_flow(self):
+        self.register.record_existing_bank_loan(
+            event_id="LEGACY-LOAN-OPENING", loan_id="LEGACY-LOAN-1",
+            borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+            original_principal="150", outstanding_principal="100",
+            origination_period_index=0, opening_period_index=1,
+            source_account_ref="WORKER-ACCOUNT-1",
+            contract_ref="LEGACY-LOAN-CONTRACT",
+            contract_evidence_ref="SIGNED-LEGACY-LOAN-CONTRACT",
+            evidence_ref="OPENING-PRINCIPAL-CERTIFICATE",
+            actor_id="financial-root", authority_ref="OPENING-LOAN-ATTESTATION",
+            effective_at=T, recorded_at=T, expected_revision=2,
+        )
+        self.assertEqual(
+            self.register.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0],
+            D("10.00"),
+        )
+        loan, version = self.register.loan_state("LEGACY-LOAN-1", principal_id="financial-root")
+        self.assertEqual(version, 3)
+        self.assertEqual(loan["original_principal"], "150")
+        self.assertEqual(loan["outstanding_principal"], "100")
+        self.assertEqual(loan["origination_period_index"], 0)
+        self.assertEqual(loan["opening_period_index"], 1)
+        opening_period_1 = self.register.loan_opening_positions(
+            period_index=1, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_period_1], [D("100"), D("100")])
+        history, checkpoint = self.register.history_with_checkpoint(
+            "operating-financial", principal_id="financial-root",
+        )
+        opening_event = next(row for row in history if row["event_id"] == "LEGACY-LOAN-OPENING")
+        native_envelope = json.loads(opening_event["native_envelope_json"])
+        self.assertIsNone(native_envelope.get("stock_flow_movements"))
+        self.assertEqual(native_envelope["no_stock_flow_effect"], "NO_STOCK_FLOW_EFFECT")
+        self.register.commit_bank_credit(
+            event_id="LEGACY-LOAN-REPAYMENT", event_type="bank.loan_principal_repaid",
+            loan_id="LEGACY-LOAN-1", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="5", period_index=1,
+            evidence_ref="LEGACY-LOAN-REPAYMENT-EVIDENCE",
+            causation_id="LEGACY-LOAN-OPENING", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+        self.assertEqual(
+            self.register.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0],
+            D("5.00"),
+        )
+        opening_period_2 = self.register.loan_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_period_2], [D("95"), D("95")])
+        loan, _ = self.register.loan_state("LEGACY-LOAN-1", principal_id="financial-root")
+        self.assertEqual(loan["outstanding_principal"], "95")
+
+    def test_existing_refinancing_opening_binds_exact_reserve_account_and_principal_bounds(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "legacy-refinancing-guards.sqlite3",
+            sectors={"bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_bank_reserve_account(
+            event_id="REFI-GUARD-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="REFI-GUARD-ACCOUNT", opening_balance="200",
+            evidence_ref="REFI-GUARD-RESERVE-CERT", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "source account reference differs from the bank's durable reserve account",
+        ):
+            register.record_existing_refinancing_facility(
+                event_id="REFI-GUARD-WRONG-ACCOUNT", facility_id="REFI-GUARD-WRONG-ACCOUNT",
+                bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="80",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="SOME-OTHER-RESERVE",
+                contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+                evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=1,
+            )
+        self.assertIsNone(register.status("REFI-GUARD-WRONG-ACCOUNT"))
+        self.assertEqual(
+            register.state("operating-financial", principal_id="financial-root")[1], 1,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "outstanding principal must be between zero and original principal",
+        ):
+            register.record_existing_refinancing_facility(
+                event_id="REFI-GUARD-OVER-ORIGINAL", facility_id="REFI-GUARD-OVER-ORIGINAL",
+                bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="100.01",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="REFI-GUARD-ACCOUNT",
+                contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+                evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=1,
+            )
+        self.assertIsNone(register.status("REFI-GUARD-OVER-ORIGINAL"))
+        self.assertEqual(
+            register.state("operating-financial", principal_id="financial-root")[1], 1,
+        )
+
+        register.record_existing_refinancing_facility(
+            event_id="REFI-GUARD-VALID", facility_id="REFI-GUARD-VALID",
+            bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="80",
+            origination_period_index=0, opening_period_index=3,
+            source_account_ref="REFI-GUARD-ACCOUNT",
+            contract_ref="LEGACY-REFI-CONTRACT", contract_evidence_ref="SIGNED-REFI-CONTRACT",
+            evidence_ref="REFI-OPENING-CERT", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        facility, version = register.refinancing_state(
+            "REFI-GUARD-VALID", principal_id="financial-root",
+        )
+        self.assertEqual(version, 2)
+        self.assertEqual(facility["outstanding_principal"], "80")
+        self.assertEqual(
+            register.bank_reserve_snapshot(
+                "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+            )["reserve_balance"],
+            D("200"),
+        )
+
+    def test_preexisting_refinancing_opening_is_not_a_reserve_issuance(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "legacy-refinancing.sqlite3",
+            sectors={"bank-1": "CB", "central-bank-1": "CBank"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_bank_reserve_account(
+            event_id="LEGACY-RESERVE-OPENING", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="LEGACY-RESERVE-ACCOUNT", opening_balance="200",
+            evidence_ref="LEGACY-RESERVE-CERTIFICATE", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+        register.record_existing_refinancing_facility(
+            event_id="LEGACY-REFI-OPENING", facility_id="LEGACY-REFI-1",
+            bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+            original_principal="150", outstanding_principal="100",
+            origination_period_index=0, opening_period_index=1,
+            source_account_ref="LEGACY-RESERVE-ACCOUNT",
+            contract_ref="LEGACY-REFI-CONTRACT",
+            contract_evidence_ref="SIGNED-LEGACY-REFI-CONTRACT",
+            evidence_ref="REFI-OPENING-PRINCIPAL-CERTIFICATE",
+            actor_id="financial-root", authority_ref="OPENING-REFI-ATTESTATION",
+            effective_at=T, recorded_at=T, expected_revision=1,
+        )
+        self.assertEqual(
+            register.bank_reserve_snapshot(
+                "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+            )["reserve_balance"],
+            D("200"),
+        )
+        facility, version = register.refinancing_state(
+            "LEGACY-REFI-1", principal_id="financial-root",
+        )
+        self.assertEqual(version, 2)
+        self.assertEqual(facility["original_principal"], "150")
+        self.assertEqual(facility["outstanding_principal"], "100")
+        self.assertEqual(facility["origination_period_index"], 0)
+        opening_period_1 = register.refinancing_opening_positions(
+            period_index=1, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_period_1], [D("100"), D("100")])
+        register.commit_central_bank_refinancing(
+            event_id="LEGACY-REFI-REPAYMENT",
+            event_type="central_bank.refinancing_principal_repaid",
+            facility_id="LEGACY-REFI-1", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="30",
+            period_index=1, evidence_ref="LEGACY-REFI-REPAYMENT-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=2,
+            causation_id="LEGACY-REFI-OPENING",
+        )
+        self.assertEqual(
+            register.bank_reserve_snapshot(
+                "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
+            )["reserve_balance"],
+            D("170"),
+        )
+        opening_period_2 = register.refinancing_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        self.assertEqual([row.amount for row in opening_period_2], [D("70"), D("70")])
+        facility, _ = register.refinancing_state(
+            "LEGACY-REFI-1", principal_id="financial-root",
+        )
+        self.assertEqual(facility["outstanding_principal"], "70")
+
+    def test_interbank_settlement_replays_shared_deposit_and_reserve_openings(self):
+        register = OperatingFinancialRegister(
+            Path(self.tmp.name) / "interbank-openings.sqlite3",
+            sectors={
+                "payer-1": "H", "payee-1": "H",
+                "bank-1": "CB", "bank-2": "CB",
+                "central-bank-1": "CBank",
+            },
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        register.open_deposit_account(
+            event_id="IB-PAYER-DEPOSIT", entity_id="payer-1", bank_id="bank-1",
+            currency="LCU", account_ref="IB-PAYER-ACCOUNT", opening_balance="100",
+            evidence_ref="IB-PAYER-OPEN", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0,
+        )
+        register.open_deposit_account(
+            event_id="IB-PAYEE-DEPOSIT", entity_id="payee-1", bank_id="bank-2",
+            currency="LCU", account_ref="IB-PAYEE-ACCOUNT", opening_balance="5",
+            evidence_ref="IB-PAYEE-OPEN", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1,
+        )
+        register.open_bank_reserve_account(
+            event_id="IB-PAYER-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="IB-PAYER-RESERVE-ACCOUNT", opening_balance="50",
+            evidence_ref="IB-PAYER-RESERVE-OPEN", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        register.open_bank_reserve_account(
+            event_id="IB-PAYEE-RESERVE", bank_id="bank-2",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="IB-PAYEE-RESERVE-ACCOUNT", opening_balance="20",
+            evidence_ref="IB-PAYEE-RESERVE-OPEN", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+        register.settle_interbank_payment(
+            event_id="IB-SETTLEMENT-1", payment_id="PAYMENT-1",
+            payer_id="payer-1", payee_id="payee-1",
+            payer_bank_id="bank-1", payee_bank_id="bank-2",
+            central_bank_id="central-bank-1", currency="LCU",
+            amount="30", period_index=2, evidence_ref="IB-SETTLEMENT-EVIDENCE",
+            actor_id="financial-root", authority_ref="INTERBANK-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=4,
+        )
+        deposits = register.deposit_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        reserves = register.reserve_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        deposit_balances = {
+            row.identity.position_id: row.amount for row in deposits
+        }
+        reserve_balances = {
+            row.identity.position_id: row.amount for row in reserves
+        }
+        self.assertEqual(deposit_balances["DEPOSIT:payer-1:bank-1:LCU:ASSET"], D("70"))
+        self.assertEqual(deposit_balances["DEPOSIT:payee-1:bank-2:LCU:ASSET"], D("35"))
+        self.assertEqual(reserve_balances["RESERVE:bank-1:central-bank-1:LCU:ASSET"], D("20"))
+        self.assertEqual(reserve_balances["RESERVE:bank-2:central-bank-1:LCU:ASSET"], D("50"))
+        self.assertTrue(register.verify())
+
+    def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
+        self.register.sectors["other-bank"] = "CB"
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
+            self.register.commit_bank_credit(
+                event_id="BANK-LOAN-WRONG-BANK", event_type="bank.loan_originated",
+                loan_id="LOAN-WRONG-BANK", borrower_id="worker-1", bank_id="other-bank",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-LOAN-WRONG-BANK", actor_id="financial-root",
+                authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("BANK-LOAN-WRONG-BANK"))
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "existing durable loan"):
+            self.register.commit_bank_credit(
+                event_id="BANK-LOAN-REPAY-NO-LOAN", event_type="bank.loan_principal_repaid",
+                loan_id="NO-LOAN", borrower_id="worker-1", bank_id="bank-1",
+                currency="LCU", amount="11", period_index=3,
+                evidence_ref="REPAYMENT-NO-LOAN", causation_id="NO-LOAN",
+                actor_id="financial-root", authority_ref="BANK-CREDIT-POLICY",
+                effective_at=T, recorded_at=T, expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("BANK-LOAN-REPAY-NO-LOAN"))
+        self.assertEqual(self.register.deposit_balance(
+            "worker-1", "LCU", principal_id="financial-root")[0], D("10.00"))
+
 
 
 if __name__ == "__main__":

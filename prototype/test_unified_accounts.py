@@ -3,8 +3,9 @@ from decimal import Decimal as D
 
 from unified_accounts import (
     Account, BalanceError, Claim, DoubleEntryLedger, JournalEntry, Posting,
-    PhysicalStock, StockFlow, consolidated_internal_claims, loan_origination,
-    money, net_worth, token_issue_as_liability, value_added,
+    PhysicalStock, StockFlow, bank_loan_origination,
+    bank_loan_principal_repayment, consolidated_internal_claims,
+    loan_origination, money, net_worth, token_issue_as_liability, value_added,
 )
 
 
@@ -13,6 +14,7 @@ def ledger_with_accounts():
     for account in [
         Account("cash:lender", "lender", "asset"),
         Account("loan:lender", "lender", "asset"),
+        Account("equity:lender", "lender", "equity"),
         Account("cash:borrower", "borrower", "asset"),
         Account("debt:borrower", "borrower", "liability"),
         Account("income:borrower", "borrower", "income"),
@@ -22,7 +24,7 @@ def ledger_with_accounts():
         ledger.add_account(account)
     ledger.post(JournalEntry("open-lender", "opening", (
         Posting("cash:lender", debit=money(100)),
-        Posting("loan:lender", credit=money(100)),
+        Posting("equity:lender", credit=money(100)),
     )))
     return ledger
 
@@ -112,6 +114,143 @@ class UnifiedBalanceTests(unittest.TestCase):
             PhysicalStock("energy", "MWh", D("1"), D("0"), D("2")).reconcile()
         with self.assertRaises(BalanceError):
             money("NaN")
+
+
+    def test_cash_funded_loan_cannot_overdraw_lender(self):
+        ledger = ledger_with_accounts()
+        before_entries = len(ledger.entries)
+        with self.assertRaisesRegex(BalanceError, "lender cash balance is insufficient"):
+            loan_origination(ledger, lender_cash="cash:lender",
+                             lender_receivable="loan:lender",
+                             borrower_cash="cash:borrower",
+                             borrower_payable="debt:borrower",
+                             amount=101, entry_prefix="overdraw")
+        self.assertEqual(len(ledger.entries), before_entries)
+        self.assertEqual(ledger.balance("cash:lender"), D("100.00"))
+        self.assertEqual(ledger.balance("loan:lender"), D("0"))
+        self.assertEqual(ledger.balance("cash:borrower"), D("0"))
+        self.assertEqual(ledger.balance("debt:borrower"), D("0"))
+
+    def test_cash_funded_loan_preflights_both_entry_ids_before_mutation(self):
+        ledger = ledger_with_accounts()
+        ledger.post(JournalEntry("atomic-B", "pre-existing ID", (
+            Posting("cash:borrower", debit=money(1)),
+            Posting("debt:borrower", credit=money(1)),
+        )))
+        before_entries = len(ledger.entries)
+        with self.assertRaisesRegex(BalanceError, "entry IDs"):
+            loan_origination(ledger, lender_cash="cash:lender",
+                             lender_receivable="loan:lender",
+                             borrower_cash="cash:borrower",
+                             borrower_payable="debt:borrower",
+                             amount=10, entry_prefix="atomic")
+        self.assertEqual(len(ledger.entries), before_entries)
+        self.assertEqual(ledger.balance("cash:lender"), D("100.00"))
+        self.assertEqual(ledger.balance("loan:lender"), D("0"))
+        self.assertEqual(ledger.balance("cash:borrower"), D("1.00"))
+        self.assertEqual(ledger.balance("debt:borrower"), D("1.00"))
+
+    def test_bank_loan_origination_creates_matching_deposit_and_debt(self):
+        ledger = DoubleEntryLedger()
+        for account in (
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
+        ):
+            ledger.add_account(account)
+        bank_loan_origination(
+            ledger, bank_loan_receivable="bank:loan",
+            bank_deposit_liability="bank:deposits",
+            borrower_deposit_asset="borrower:deposit",
+            borrower_loan_payable="borrower:loan",
+            amount=100, entry_id="bank-loan-1",
+        )
+        self.assertEqual(ledger.balance("bank:loan"), D("100.00"))
+        self.assertEqual(ledger.balance("bank:deposits"), D("100.00"))
+        self.assertEqual(ledger.balance("borrower:deposit"), D("100.00"))
+        self.assertEqual(ledger.balance("borrower:loan"), D("100.00"))
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
+        self.assertEqual(len(ledger.entries), 1)
+
+    def test_bank_loan_principal_repayment_destroys_matching_deposit(self):
+        ledger = DoubleEntryLedger()
+        for account in (
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
+        ):
+            ledger.add_account(account)
+        bank_loan_origination(
+            ledger, bank_loan_receivable="bank:loan",
+            bank_deposit_liability="bank:deposits",
+            borrower_deposit_asset="borrower:deposit",
+            borrower_loan_payable="borrower:loan",
+            amount=100, entry_id="bank-loan-2",
+        )
+        bank_loan_principal_repayment(
+            ledger, bank_loan_receivable="bank:loan",
+            bank_deposit_liability="bank:deposits",
+            borrower_deposit_asset="borrower:deposit",
+            borrower_loan_payable="borrower:loan",
+            amount=35, entry_id="bank-repay-1",
+        )
+        for account_id in ("bank:loan", "bank:deposits",
+                           "borrower:deposit", "borrower:loan"):
+            self.assertEqual(ledger.balance(account_id), D("65.00"))
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
+
+    def test_bank_loan_repayment_cannot_overdraw_deposit_or_partially_post(self):
+        ledger = DoubleEntryLedger()
+        for account in (
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
+        ):
+            ledger.add_account(account)
+        bank_loan_origination(
+            ledger, bank_loan_receivable="bank:loan",
+            bank_deposit_liability="bank:deposits",
+            borrower_deposit_asset="borrower:deposit",
+            borrower_loan_payable="borrower:loan",
+            amount=100, entry_id="bank-loan-3",
+        )
+        before_entries = len(ledger.entries)
+        with self.assertRaisesRegex(BalanceError, "borrower deposit balance"):
+            bank_loan_principal_repayment(
+                ledger, bank_loan_receivable="bank:loan",
+                bank_deposit_liability="bank:deposits",
+                borrower_deposit_asset="borrower:deposit",
+                borrower_loan_payable="borrower:loan",
+                amount=101, entry_id="bank-repay-too-much",
+            )
+        self.assertEqual(len(ledger.entries), before_entries)
+        for account_id in ("bank:loan", "bank:deposits",
+                           "borrower:deposit", "borrower:loan"):
+            self.assertEqual(ledger.balance(account_id), D("100.00"))
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
+
+    def test_bank_credit_rejects_wrong_issuing_bank_counterparty_without_posting(self):
+        ledger = DoubleEntryLedger()
+        for account in (
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="other-bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
+        ):
+            ledger.add_account(account)
+        with self.assertRaisesRegex(BalanceError, "counterparties must bind"):
+            bank_loan_origination(
+                ledger, bank_loan_receivable="bank:loan",
+                bank_deposit_liability="bank:deposits",
+                borrower_deposit_asset="borrower:deposit",
+                borrower_loan_payable="borrower:loan",
+                amount=100, entry_id="wrong-bank-counterparty",
+            )
+        self.assertEqual(len(ledger.entries), 0)
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
 
 
 if __name__ == "__main__":

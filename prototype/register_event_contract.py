@@ -64,10 +64,16 @@ def normalize_event_envelope(register_id, envelope):
         raise RegisterEventContractError(f"unknown native event envelope fields: {sorted(unknown)}")
     if "stock_flow_movements" in result:
         specs = result["stock_flow_movements"]
-        if not isinstance(specs, list) or not specs or any(not isinstance(item, Mapping) for item in specs):
-            raise RegisterEventContractError("stock_flow_movements must be a non-empty array of objects")
-        if "no_stock_flow_effect" in result:
-            raise RegisterEventContractError("event cannot declare movements and no-stock-flow effect together")
+        if specs is None:
+            if "no_stock_flow_effect" not in result:
+                raise RegisterEventContractError(
+                    "null stock_flow_movements requires an explicit no-stock-flow effect"
+                )
+        else:
+            if not isinstance(specs, list) or not specs or any(not isinstance(item, Mapping) for item in specs):
+                raise RegisterEventContractError("stock_flow_movements must be a non-empty array of objects or explicit null")
+            if "no_stock_flow_effect" in result:
+                raise RegisterEventContractError("event cannot declare movements and no-stock-flow effect together")
     if "no_stock_flow_effect" in result:
         _text(result["no_stock_flow_effect"], "no_stock_flow_effect")
     migration = result.get("migration")

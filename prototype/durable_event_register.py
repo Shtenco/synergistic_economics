@@ -10,6 +10,7 @@ from pathlib import Path
 import hashlib
 import json
 import sqlite3
+import uuid
 from typing import Mapping
 from datetime import datetime, timezone
 
@@ -76,7 +77,8 @@ class DurableEventRegister:
                     register_name TEXT NOT NULL,
                     schema_version INTEGER NOT NULL,
                     event_count INTEGER NOT NULL CHECK(event_count>=0),
-                    tail_hash TEXT NOT NULL
+                    tail_hash TEXT NOT NULL,
+                    register_instance_id TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS register_events(
                     commit_sequence INTEGER PRIMARY KEY CHECK(commit_sequence>0),
@@ -119,12 +121,25 @@ class DurableEventRegister:
                     ON native_participant_inbox
                     BEGIN SELECT RAISE(ABORT,'prepared native participant payload is immutable'); END;
             """)
-            row = con.execute("SELECT register_name,schema_version FROM register_meta WHERE singleton_id=1").fetchone()
+            # Additive migration: old V2 stores receive one durable instance ID.
+            # The ID is persisted in the source database and survives process restarts.
+            columns = {item["name"] for item in con.execute("PRAGMA table_info(register_meta)")}
+            if "register_instance_id" not in columns:
+                con.execute("ALTER TABLE register_meta ADD COLUMN register_instance_id TEXT")
+            row = con.execute("SELECT register_name,schema_version,register_instance_id FROM register_meta WHERE singleton_id=1").fetchone()
             if row is None:
-                con.execute("INSERT INTO register_meta VALUES(1,?,?,0,?)",
-                            (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS))
+                instance_id = uuid.uuid4().hex
+                con.execute(
+                    "INSERT INTO register_meta(singleton_id,register_name,schema_version,event_count,tail_hash,register_instance_id) VALUES(1,?,?,0,?,?)",
+                    (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS, instance_id),
+                )
             elif (row["register_name"], row["schema_version"]) != (self.REGISTER_NAME, self.SCHEMA_VERSION):
                 raise RegisterError("register identity/schema mismatch; explicit migration required")
+            elif not row["register_instance_id"]:
+                con.execute(
+                    "UPDATE register_meta SET register_instance_id=? WHERE singleton_id=1",
+                    (uuid.uuid4().hex,),
+                )
 
     def _connect(self):
         con = sqlite3.connect(self.path, timeout=30, isolation_level=None)
@@ -147,7 +162,11 @@ class DurableEventRegister:
 
     def _load(self, con):
         meta = con.execute("SELECT * FROM register_meta WHERE singleton_id=1").fetchone()
-        if meta is None or meta["register_name"] != self.REGISTER_NAME or meta["schema_version"] != self.SCHEMA_VERSION:
+        if (meta is None or meta["register_name"] != self.REGISTER_NAME
+                or meta["schema_version"] != self.SCHEMA_VERSION
+                or not isinstance(meta["register_instance_id"], str)
+                or len(meta["register_instance_id"]) != 32
+                or any(char not in "0123456789abcdef" for char in meta["register_instance_id"])):
             raise RegisterError("register metadata is missing or incompatible")
         rows = con.execute("SELECT * FROM register_events ORDER BY commit_sequence").fetchall()
         previous, states, versions, acl = GENESIS, {}, {}, {}
@@ -165,6 +184,38 @@ class DurableEventRegister:
                 raise RegisterError("persisted event chain hash mismatch")
             event = dict(row)
             event["payload"] = payload
+            # Reattach verified envelope metadata: the immutable event row stores
+            # domain payload, while the committed prepare inbox stores its full envelope.
+            prepared = con.execute(
+                "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                (row["event_id"],),
+            ).fetchone()
+            if prepared is not None:
+                raw_envelope = prepared["payload_json"]
+                if prepared["state"] not in {"PREPARED", "COMMITTED"} or not isinstance(raw_envelope, str):
+                    raise RegisterError("event has a missing or non-committed native envelope")
+                if hashlib.sha256(raw_envelope.encode("utf-8")).hexdigest() != prepared["payload_digest"]:
+                    raise RegisterError("committed native envelope digest mismatch")
+                try:
+                    native_envelope = json.loads(raw_envelope)
+                except (TypeError, json.JSONDecodeError) as exc:
+                    raise RegisterError("committed native envelope is invalid JSON") from exc
+                if canonical_json(native_envelope) != raw_envelope:
+                    raise RegisterError("committed native envelope is not canonical")
+                for field, expected_value in (
+                    ("event_type", row["event_type"]),
+                    ("effective_at", row["effective_at"]),
+                    ("recorded_at", row["recorded_at"]),
+                    ("actor_id", row["actor_id"]),
+                    ("authority_ref", row["authority_ref"]),
+                    ("idempotency_key", row["idempotency_key"]),
+                    ("payload", payload),
+                ):
+                    if native_envelope.get(field) != expected_value:
+                        raise RegisterError(f"committed native envelope {field} differs from immutable event")
+                for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                    if field in native_envelope:
+                        event[field] = native_envelope[field]
             if row["event_type"] == "acl.granted":
                 principal = required_text(payload.get("principal_id"), "principal_id")
                 permissions = payload.get("permissions")
@@ -244,12 +295,14 @@ class DurableEventRegister:
                     "SELECT 1 FROM native_participant_inbox WHERE state='PREPARED' LIMIT 1").fetchone():
                     raise RegisterError("ACL changes are serialized behind prepared domain transactions")
                 prepared_authority = False
+                prepared_envelope = None
                 if allow_prepared_txid is not None:
                     prepared = con.execute("SELECT state,payload_json FROM native_participant_inbox WHERE transaction_id=?",
                                            (allow_prepared_txid,)).fetchone()
                     if prepared is None or prepared["state"] != "PREPARED":
                         raise RegisterError("native commit is missing its durable prepared authority record")
                     envelope = json.loads(prepared["payload_json"])
+                    prepared_envelope = envelope
                     if (envelope.get("event_type"),envelope.get("effective_at"),envelope.get("recorded_at"),
                         envelope.get("actor_id"),envelope.get("authority_ref"),envelope.get("idempotency_key"),
                         envelope.get("payload")) != (event_type,effective_at,recorded_at,actor_id,authority_ref,
@@ -278,6 +331,10 @@ class DurableEventRegister:
                              "aggregate_version":current+1,"effective_at":effective_at,
                              "recorded_at":recorded_at,"actor_id":actor_id,
                              "authority_ref":authority_ref,"payload":dict(payload)}
+                    if prepared_envelope is not None:
+                        for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                            if field in prepared_envelope:
+                                event[field] = prepared_envelope[field]
                     states[aggregate_id] = self.reduce_event(states.get(aggregate_id), event)
                 meta = con.execute("SELECT event_count,tail_hash FROM register_meta WHERE singleton_id=1").fetchone()
                 sequence = meta["event_count"] + 1
@@ -346,7 +403,62 @@ class DurableEventRegister:
             _, _, acl, rows = self._load(con)
             if not self._authorized(acl, principal_id, self.read_permission):
                 raise RegisterError("actor is not authorized to read this register")
-            return tuple(dict(row) for row in rows if row["aggregate_id"] == aggregate_id)
+            result = []
+            for source in rows:
+                if source["aggregate_id"] != aggregate_id:
+                    continue
+                item = dict(source)
+                item["payload"] = json.loads(source["payload_json"])
+                # Native prepare/commit stores the complete immutable envelope,
+                # including SFC movement specs, in the durable participant inbox.
+                # The event log itself stores only the domain payload. Reattach
+                # the committed envelope for deterministic downstream projection.
+                prepared = con.execute(
+                    "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                    (source["event_id"],),
+                ).fetchone()
+                if prepared is not None:
+                    if prepared["state"] != "COMMITTED":
+                        raise RegisterError("history event has a non-committed native envelope")
+                    item["native_envelope_json"] = prepared["payload_json"]
+                    item["native_envelope_sha256"] = prepared["payload_digest"]
+                result.append(item)
+            return tuple(result)
+
+    def history_with_checkpoint(self, aggregate_id, *, principal_id):
+        """Read verified aggregate history and its global chain tail in one SQLite snapshot."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            _, _, acl, rows = self._load(con)
+            if not self._authorized(acl, principal_id, self.read_permission):
+                raise RegisterError("actor is not authorized to read this register")
+            result = []
+            for source in rows:
+                if source["aggregate_id"] != aggregate_id:
+                    continue
+                item = dict(source)
+                item["payload"] = json.loads(source["payload_json"])
+                prepared = con.execute(
+                    "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                    (source["event_id"],),
+                ).fetchone()
+                if prepared is not None:
+                    if prepared["state"] != "COMMITTED":
+                        raise RegisterError("history event has a non-committed native envelope")
+                    item["native_envelope_json"] = prepared["payload_json"]
+                    item["native_envelope_sha256"] = prepared["payload_digest"]
+                result.append(item)
+            meta = con.execute(
+                "SELECT register_instance_id,event_count,tail_hash FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+            if meta is None:
+                raise RegisterError("register source checkpoint metadata is missing")
+            checkpoint = {
+                "register_instance_id": meta["register_instance_id"],
+                "event_count": meta["event_count"],
+                "tail_hash": meta["tail_hash"],
+            }
+            return tuple(result), checkpoint
 
     def _participant_token(self, txid, operation):
         digest = hashlib.sha256(canonical_json(operation["payload"]).encode("utf-8")).hexdigest()
@@ -425,6 +537,9 @@ class DurableEventRegister:
                     "aggregate_version":revision+1,"effective_at":envelope["effective_at"],
                     "recorded_at":envelope["recorded_at"],"actor_id":envelope["actor_id"],
                     "authority_ref":envelope["authority_ref"],"payload":dict(envelope["payload"])}
+                for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                    if field in envelope:
+                        candidate[field] = envelope[field]
                 self.reduce_event(states.get(stream),candidate)
                 con.execute("INSERT INTO native_participant_inbox VALUES(?,?,?,?,?,?,?,'PREPARED',NULL)",
                     (txid,stream,native_id,digest,payload_json,revision,token))
@@ -525,7 +640,44 @@ class DurableEventRegister:
         except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError):
             return False
 
+    def source_checkpoint(self):
+        """Return verified durable source identity and the global event-chain cursor."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            self._load(con)
+            row = con.execute(
+                "SELECT register_instance_id,event_count,tail_hash FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+            if row is None:
+                raise RegisterError("register source checkpoint metadata is missing")
+            return {
+                "register_instance_id": row["register_instance_id"],
+                "event_count": row["event_count"],
+                "tail_hash": row["tail_hash"],
+            }
+
+    def chain_hash_at(self, commit_sequence):
+        """Return a verified hash-chain ancestor at a global commit cursor."""
+        if (not isinstance(commit_sequence, int) or isinstance(commit_sequence, bool)
+                or commit_sequence < 0):
+            raise RegisterError("commit_sequence must be a non-negative integer")
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            self._load(con)
+            if commit_sequence == 0:
+                return GENESIS
+            row = con.execute(
+                "SELECT chain_hash FROM register_events WHERE commit_sequence=?",
+                (commit_sequence,),
+            ).fetchone()
+            if row is None:
+                raise RegisterError("requested source-chain ancestor cursor does not exist")
+            return row["chain_hash"]
+
+    @property
+    def register_instance_id(self):
+        return self.source_checkpoint()["register_instance_id"]
+
     @property
     def total_event_count(self):
-        with closing(self._connect()) as con:
-            return con.execute("SELECT event_count FROM register_meta WHERE singleton_id=1").fetchone()[0]
+        return self.source_checkpoint()["event_count"]

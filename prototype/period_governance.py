@@ -56,19 +56,26 @@ class PeriodGovernance:
     authorization_verifier(approver_id, role, request_context, evidence_ref)
     must authenticate the identity, authorize the role for this exact request,
     and verify an independently issued approval assertion.
+    register_attestation_authorizer(register_name, signer_key_id, declaration)
+    must verify that the independently trusted signing key is authorized to
+    attest for that exact native register.
     """
 
     def __init__(self, database_path, checkpoint_verifier: Callable[[str, str], dict],
-                 service_id: str, authorization_verifier: Callable[[str, str, dict, str], bool]):
+                 service_id: str, authorization_verifier: Callable[[str, str, dict, str], bool],
+                 register_attestation_authorizer: Callable[[str, str, dict], bool]):
         if not callable(checkpoint_verifier):
             raise PeriodGovernanceError("an external checkpoint verifier is mandatory")
         if not callable(authorization_verifier):
             raise PeriodGovernanceError("an independent approval authorization verifier is mandatory")
+        if not callable(register_attestation_authorizer):
+            raise PeriodGovernanceError("a per-register attestation authority verifier is mandatory")
         self.service_id = _required(service_id, "service_id")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.checkpoint_verifier = checkpoint_verifier
         self.authorization_verifier = authorization_verifier
+        self.register_attestation_authorizer = register_attestation_authorizer
         with closing(self._connect()) as con:
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS period_closures(
@@ -82,6 +89,30 @@ class PeriodGovernance:
                     period INTEGER PRIMARY KEY,
                     generation INTEGER NOT NULL CHECK(generation>=0)
                 );
+                CREATE TABLE IF NOT EXISTS register_period_attestations(
+                    period INTEGER NOT NULL CHECK(period>=0),
+                    generation INTEGER NOT NULL CHECK(generation>=0),
+                    register_name TEXT NOT NULL CHECK(register_name IN
+                      ('physical','capital','labour','product','legal_rights','financial')),
+                    attestation_ref TEXT NOT NULL,
+                    attestation_digest TEXT NOT NULL,
+                    source_register_id TEXT NOT NULL,
+                    source_sequence INTEGER NOT NULL CHECK(source_sequence>=0),
+                    source_chain_hash TEXT NOT NULL,
+                    period_event_count INTEGER NOT NULL CHECK(period_event_count>=0),
+                    period_event_root TEXT NOT NULL,
+                    activity_status TEXT NOT NULL CHECK(activity_status IN ('ACTIVITY','ZERO_ACTIVITY')),
+                    opening_state_hash TEXT NOT NULL,
+                    closing_state_hash TEXT NOT NULL,
+                    reconciliation_hash TEXT NOT NULL,
+                    PRIMARY KEY(period,generation,register_name)
+                );
+                CREATE TRIGGER IF NOT EXISTS register_period_attestations_no_update
+                    BEFORE UPDATE ON register_period_attestations
+                    BEGIN SELECT RAISE(ABORT,'register period attestations are immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS register_period_attestations_no_delete
+                    BEFORE DELETE ON register_period_attestations
+                    BEGIN SELECT RAISE(ABORT,'register period attestations are immutable'); END;
                 CREATE TABLE IF NOT EXISTS generation_history(
                     period INTEGER NOT NULL,
                     generation INTEGER NOT NULL,
@@ -219,6 +250,178 @@ class PeriodGovernance:
             raise PeriodGovernanceError("checkpoint belongs to a different service identity")
         return ref, digest, manifest
 
+    def _verify_register_completeness(self, manifest, period, generation):
+        entries = manifest.get("register_completeness")
+        if not isinstance(entries, list) or len(entries) != len(REGISTERS):
+            raise PeriodGovernanceError(
+                "signed period checkpoint must include exactly six register completeness attestations"
+            )
+        normalized = []
+        seen = set()
+        signer_keys = {_required(manifest.get("signer_key_id"), "period checkpoint signer_key_id")}
+        source_register_ids = set()
+        empty_event_root = hashlib.sha256(_canonical([]).encode("utf-8")).hexdigest()
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {
+                "register_name", "attestation_ref", "attestation_digest",
+            }:
+                raise PeriodGovernanceError("register completeness reference is malformed")
+            name = _required(entry.get("register_name"), "register_name")
+            if name not in REGISTERS or name in seen:
+                raise PeriodGovernanceError("register completeness declarations must cover each register exactly once")
+            seen.add(name)
+            ref = _required(entry.get("attestation_ref"), "attestation_ref")
+            digest = _sha256(entry.get("attestation_digest"), "attestation_digest")
+            attestation_manifest = self.checkpoint_verifier(ref, digest)
+            if not isinstance(attestation_manifest, dict):
+                raise PeriodGovernanceError("register attestation verifier must return a verified signed manifest")
+            if (
+                attestation_manifest.get("service_id") != self.service_id
+                or attestation_manifest.get("period") != period
+                or attestation_manifest.get("projection_generation") != generation
+                or attestation_manifest.get("period_closed") is not False
+            ):
+                raise PeriodGovernanceError("register attestation checkpoint has the wrong service/period/generation or close state")
+            signer_key = _required(
+                attestation_manifest.get("signer_key_id"), "register attestation signer_key_id",
+            )
+            if signer_key in signer_keys:
+                raise PeriodGovernanceError(
+                    "each register completeness declaration must have an independent signing key"
+                )
+            signer_keys.add(signer_key)
+            attestation = attestation_manifest.get("register_declaration")
+            if not isinstance(attestation, dict):
+                raise PeriodGovernanceError("signed register checkpoint is missing register_declaration")
+            if (
+                attestation.get("declaration_type") != "register_period_completeness"
+                or attestation.get("register_name") != name
+                or attestation.get("period") != period
+                or attestation.get("projection_generation") != generation
+                or attestation.get("complete") is not True
+            ):
+                raise PeriodGovernanceError(
+                    f"{name} attestation does not certify this complete period/generation"
+                )
+            if not self.register_attestation_authorizer(name, signer_key, attestation):
+                raise PeriodGovernanceError(
+                    f"{name} attestation signing key is not authorized for that native register"
+                )
+            source_id = _required(attestation.get("source_register_id"), "source_register_id")
+            if source_id in source_register_ids:
+                raise PeriodGovernanceError(
+                    "each register completeness declaration must identify a distinct source register"
+                )
+            source_register_ids.add(source_id)
+            sequence = attestation.get("source_sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
+                raise PeriodGovernanceError("register source_sequence must be a non-negative integer")
+            source_hash = _sha256(attestation.get("source_chain_hash"), "source_chain_hash")
+            if (
+                attestation_manifest.get("commit_sequence") != sequence
+                or attestation_manifest.get("applied_through_cursor") != sequence
+                or attestation_manifest.get("event_count") != attestation.get("period_event_count")
+                or attestation_manifest.get("coverage_count") != attestation.get("period_event_count")
+                or attestation_manifest.get("event_log_root") != attestation.get("period_event_root")
+                or attestation_manifest.get("instrument_opening_hash") != attestation.get("opening_state_hash")
+                or attestation_manifest.get("projection_state_hash") != attestation.get("closing_state_hash")
+            ):
+                raise PeriodGovernanceError(
+                    f"{name} signed register checkpoint does not bind its declared source cursor and state"
+                )
+            event_count = attestation.get("period_event_count")
+            if not isinstance(event_count, int) or isinstance(event_count, bool) or event_count < 0:
+                raise PeriodGovernanceError("period_event_count must be a non-negative integer")
+            if event_count > sequence:
+                raise PeriodGovernanceError(
+                    f"{name} period event count exceeds its durable source sequence"
+                )
+            event_root = _sha256(attestation.get("period_event_root"), "period_event_root")
+            activity = attestation.get("activity_status")
+            expected_activity = "ZERO_ACTIVITY" if event_count == 0 else "ACTIVITY"
+            if activity != expected_activity:
+                raise PeriodGovernanceError(
+                    f"{name} activity status contradicts its signed period event count"
+                )
+            if event_count == 0:
+                if event_root != empty_event_root:
+                    raise PeriodGovernanceError(
+                        f"{name} zero-activity attestation must commit to the canonical empty event root"
+                    )
+            elif event_root == empty_event_root:
+                raise PeriodGovernanceError(
+                    f"{name} non-zero activity cannot use the canonical empty event root"
+                )
+            opening_hash = _sha256(attestation.get("opening_state_hash"), "opening_state_hash")
+            closing_hash = _sha256(attestation.get("closing_state_hash"), "closing_state_hash")
+            reconciliation_hash = _sha256(
+                attestation.get("reconciliation_hash"), "reconciliation_hash"
+            )
+            if event_count == 0 and opening_hash != closing_hash:
+                raise PeriodGovernanceError(
+                    f"{name} zero-activity attestation must preserve its opening state"
+                )
+            normalized.append({
+                "register_name": name,
+                "attestation_ref": ref,
+                "attestation_digest": digest,
+                "source_register_id": source_id,
+                "source_sequence": sequence,
+                "source_chain_hash": source_hash,
+                "period_event_count": event_count,
+                "period_event_root": event_root,
+                "activity_status": activity,
+                "opening_state_hash": opening_hash,
+                "closing_state_hash": closing_hash,
+                "reconciliation_hash": reconciliation_hash,
+            })
+        if seen != set(REGISTERS):
+            raise PeriodGovernanceError("signed period checkpoint omits one or more native registers")
+        normalized.sort(key=lambda item: item["register_name"])
+        commitment = [{
+            "register_name": item["register_name"],
+            "attestation_ref": item["attestation_ref"],
+            "attestation_digest": item["attestation_digest"],
+        } for item in normalized]
+        calculated = hashlib.sha256(_canonical(commitment).encode("utf-8")).hexdigest()
+        if manifest.get("register_completeness_digest") != calculated:
+            raise PeriodGovernanceError(
+                "period checkpoint does not commit to the exact six register attestations"
+            )
+        return tuple(normalized)
+
+    @staticmethod
+    def _assert_or_insert_register_attestations(con, period, generation, declarations,
+                                                *, insert_if_missing):
+        existing = con.execute(
+            "SELECT register_name,attestation_ref,attestation_digest,source_register_id,"
+            "source_sequence,source_chain_hash,period_event_count,period_event_root,"
+            "activity_status,opening_state_hash,closing_state_hash,reconciliation_hash "
+            "FROM register_period_attestations WHERE period=? AND generation=? "
+            "ORDER BY register_name",
+            (period, generation),
+        ).fetchall()
+        expected = [(
+            item["register_name"], item["attestation_ref"], item["attestation_digest"],
+            item["source_register_id"], item["source_sequence"], item["source_chain_hash"],
+            item["period_event_count"], item["period_event_root"], item["activity_status"],
+            item["opening_state_hash"], item["closing_state_hash"], item["reconciliation_hash"],
+        ) for item in declarations]
+        if existing:
+            if [tuple(row) for row in existing] != expected:
+                raise PeriodGovernanceError(
+                    "period retry changed immutable register completeness attestations"
+                )
+            return
+        if not insert_if_missing:
+            raise PeriodGovernanceError(
+                "existing closed generation has no durable register completeness attestations"
+            )
+        con.executemany(
+            "INSERT INTO register_period_attestations VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(period, generation, *row) for row in expected],
+        )
+
     def close_period(self, period, generation, checkpoint_ref, checkpoint_digest, closed_by):
         period = _period(period)
         if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
@@ -226,6 +429,7 @@ class PeriodGovernance:
         ref, digest, manifest = self._verify_checkpoint(checkpoint_ref, checkpoint_digest)
         if manifest.get("period") != period or manifest.get("projection_generation") != generation or manifest.get("period_closed") is not True:
             raise PeriodGovernanceError("close checkpoint does not identify this closed period and generation")
+        declarations = self._verify_register_completeness(manifest, period, generation)
         actor = _required(closed_by, "closed_by")
         with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
@@ -238,6 +442,9 @@ class PeriodGovernance:
                 if old:
                     if tuple(old) != expected:
                         raise PeriodGovernanceError("period already closed with different immutable evidence")
+                    self._assert_or_insert_register_attestations(
+                        con, period, generation, declarations, insert_if_missing=False,
+                    )
                     con.execute("COMMIT")
                     return False
                 previous = con.execute(
@@ -245,6 +452,9 @@ class PeriodGovernance:
                 ).fetchone()[0]
                 if previous is not None and period <= previous:
                     raise PeriodGovernanceError("period closures must advance monotonically")
+                self._assert_or_insert_register_attestations(
+                    con, period, generation, declarations, insert_if_missing=True,
+                )
                 con.execute("INSERT INTO period_closures VALUES(?,?,?,?,?)",
                             (period, generation, ref, digest, actor))
                 con.execute("INSERT INTO active_generations VALUES(?,?)", (period, generation))
@@ -318,6 +528,16 @@ class PeriodGovernance:
                 ).fetchone()
                 if closure is None:
                     raise PeriodGovernanceError("only a closed period can be reopened")
+                sealed_registers = con.execute(
+                    "SELECT register_name FROM register_period_attestations "
+                    "WHERE period=? AND generation=? ORDER BY register_name",
+                    (period, closure["generation"]),
+                ).fetchall()
+                if (len(sealed_registers) != len(REGISTERS)
+                        or {row["register_name"] for row in sealed_registers} != set(REGISTERS)):
+                    raise PeriodGovernanceError(
+                        "legacy closed period without six signed register attestations cannot be reopened"
+                    )
                 if (closure["checkpoint_ref"], closure["checkpoint_digest"]) != (ref, digest):
                     raise PeriodGovernanceError("pre-reopen checkpoint must match the currently active generation")
                 if (manifest.get("period") != period
@@ -532,6 +752,15 @@ class PeriodGovernance:
                 if request is None:
                     raise PeriodGovernanceError("unknown reopen request")
                 if request["state"] == "PUBLISHED":
+                    if (manifest.get("period") != request["period"]
+                            or manifest.get("projection_generation") != request["new_generation"]
+                            or manifest.get("period_closed") is not True):
+                        raise PeriodGovernanceError(
+                            "publication retry checkpoint does not identify the published generation"
+                        )
+                    declarations = self._verify_register_completeness(
+                        manifest, request["period"], request["new_generation"],
+                    )
                     published = con.execute(
                         "SELECT period,old_generation,new_generation,global_reconciliation_hash,checkpoint_ref,checkpoint_digest "
                         "FROM generation_publications WHERE request_id=?", (request_id,)
@@ -540,6 +769,10 @@ class PeriodGovernance:
                                 global_reconcile, ref, digest)
                     if published is None or tuple(published) != expected:
                         raise PeriodGovernanceError("published generation retry changed immutable publication content")
+                    self._assert_or_insert_register_attestations(
+                        con, request["period"], request["new_generation"],
+                        declarations, insert_if_missing=False,
+                    )
                     con.execute("COMMIT")
                     return False
                 if request["state"] != "REBUILDING":
@@ -548,6 +781,9 @@ class PeriodGovernance:
                         or manifest.get("projection_generation") != request["new_generation"]
                         or manifest.get("period_closed") is not True):
                     raise PeriodGovernanceError("publication checkpoint does not identify the rebuilt generation")
+                declarations = self._verify_register_completeness(
+                    manifest, request["period"], request["new_generation"],
+                )
                 receipts = con.execute(
                     "SELECT * FROM rebuild_receipts WHERE request_id=? ORDER BY register_name",
                     (request_id,)
@@ -604,6 +840,10 @@ class PeriodGovernance:
                 ).fetchone()
                 if active is None or active["generation"] != request["old_generation"]:
                     raise PeriodGovernanceError("active generation changed during rebuild")
+                self._assert_or_insert_register_attestations(
+                    con, request["period"], request["new_generation"],
+                    declarations, insert_if_missing=True,
+                )
                 con.execute("INSERT INTO generation_publications VALUES(?,?,?,?,?,?,?,?)",
                             (request_id, request["period"], request["old_generation"],
                              request["new_generation"], root, global_reconcile, ref, digest))
@@ -621,6 +861,21 @@ class PeriodGovernance:
                 if con.in_transaction:
                     con.execute("ROLLBACK")
                 raise
+
+    def register_period_attestations(self, period, generation):
+        period = _period(period)
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
+            raise PeriodGovernanceError("generation must be a non-negative integer")
+        with closing(self._connect()) as con:
+            rows = con.execute(
+                "SELECT register_name,attestation_ref,attestation_digest,source_register_id,"
+                "source_sequence,source_chain_hash,period_event_count,period_event_root,"
+                "activity_status,opening_state_hash,closing_state_hash,reconciliation_hash "
+                "FROM register_period_attestations WHERE period=? AND generation=? "
+                "ORDER BY register_name",
+                (period, generation),
+            ).fetchall()
+            return tuple(dict(row) for row in rows)
 
     def active_generation(self, period):
         period = _period(period)

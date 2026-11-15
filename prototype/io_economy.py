@@ -4,11 +4,13 @@ This is a transparent, deterministic research model, not a calibrated forecast.
 Money is Decimal; physical quantities are Decimal; spot markets clear by product.
 """
 from dataclasses import dataclass, field
-from decimal import Decimal as D, ROUND_HALF_UP
+from decimal import Decimal as D, ROUND_DOWN, ROUND_HALF_UP
 from hashlib import sha256
 import argparse
 import json
 from pathlib import Path
+
+from firm_fixed_assets import FixedAssetError, FixedAssetLedger, InvestmentOrder
 
 ZERO = D("0")
 QTY = D("0.00000001")
@@ -19,6 +21,43 @@ def dec(value):
 
 def qty(value):
     return dec(value).quantize(QTY, rounding=ROUND_HALF_UP)
+
+def qty_floor(value):
+    """Round physical quantities down so execution cannot consume unavailable stock."""
+    return dec(value).quantize(QTY, rounding=ROUND_DOWN)
+
+def _scale_allocations(allocations, total):
+    """Scale non-negative physical allocations without negative residual plugs."""
+    total = dec(total)
+    if not total.is_finite() or total < 0:
+        raise EconomyError("allocation target must be finite and non-negative")
+    source_total = sum(allocations.values(), ZERO)
+    if any(not value.is_finite() or value < 0 for value in allocations.values()):
+        raise EconomyError("source allocations must be finite and non-negative")
+    if total > source_total:
+        raise EconomyError("allocation target exceeds source quantity")
+    if source_total == 0:
+        if total != 0:
+            raise EconomyError("cannot allocate a positive target from zero source quantity")
+        return {key: ZERO for key in allocations}
+    scaled = {
+        key: qty_floor(value * total / source_total)
+        for key, value in allocations.items()
+    }
+    residual = total - sum(scaled.values(), ZERO)
+    # Assign the sub-quantum residual to the largest remaining capacity first.
+    # This prevents a tiny final seller/buyer from becoming negative and then
+    # disappearing from settlement when positive rows are filtered.
+    for key in sorted(allocations, key=lambda item: (-allocations[item], item)):
+        if residual <= 0:
+            break
+        capacity = allocations[key] - scaled[key]
+        addition = min(capacity, residual)
+        scaled[key] += addition
+        residual -= addition
+    if residual != 0 or any(value < 0 or value > allocations[key] for key, value in scaled.items()):
+        raise EconomyError("deterministic allocation residual could not be assigned within source capacities")
+    return scaled
 
 def cash(value):
     return dec(value).quantize(CENT, rounding=ROUND_HALF_UP)
@@ -47,6 +86,7 @@ class FirmConfig:
     initial_cash: D
     initial_inventory: dict
     domestic_ask_markup: D = D("0.90")
+    household_labour_shares: dict = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class HouseholdConfig:
@@ -54,6 +94,27 @@ class HouseholdConfig:
     initial_cash: D
     basket: dict
     consumption_propensity: D = D("0.35")
+    labour_supply_hours: D = D("25")
+
+@dataclass(frozen=True)
+class HouseholdIncomePayment:
+    payment_id: str
+    source_type: str
+    payer_kind: str
+    payer_id: str
+    recipient_id: str
+    amount: D
+    period: int
+    evidence_ref: str
+
+    def __post_init__(self):
+        try:
+            amount = dec(self.amount)
+        except Exception as exc:
+            raise EconomyError("income payment amount must be a finite positive Decimal") from exc
+        if not amount.is_finite() or amount <= 0:
+            raise EconomyError("income payment amount must be a finite positive Decimal")
+        object.__setattr__(self, "amount", amount)
 
 @dataclass
 class FirmState:
@@ -71,6 +132,12 @@ class HouseholdState:
     cash: D
     consumption: dict = field(default_factory=dict)
     wage_income: D = ZERO
+    period_wage_income: D = ZERO
+    period_labour_hours: D = ZERO
+    period_unemployment_hours: D = ZERO
+    cumulative_unemployment_hours: D = ZERO
+    period_income_by_source: dict = field(default_factory=dict)
+    cumulative_income_by_source: dict = field(default_factory=dict)
     expenditure: D = ZERO
 
 @dataclass
@@ -91,6 +158,17 @@ class PeriodResult:
     closing_inventory: dict
     shortages: dict
     wages: D
+    household_wage_income: dict
+    household_labour_hours: dict
+    household_labour_supply_hours: dict
+    household_unemployment_hours: dict
+    household_employment_rate: dict
+    household_income_by_source: dict
+    household_total_income: dict
+    household_income_payment_arrears: dict
+    capital_formation: dict
+    firm_production_by_firm: dict
+    firm_commissioned_capacity_by_firm: dict
     household_expenditure: D
     import_expenditure: D
     gross_value_added_proxy: D
@@ -104,7 +182,8 @@ class InputOutputEconomy:
 
     def __init__(self, products=None, firms=None, households=None,
                  price_adjustment=D("0.18"), max_price_change=D("0.35"),
-                 household_demand_multiplier=D("1")):
+                 household_demand_multiplier=D("1"),
+                 income_payments=None, income_source_funds=None):
         self.products = products or self.default_products()
         self.firm_configs = firms or self.default_firms()
         self.household_configs = households or self.default_households()
@@ -118,6 +197,17 @@ class InputOutputEconomy:
             h.household_id: HouseholdState(h, h.initial_cash)
             for h in self.household_configs
         }
+        self.income_source_cash = {key: dec(value) for key, value in (income_source_funds or {}).items()}
+        if any(not isinstance(key, str) or not key or not value.is_finite() or value < 0
+               for key, value in self.income_source_cash.items()):
+            raise EconomyError("income source funds require named non-negative finite opening balances")
+        self.income_payments = list(income_payments or [])
+        self.income_payment_arrears = {}
+        self._validate_income_payments()
+        self.fixed_asset_ledger = FixedAssetLedger()
+        self.capex_supplier_reservations = {}
+        self.capex_orders = {}
+        self.current_period = 0
         self.prices = {p.product_id: p.base_price for p in self.products}
         self.price_adjustment = dec(price_adjustment)
         self.max_price_change = dec(max_price_change)
@@ -149,15 +239,15 @@ class InputOutputEconomy:
     @staticmethod
     def default_firms():
         return [
-            FirmConfig("farm-north", "grain", {"energy": D("0.12"), "logistics": D("0.08")}, D("0.40"), D("12"), D("24"), D("8"), D("5200"), {"grain": D("7"), "energy": D("1"), "logistics": D("1")}),
-            FirmConfig("farm-south", "grain", {"energy": D("0.15"), "logistics": D("0.10")}, D("0.42"), D("10"), D("20"), D("8"), D("4100"), {"grain": D("5"), "energy": D("1"), "logistics": D("1")}),
-            FirmConfig("power-east", "energy", {"metals": D("0.025"), "machinery": D("0.006")}, D("0.18"), D("15"), D("28"), D("9"), D("6200"), {"energy": D("5"), "metals": D("0.5"), "machinery": D("0.1")}),
-            FirmConfig("power-west", "energy", {"metals": D("0.03"), "machinery": D("0.005")}, D("0.20"), D("12"), D("22"), D("9"), D("5000"), {"energy": D("4"), "metals": D("0.5"), "machinery": D("0.1")}),
-            FirmConfig("mine-central", "metals", {"energy": D("0.20"), "machinery": D("0.012"), "logistics": D("0.04")}, D("0.35"), D("11"), D("18"), D("10"), D("6000"), {"metals": D("3"), "energy": D("2"), "machinery": D("0.2"), "logistics": D("0.5")}),
-            FirmConfig("machine-works", "machinery", {"metals": D("0.55"), "energy": D("0.30"), "logistics": D("0.10")}, D("1.20"), D("8"), D("7"), D("14"), D("8500"), {"machinery": D("1"), "metals": D("2"), "energy": D("2"), "logistics": D("0.5")}),
-            FirmConfig("transport-coop", "logistics", {"energy": D("0.28"), "machinery": D("0.018")}, D("0.55"), D("14"), D("22"), D("9"), D("4800"), {"logistics": D("3"), "energy": D("2"), "machinery": D("0.2")}),
-            FirmConfig("food-coop", "food", {"grain": D("0.72"), "energy": D("0.10"), "logistics": D("0.12")}, D("0.62"), D("12"), D("18"), D("9"), D("5600"), {"food": D("2"), "grain": D("2"), "energy": D("1"), "logistics": D("0.5")}),
-            FirmConfig("care-network", "care", {"food": D("0.025"), "energy": D("0.08"), "logistics": D("0.04")}, D("1.10"), D("9"), D("12"), D("11"), D("6300"), {"care": D("1"), "food": D("0.2"), "energy": D("1"), "logistics": D("0.2")}),
+            FirmConfig("farm-north", "grain", {"energy": D("0.12"), "logistics": D("0.08")}, D("0.40"), D("12"), D("24"), D("8"), D("5200"), {"grain": D("7"), "energy": D("1"), "logistics": D("1")}, household_labour_shares={"household-1": D("0.8"), "household-2": D("0.2")}),
+            FirmConfig("farm-south", "grain", {"energy": D("0.15"), "logistics": D("0.10")}, D("0.42"), D("10"), D("20"), D("8"), D("4100"), {"grain": D("5"), "energy": D("1"), "logistics": D("1")}, household_labour_shares={"household-2": D("0.7"), "household-3": D("0.3")}),
+            FirmConfig("power-east", "energy", {"metals": D("0.025"), "machinery": D("0.006")}, D("0.18"), D("15"), D("28"), D("9"), D("6200"), {"energy": D("5"), "metals": D("0.5"), "machinery": D("0.1")}, household_labour_shares={"household-1": D("0.6"), "household-2": D("0.4")}),
+            FirmConfig("power-west", "energy", {"metals": D("0.03"), "machinery": D("0.005")}, D("0.20"), D("12"), D("22"), D("9"), D("5000"), {"energy": D("4"), "metals": D("0.5"), "machinery": D("0.1")}, household_labour_shares={"household-2": D("0.4"), "household-3": D("0.6")}),
+            FirmConfig("mine-central", "metals", {"energy": D("0.20"), "machinery": D("0.012"), "logistics": D("0.04")}, D("0.35"), D("11"), D("18"), D("10"), D("6000"), {"metals": D("3"), "energy": D("2"), "machinery": D("0.2"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.2"), "household-3": D("0.8")}),
+            FirmConfig("machine-works", "machinery", {"metals": D("0.55"), "energy": D("0.30"), "logistics": D("0.10")}, D("1.20"), D("8"), D("7"), D("14"), D("8500"), {"machinery": D("1"), "metals": D("2"), "energy": D("2"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.5"), "household-2": D("0.5")}),
+            FirmConfig("transport-coop", "logistics", {"energy": D("0.28"), "machinery": D("0.018")}, D("0.55"), D("14"), D("22"), D("9"), D("4800"), {"logistics": D("3"), "energy": D("2"), "machinery": D("0.2")}, household_labour_shares={"household-2": D("0.7"), "household-3": D("0.3")}),
+            FirmConfig("food-coop", "food", {"grain": D("0.72"), "energy": D("0.10"), "logistics": D("0.12")}, D("0.62"), D("12"), D("18"), D("9"), D("5600"), {"food": D("2"), "grain": D("2"), "energy": D("1"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.3"), "household-2": D("0.7")}),
+            FirmConfig("care-network", "care", {"food": D("0.025"), "energy": D("0.08"), "logistics": D("0.04")}, D("1.10"), D("9"), D("12"), D("11"), D("6300"), {"care": D("1"), "food": D("0.2"), "energy": D("1"), "logistics": D("0.2")}, household_labour_shares={"household-1": D("0.2"), "household-3": D("0.8")}),
         ]
 
     @staticmethod
@@ -203,16 +293,102 @@ class InputOutputEconomy:
                 raise EconomyError("negative firm parameter or non-positive ask markup")
             if f.labour_per_unit <= 0:
                 raise EconomyError("labour_per_unit must be positive")
+        household_ids_set = set(household_ids)
+        for f in self.firm_configs:
+            shares = f.household_labour_shares
+            if shares:
+                if set(shares) - household_ids_set:
+                    raise EconomyError("firm labour allocation references unknown household")
+                if any(not value.is_finite() or value < 0 for value in shares.values()):
+                    raise EconomyError("firm labour shares must be finite and non-negative")
+                if sum(shares.values(), ZERO) != D("1"):
+                    raise EconomyError("explicit firm labour shares must sum exactly to one")
         for h in self.household_configs:
             if set(h.basket) - known or any(not v.is_finite() or v < 0 for v in h.basket.values()):
                 raise EconomyError("invalid household basket")
             if (not h.initial_cash.is_finite() or not h.consumption_propensity.is_finite()
-                    or h.initial_cash < 0
+                    or not h.labour_supply_hours.is_finite()
+                    or h.initial_cash < 0 or h.labour_supply_hours < 0
                     or not D("0") <= h.consumption_propensity <= D("1")):
-                raise EconomyError("invalid household budget")
+                raise EconomyError("invalid household budget or labour supply")
+
+    def _labour_shares(self, firm_config):
+        if firm_config.household_labour_shares:
+            return dict(sorted(firm_config.household_labour_shares.items()))
+        # Backwards-compatible fallback for custom legacy fixtures only. The
+        # canonical default economy uses explicit firm-to-household allocations.
+        household_ids = sorted(self.households)
+        if not household_ids:
+            return {}
+        each = D("1") / D(len(household_ids))
+        shares = {key: each for key in household_ids}
+        shares[household_ids[-1]] += D("1") - sum(shares.values(), ZERO)
+        return shares
+
+    def _validate_income_payments(self):
+        allowed_sources = {"dividend", "interest", "pension", "public_transfer", "rental", "self_employment"}
+        ids = set()
+        for payment in self.income_payments:
+            if not isinstance(payment, HouseholdIncomePayment):
+                raise EconomyError("income payments must be HouseholdIncomePayment records")
+            if (not payment.payment_id or payment.payment_id in ids
+                    or payment.source_type not in allowed_sources
+                    or payment.recipient_id not in self.households
+                    or not payment.payer_id or not payment.evidence_ref
+                    or payment.payer_kind not in {"firm", "income_fund"}
+                    or not payment.amount.is_finite() or payment.amount <= 0
+                    or not isinstance(payment.period, int) or isinstance(payment.period, bool)
+                    or payment.period < 1):
+                raise EconomyError("invalid or duplicate household income payment")
+            if payment.payer_kind == "firm" and payment.payer_id not in self.firms:
+                raise EconomyError("income payment references an unknown firm payer")
+            if payment.payer_kind == "income_fund" and payment.payer_id not in self.income_source_cash:
+                raise EconomyError("income payment references an unfunded income source account")
+            ids.add(payment.payment_id)
+
+    def _settle_household_income(self, period):
+        due_rows = [p for p in self.income_payments if p.period == period]
+        due_rows += [p for p in self.income_payments if self.income_payment_arrears.get(p.payment_id, ZERO) > 0]
+        seen = set()
+        for payment in sorted(due_rows, key=lambda item: (item.period, item.payment_id)):
+            if payment.payment_id in seen:
+                continue
+            seen.add(payment.payment_id)
+            due = payment.amount if payment.period == period else ZERO
+            due += self.income_payment_arrears.get(payment.payment_id, ZERO)
+            if payment.payer_kind == "firm":
+                payer = self.firms[payment.payer_id]
+                available = payer.cash
+            else:
+                available = self.income_source_cash[payment.payer_id]
+            paid = cash(min(available, due))
+            if paid > 0:
+                if payment.payer_kind == "firm":
+                    payer.cash -= paid
+                else:
+                    self.income_source_cash[payment.payer_id] -= paid
+                household = self.households[payment.recipient_id]
+                household.cash += paid
+                household.period_income_by_source[payment.source_type] = (
+                    household.period_income_by_source.get(payment.source_type, ZERO) + paid
+                )
+                household.cumulative_income_by_source[payment.source_type] = (
+                    household.cumulative_income_by_source.get(payment.source_type, ZERO) + paid
+                )
+            arrears = max(ZERO, due - paid)
+            self.income_payment_arrears[payment.payment_id] = arrears
+            self._event(f"p{period}:income:{payment.payment_id}", "household_income_payment", {
+                "payment_id": payment.payment_id, "source_type": payment.source_type,
+                "payer_kind": payment.payer_kind, "payer_id": payment.payer_id,
+                "recipient_id": payment.recipient_id, "due": str(due),
+                "paid": str(paid), "arrears": str(arrears),
+                "evidence_ref": payment.evidence_ref,
+            })
 
     def _system_cash(self):
-        return sum((f.cash for f in self.firms.values()), ZERO) + sum((h.cash for h in self.households.values()), ZERO) + self.import_cash
+        return (sum((f.cash for f in self.firms.values()), ZERO)
+                + sum((h.cash for h in self.households.values()), ZERO)
+                + sum(self.income_source_cash.values(), ZERO) + self.import_cash)
 
     def _event(self, key, kind, payload):
         if key in self._event_keys:
@@ -221,15 +397,163 @@ class InputOutputEconomy:
         row = {"key": key, "kind": kind, "payload": payload}
         self.events.append(row)
 
-    def _plan_production(self):
+    def place_capex_order(self, *, order_id, credit_event_id, payment_event_id,
+                          buyer_id, supplier_id, asset_type, quantity, unit_cost,
+                          order_period, delivery_period, commissioning_period,
+                          useful_life_periods, residual_value_per_unit,
+                          service_capacity_per_unit, currency="LCU",
+                          payment_evidence_ref):
+        """Pay a machinery supplier, reserve physical stock, and register an asset order."""
+        if buyer_id not in self.firms or supplier_id not in self.firms:
+            raise EconomyError("capex buyer and supplier must be existing firms")
+        buyer, supplier = self.firms[buyer_id], self.firms[supplier_id]
+        if buyer_id == supplier_id or supplier.config.output_product != asset_type:
+            raise EconomyError("capex supplier must be a distinct producer of the ordered asset product")
+        try:
+            order = InvestmentOrder(
+                order_id, credit_event_id, payment_event_id, buyer_id, supplier_id,
+                asset_type, dec(quantity), dec(unit_cost), order_period, delivery_period,
+                commissioning_period, useful_life_periods, dec(residual_value_per_unit),
+                dec(service_capacity_per_unit),
+            )
+        except (FixedAssetError, ArithmeticError, ValueError) as exc:
+            raise EconomyError(str(exc)) from exc
+        if order.order_period != self.current_period + 1:
+            raise EconomyError("capex orders must be paid in the next unstarted IO period")
+        payment_event_key = f"p{order.order_period}:capex-payment:{order.order_id}"
+        if payment_event_key in self._event_keys:
+            raise EconomyError("capex payment event key already exists")
+        acquisition_cost = order.acquisition_cost
+        payment = cash(acquisition_cost)
+        if payment != acquisition_cost:
+            raise EconomyError("capex acquisition cost must be exactly representable in currency cents")
+        reserved_key = (supplier_id, asset_type)
+        already_reserved = self.capex_supplier_reservations.get(reserved_key, ZERO)
+        available = supplier.inventory.get(asset_type, ZERO) - already_reserved
+        if order.quantity > available:
+            raise EconomyError("supplier lacks unreserved physical asset inventory")
+        if buyer.cash < payment:
+            raise EconomyError("capex buyer cannot fully settle the investment order")
+        try:
+            self.fixed_asset_ledger.place_paid_order(
+                order, payment_amount=payment, payment_currency=currency,
+                order_currency=currency, payment_evidence_ref=payment_evidence_ref,
+            )
+        except FixedAssetError as exc:
+            raise EconomyError(str(exc)) from exc
+        buyer.cash -= payment
+        supplier.cash += payment
+        self.capex_supplier_reservations[reserved_key] = already_reserved + order.quantity
+        self.capex_orders[order.order_id] = order
+        self._event(f"p{order_period}:capex-payment:{order.order_id}", "capex_payment", {
+            "order_id": order.order_id, "credit_event_id": order.credit_event_id,
+            "payment_event_id": order.payment_event_id, "buyer_id": buyer_id,
+            "supplier_id": supplier_id, "asset_type": asset_type,
+            "quantity": str(order.quantity), "unit_cost": str(order.unit_cost),
+            "amount": str(payment), "evidence_ref": payment_evidence_ref,
+        })
+        return order
+
+    def _commission_capex_deliveries(self, period, capital_formation):
+        for order in sorted(self.capex_orders.values(), key=lambda item: item.order_id):
+            if order.delivery_period != period:
+                continue
+            supplier = self.firms[order.supplier_id]
+            if supplier.inventory.get(order.asset_type, ZERO) < order.quantity:
+                raise EconomyError("reserved capex goods disappeared before physical delivery")
+            event_id = f"delivery:{order.order_id}"
+            delivery_event_key = f"p{period}:capex-delivery:{order.order_id}"
+            if delivery_event_key in self._event_keys:
+                raise EconomyError("capex delivery event key already exists")
+            try:
+                self.fixed_asset_ledger.deliver(
+                    event_id=event_id, order_id=order.order_id,
+                    quantity=order.quantity, period=period,
+                    evidence_ref=f"goods-receipt:{order.order_id}",
+                )
+            except FixedAssetError as exc:
+                raise EconomyError(str(exc)) from exc
+            supplier.inventory[order.asset_type] -= order.quantity
+            key = (order.supplier_id, order.asset_type)
+            self.capex_supplier_reservations[key] -= order.quantity
+            if self.capex_supplier_reservations[key] == 0:
+                del self.capex_supplier_reservations[key]
+            capital_formation[order.asset_type] += order.quantity
+            self._event(f"p{period}:capex-delivery:{order.order_id}", "capex_physical_delivery", {
+                "order_id": order.order_id, "delivery_event_id": event_id,
+                "credit_event_id": order.credit_event_id,
+                "payment_event_id": order.payment_event_id,
+                "supplier_id": order.supplier_id, "buyer_id": order.borrower_id,
+                "asset_type": order.asset_type, "quantity": str(order.quantity),
+                "capital_formation": str(order.quantity),
+                "evidence_ref": f"goods-receipt:{order.order_id}",
+            })
+
+    def _commissioned_capacity(self, firm_id, period):
+        return self.fixed_asset_ledger.commissioned_capacity(firm_id, period)
+
+    def _plan_production(self, period=None):
+        period = period if period is not None else max(1, self.current_period + 1)
         plans = {}
         for firm_id, state in sorted(self.firms.items()):
             c = state.config
-            labour_limited = c.labour_capacity / c.labour_per_unit
+            asset_capacity = self._commissioned_capacity(firm_id, period)
+            effective_output_capacity = c.output_capacity + asset_capacity
+            effective_labour_capacity = c.labour_capacity + asset_capacity * c.labour_per_unit
+            labour_limited = effective_labour_capacity / c.labour_per_unit
             output_stock = state.inventory.get(c.output_product, ZERO)
-            inventory_gap = max(ZERO, c.output_capacity - output_stock)
-            plans[firm_id] = min(c.output_capacity, labour_limited, inventory_gap)
+            inventory_gap = max(ZERO, effective_output_capacity - output_stock)
+            plans[firm_id] = min(effective_output_capacity, labour_limited, inventory_gap)
         return plans
+
+    def _allocate_labour(self, plans):
+        """Allocate scarce household hours to firms using declared hiring weights.
+
+        Firm-level household shares are hiring preferences, not wage entitlements.
+        Actual wage income is paid only for hours used in production.
+        """
+        requested = {household_id: ZERO for household_id in self.households}
+        firm_requests = {}
+        for firm_id, state in sorted(self.firms.items()):
+            asset_capacity = self._commissioned_capacity(firm_id, self.current_period)
+            effective_labour_capacity = (state.config.labour_capacity
+                                          + asset_capacity * state.config.labour_per_unit)
+            demand = min(plans[firm_id] * state.config.labour_per_unit,
+                         effective_labour_capacity)
+            shares = self._labour_shares(state.config)
+            firm_requests[firm_id] = {h: demand * share for h, share in shares.items()}
+            for household_id, hours in firm_requests[firm_id].items():
+                requested[household_id] += hours
+        scale = {}
+        rounding_buffer = QTY * D(len(self.firms) + 1)
+        for household_id, state in self.households.items():
+            supply = state.config.labour_supply_hours
+            # Reserve enough sub-quantum slack for per-firm Decimal rounding
+            # and the per-firm residual assignment below. This prevents the
+            # realized hours from exceeding a hard household supply ceiling.
+            safe_supply = max(ZERO, supply - rounding_buffer)
+            scale[household_id] = min(D("1"), safe_supply / requested[household_id]) if requested[household_id] > 0 else ZERO
+        allocations = {}
+        firm_hired = {firm_id: ZERO for firm_id in self.firms}
+        household_hired = {household_id: ZERO for household_id in self.households}
+        for firm_id, rows in firm_requests.items():
+            allocations[firm_id] = {}
+            for household_id, hours in rows.items():
+                allocated = qty(hours * scale[household_id])
+                allocations[firm_id][household_id] = allocated
+                firm_hired[firm_id] += allocated
+                household_hired[household_id] += allocated
+        # Keep rounded allocations within each household's hard hour limit.
+        for household_id, state in self.households.items():
+            excess = household_hired[household_id] - state.config.labour_supply_hours
+            if excess > 0:
+                candidates = [(firm_id, allocations[firm_id].get(household_id, ZERO))
+                              for firm_id in sorted(allocations)]
+                firm_id, amount = max(candidates, key=lambda item: (item[1], item[0]))
+                allocations[firm_id][household_id] -= excess
+                firm_hired[firm_id] -= excess
+                household_hired[household_id] -= excess
+        return allocations, firm_hired, household_hired, requested
 
     def _build_orders(self, plans):
         orders = []
@@ -268,6 +592,7 @@ class InputOutputEconomy:
         for firm_id, state in sorted(self.firms.items()):
             if state.config.output_product == product_id:
                 stock = state.inventory.get(product_id, ZERO)
+                stock -= self.capex_supplier_reservations.get((firm_id, product_id), ZERO)
                 if stock > 0:
                     offers.append((firm_id, "firm", stock, self.prices[product_id] * state.config.domestic_ask_markup))
         offers.append(("external-supplier", "external", product.import_capacity, product.import_price))
@@ -303,11 +628,12 @@ class InputOutputEconomy:
         available = sum((o[2] for o in eligible_offers), ZERO)
         requested = sum((o.quantity for o in eligible_demand), ZERO)
         traded = min(available, requested)
-        buyer_allocations = {}
+        buyer_weights = {}
         if requested > 0 and traded > 0:
             for order in eligible_demand:
-                allocation = qty(traded * order.quantity / requested)
-                buyer_allocations[(order.buyer_kind, order.buyer_id)] = buyer_allocations.get((order.buyer_kind, order.buyer_id), ZERO) + allocation
+                key = (order.buyer_kind, order.buyer_id)
+                buyer_weights[key] = buyer_weights.get(key, ZERO) + order.quantity
+        buyer_allocations = _scale_allocations(buyer_weights, traded) if traded > 0 else {}
         seller_allocations = {}
         if available > 0 and traded > 0:
             # Merit order: use the lowest-ask supplier first; expensive imports
@@ -316,19 +642,10 @@ class InputOutputEconomy:
             for seller_id, seller_kind, offer_qty, ask in sorted(eligible_offers, key=lambda x: (x[3], x[1], x[0])):
                 allocation = min(offer_qty, remaining_supply)
                 if allocation > 0:
-                    seller_allocations[(seller_kind, seller_id)] = qty(allocation)
+                    seller_allocations[(seller_kind, seller_id)] = allocation
                     remaining_supply -= allocation
                 if remaining_supply <= 0:
                     break
-        # Correct tiny Decimal rounding drift deterministically on the last eligible buyer/seller.
-        if buyer_allocations:
-            drift = traded - sum(buyer_allocations.values(), ZERO)
-            key = sorted(buyer_allocations)[-1]
-            buyer_allocations[key] += drift
-        if seller_allocations:
-            drift = traded - sum(seller_allocations.values(), ZERO)
-            key = sorted(seller_allocations)[-1]
-            seller_allocations[key] += drift
         # Cash cap is checked again at execution; any residual quantity remains unfilled.
         actual_buyer_allocations = {}
         for key, amount in sorted(buyer_allocations.items()):
@@ -336,23 +653,43 @@ class InputOutputEconomy:
             available_cash = self.firms[buyer_id].cash if kind == "firm" else self.households[buyer_id].cash
             remaining_budget = buyer_budget.get(key, available_cash)
             spendable = min(available_cash, remaining_budget)
-            affordable = qty(spendable / clearing_price) if clearing_price > 0 else ZERO
+            affordable = qty_floor(spendable / clearing_price) if clearing_price > 0 else ZERO
             actual_buyer_allocations[key] = min(amount, affordable)
-        actual_traded = sum(actual_buyer_allocations.values(), ZERO)
+        # A positive physical allocation is not executable if its cash settlement
+        # rounds to zero cents. Exclude it before computing traded quantity; otherwise
+        # sellers lose inventory while buyers receive nothing, breaking the stock-flow
+        # identity by the sum of these unpayable micro-allocations.
+        settled_buyer_allocations = {}
+        for key, amount in actual_buyer_allocations.items():
+            if amount > 0 and cash(amount * clearing_price) > 0:
+                settled_buyer_allocations[key] = amount
+        actual_traded = sum(settled_buyer_allocations.values(), ZERO)
         if actual_traded < traded and seller_allocations:
-            # Scale seller deliveries to actual buyer settlement.
-            for key in list(seller_allocations):
-                seller_allocations[key] = qty(seller_allocations[key] * actual_traded / traded)
-            drift = actual_traded - sum(seller_allocations.values(), ZERO)
-            key = sorted(seller_allocations)[-1]
-            seller_allocations[key] += drift
+            # Reconcile seller deliveries without assigning a negative rounding
+            # residual to a small final seller.
+            seller_allocations = _scale_allocations(seller_allocations, actual_traded)
         else:
             actual_traded = traded
-        # Allocate the actual quantity to buyers' firm input stocks or household consumption.
-        for (kind, buyer_id), amount in actual_buyer_allocations.items():
+        # Preflight seller-side cent settlement before mutating either side. Several
+        # tiny suppliers can each round up to a cent even when the buyer's aggregate
+        # settlement is smaller; fail closed rather than partially debiting buyers.
+        buyer_cash = sum((cash(qty_value * clearing_price)
+                          for qty_value in settled_buyer_allocations.values()), ZERO)
+        seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
+        seller_revenues = {}
+        seller_cash_assigned = ZERO
+        for index, (key, amount) in enumerate(seller_items):
+            revenue = (cash(amount * clearing_price)
+                       if index < len(seller_items) - 1
+                       else buyer_cash - seller_cash_assigned)
+            if revenue < 0:
+                raise EconomyError("seller-side cent rounding exceeds executable buyer settlement")
+            seller_revenues[key] = revenue
+            seller_cash_assigned += revenue
+
+        # Allocate only settled quantities to buyers' firm input stocks or household consumption.
+        for (kind, buyer_id), amount in settled_buyer_allocations.items():
             payment = cash(amount * clearing_price)
-            if payment <= 0 or amount <= 0:
-                continue
             buyer_budget[(kind, buyer_id)] = max(ZERO, buyer_budget.get((kind, buyer_id), ZERO) - payment)
             if kind == "firm":
                 state = self.firms[buyer_id]
@@ -365,15 +702,8 @@ class InputOutputEconomy:
                 state.expenditure += payment
         imported = ZERO
         domestic_sold = ZERO
-        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in actual_buyer_allocations.values()), ZERO)
-        seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
-        seller_cash_assigned = ZERO
-        for index, ((kind, seller_id), amount) in enumerate(seller_items):
-            # Allocate cent-rounding residual to the final actual seller, not to an artificial plug account.
-            revenue = cash(amount * clearing_price) if index < len(seller_items) - 1 else buyer_cash - seller_cash_assigned
-            if revenue < 0:
-                raise EconomyError("negative seller settlement after rounding")
-            seller_cash_assigned += revenue
+        for (kind, seller_id), amount in seller_items:
+            revenue = seller_revenues[(kind, seller_id)]
             if kind == "firm":
                 seller = self.firms[seller_id]
                 seller.inventory[product_id] = max(ZERO, seller.inventory.get(product_id, ZERO) - amount)
@@ -394,6 +724,20 @@ class InputOutputEconomy:
                 "traded": actual_traded, "shortage": shortage, "price": clearing_price}
 
     def step(self, period):
+        if (not isinstance(period, int) or isinstance(period, bool)
+                or period != self.current_period + 1):
+            raise EconomyError("IO periods must advance exactly one step from the current period")
+        # Preflight all deterministic delivery event identities before changing
+        # the period, asset ledger, supplier inventory or household state.
+        for order in self.capex_orders.values():
+            if order.delivery_period == period:
+                delivery_event_key = f"p{period}:capex-delivery:{order.order_id}"
+                if delivery_event_key in self._event_keys:
+                    raise EconomyError("capex delivery event key already exists")
+        for household in self.households.values():
+            household.period_wage_income = ZERO
+            household.period_labour_hours = ZERO
+            household.period_income_by_source = {}
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         household_consumption_open = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
@@ -403,30 +747,37 @@ class InputOutputEconomy:
             p.product_id: sum((f.inventory.get(p.product_id, ZERO) for f in self.firms.values()), ZERO)
             for p in self.products
         }
-        plans = self._plan_production()
+        self.current_period = period
+        capital_formation = {p.product_id: ZERO for p in self.products}
+        self._commission_capex_deliveries(period, capital_formation)
+        plans = self._plan_production(period)
         orders, budgets = self._build_orders(plans)
         market = {}
         for product_id in sorted(self.product_by_id):
             market[product_id] = self._clear_product(product_id, orders, period, budgets)
+        labour_allocations, firm_hired_hours, household_hired_hours, household_labour_demand = self._allocate_labour(plans)
         production = {p.product_id: ZERO for p in self.products}
         input_consumption = {p.product_id: ZERO for p in self.products}
         wages_total = ZERO
         gross_value_added = ZERO
         for firm_id, state in sorted(self.firms.items()):
             c = state.config
-            possible = plans[firm_id]
+            possible = min(plans[firm_id], firm_hired_hours[firm_id] / c.labour_per_unit)
             for product_id, coefficient in c.recipe.items():
                 possible = min(possible, state.inventory.get(product_id, ZERO) / coefficient)
             wage_per_output = c.labour_per_unit * c.wage_per_labour
             if wage_per_output > 0:
                 possible = min(possible, state.cash / wage_per_output)
-            actual = qty(max(ZERO, possible))
+            # Production must never round above a binding stock, labour or capacity constraint.
+            actual = qty_floor(max(ZERO, possible))
             if actual <= 0:
                 state.production = ZERO
                 continue
             input_value = ZERO
             for product_id, coefficient in c.recipe.items():
-                used = qty(actual * coefficient)
+                # Conservative quantity rounding prevents the inventory clamp from silently
+                # deleting an unaccounted physical shortfall at the last sub-quantum.
+                used = qty_floor(actual * coefficient)
                 state.inventory[product_id] = max(ZERO, state.inventory.get(product_id, ZERO) - used)
                 input_consumption[product_id] += used
                 input_value += used * self.prices[product_id]
@@ -439,18 +790,84 @@ class InputOutputEconomy:
             production[c.output_product] += actual
             wages_total += wage
             gross_value_added += actual * self.prices[c.output_product] - input_value
-            # Wage payments become household income, split evenly across households.
-            household_states = list(self.households.values())
-            if household_states and wage > 0:
-                shares = [cash(wage / D(len(household_states))) for _ in household_states]
-                shares[-1] += wage - sum(shares, ZERO)
-                for household, share in zip(household_states, shares):
-                    household.cash += share
-                    household.wage_income += share
-            self._event(f"p{period}:production:{firm_id}", "production", {
+            # Allocate wages and paid labour hours through explicit firm-level
+            # employment shares; cash and hour residuals are assigned exactly.
+            labour_hours = actual * c.labour_per_unit
+            hired = firm_hired_hours[firm_id]
+            hours_by_household = {
+                key: qty(labour_hours * allocation / hired)
+                for key, allocation in labour_allocations[firm_id].items()
+            } if hired > 0 else {}
+            if hours_by_household:
+                residual_household = max(hours_by_household, key=lambda key: (hours_by_household[key], key))
+                hours_by_household[residual_household] += labour_hours - sum(hours_by_household.values(), ZERO)
+            wage_by_household = {key: cash(hours * c.wage_per_labour)
+                                 for key, hours in hours_by_household.items()}
+            if wage_by_household:
+                residual_household = max(wage_by_household, key=lambda key: (wage_by_household[key], key))
+                wage_by_household[residual_household] += wage - sum(wage_by_household.values(), ZERO)
+            wage_payment_event_ids = {}
+            active_cohorts = [
+                cohort for cohort in self.fixed_asset_ledger.cohorts.values()
+                if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+            ]
+            active_credit_event_ids = [
+                self.capex_orders[cohort.order_id].credit_event_id for cohort in active_cohorts
+            ]
+            active_asset_order_ids = [cohort.order_id for cohort in active_cohorts]
+            production_event_key = f"p{period}:production:{firm_id}"
+            wage_payment_event_ids = {
+                household_id: f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
+                for household_id, share in wage_by_household.items() if share > 0
+            }
+            self._event(production_event_key, "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
-                "intermediate_input_value": str(input_value), "wages": str(wage)
+                "intermediate_input_value": str(input_value), "wages": str(wage),
+                "labour_hours": str(labour_hours),
+                "wage_by_household": {k: str(v) for k, v in wage_by_household.items()},
+                "wage_payment_event_ids_by_household": wage_payment_event_ids,
+                "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()},
+                "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()},
+                "commissioned_capital_capacity": str(self._commissioned_capacity(firm_id, period)),
+                "capital_asset_cohort_ids": [cohort.cohort_id for cohort in active_cohorts],
+                "capital_asset_order_ids": active_asset_order_ids,
+                "capital_asset_credit_event_ids": active_credit_event_ids,
+                "capital_asset_payment_event_ids": [
+                    self.capex_orders[cohort.order_id].payment_event_id for cohort in active_cohorts
+                ],
             })
+            for household_id, hours in hours_by_household.items():
+                household = self.households[household_id]
+                household.period_labour_hours += hours
+                share = wage_by_household.get(household_id, ZERO)
+                if share <= 0:
+                    continue
+                household.cash += share
+                household.wage_income += share
+                household.period_wage_income += share
+                household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
+                household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
+                wage_event_id = wage_payment_event_ids[household_id]
+                self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "wage_payment", {
+                    "event_id": wage_event_id, "firm_id": firm_id,
+                    "household_id": household_id, "amount": str(share),
+                    "labour_hours": str(hours_by_household[household_id]),
+                    "production_event_key": production_event_key,
+                    "capital_asset_order_ids": active_asset_order_ids,
+                    "credit_event_ids": active_credit_event_ids,
+                })
+        self._settle_household_income(period)
+        for household_id, household in self.households.items():
+            used_hours = household.period_labour_hours
+            household.period_unemployment_hours = max(ZERO, household.config.labour_supply_hours - used_hours)
+            household.cumulative_unemployment_hours += household.period_unemployment_hours
+        self._event(f"p{period}:labour_market", "labour_market_clearing", {
+            "household_supply_hours": {k: str(v.config.labour_supply_hours) for k, v in self.households.items()},
+            "household_requested_hours": {k: str(v) for k, v in household_labour_demand.items()},
+            "household_hired_hours": {k: str(v) for k, v in household_hired_hours.items()},
+            "household_worked_hours": {k: str(v.period_labour_hours) for k, v in self.households.items()},
+            "household_unemployment_hours": {k: str(v.period_unemployment_hours) for k, v in self.households.items()},
+        })
         household_consumption = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
             - household_consumption_open[p.product_id]
@@ -465,10 +882,23 @@ class InputOutputEconomy:
         for p in self.products:
             pid = p.product_id
             lhs = opening_stock[pid] + imports[pid] + production[pid]
-            rhs = input_consumption[pid] + household_consumption[pid] + closing_stock[pid]
+            rhs = (input_consumption[pid] + household_consumption[pid]
+                   + capital_formation[pid] + closing_stock[pid])
             physical_error[pid] = lhs - rhs
             if abs(physical_error[pid]) > D("0.000001"):
-                raise EconomyError(f"physical stock balance failed for {pid}: {physical_error[pid]}")
+                firm_input_flows = {
+                    firm_id: str(qty_floor(state.production * state.config.recipe[pid]))
+                    for firm_id, state in sorted(self.firms.items())
+                    if pid in state.config.recipe and state.production > 0
+                }
+                raise EconomyError(
+                    f"physical stock balance failed for {pid}: {physical_error[pid]}; "
+                    f"opening={opening_stock[pid]}, imports={imports[pid]}, "
+                    f"production={production[pid]}, intermediate={input_consumption[pid]}, "
+                    f"household={household_consumption[pid]}, "
+                    f"capital_formation={capital_formation[pid]}, closing={closing_stock[pid]}, "
+                    f"firm_input_flows={firm_input_flows}"
+                )
         system_cash = self._system_cash()
         cash_error = system_cash - self.initial_cash
         if cash_error != 0:
@@ -489,7 +919,19 @@ class InputOutputEconomy:
             household_consumption={k: str(v) for k, v in household_consumption.items()},
             closing_inventory={k: str(v) for k, v in closing_stock.items()},
             shortages={k: str(market[k]["shortage"]) for k in market},
-            wages=wages_total, household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
+            wages=wages_total,
+            household_wage_income={k: str(v.period_wage_income) for k, v in self.households.items()},
+            household_labour_hours={k: str(v.period_labour_hours) for k, v in self.households.items()},
+            household_labour_supply_hours={k: str(v.config.labour_supply_hours) for k, v in self.households.items()},
+            household_unemployment_hours={k: str(v.period_unemployment_hours) for k, v in self.households.items()},
+            household_employment_rate={k: str((v.period_labour_hours / v.config.labour_supply_hours) if v.config.labour_supply_hours > 0 else ZERO) for k, v in self.households.items()},
+            household_income_by_source={k: {source: str(amount) for source, amount in v.period_income_by_source.items()} for k, v in self.households.items()},
+            household_total_income={k: str(sum(v.period_income_by_source.values(), ZERO)) for k, v in self.households.items()},
+            household_income_payment_arrears={p.payment_id: str(self.income_payment_arrears.get(p.payment_id, ZERO)) for p in self.income_payments},
+            capital_formation={k: str(v) for k, v in capital_formation.items()},
+            firm_production_by_firm={k: str(v.production) for k, v in self.firms.items()},
+            firm_commissioned_capacity_by_firm={k: str(self._commissioned_capacity(k, period)) for k in self.firms},
+            household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
             cash_error=cash_error, physical_balance_error=physical_error, event_digest=digest
@@ -500,7 +942,8 @@ class InputOutputEconomy:
     def run(self, periods=12):
         if periods < 1:
             raise EconomyError("periods must be positive")
-        for period in range(1, periods + 1):
+        start_period = self.current_period + 1
+        for period in range(start_period, start_period + periods):
             self.step(period)
         return self.summary()
 
@@ -524,8 +967,14 @@ class InputOutputEconomy:
             "cash_conservation_error": str(final.cash_error),
             "max_abs_physical_balance_error": str(max((abs(dec(x)) for r in self.period_results for x in r.physical_balance_error.values()), default=ZERO)),
             "cumulative_wages": str(sum((r.wages for r in self.period_results), ZERO)),
+            "final_household_unemployment_hours": final.household_unemployment_hours,
+            "final_household_employment_rate": final.household_employment_rate,
+            "final_household_income_by_source": final.household_income_by_source,
+            "final_household_total_income": final.household_total_income,
+            "outstanding_household_income_payment_arrears": {k: v for k, v in final.household_income_payment_arrears.items() if D(v) > 0},
             "cumulative_household_expenditure": str(sum((r.household_expenditure for r in self.period_results), ZERO)),
             "cumulative_import_expenditure": str(sum((r.import_expenditure for r in self.period_results), ZERO)),
+            "cumulative_capital_formation_by_product": {p.product_id: str(sum((dec(r.capital_formation[p.product_id]) for r in self.period_results), ZERO)) for p in self.products},
             "cumulative_gross_value_added_proxy": str(sum((r.gross_value_added_proxy for r in self.period_results), ZERO)),
             "ending_inventory_by_product": final.closing_inventory,
             "event_count": len(self.events),

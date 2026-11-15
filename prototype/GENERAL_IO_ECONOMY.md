@@ -52,12 +52,19 @@ A firm can be a supplier in its output market and a buyer in several input marke
 ### Household
 
 A household has:
-- opening cash;
-- a basket of desired product quantities;
+- opening cash and a basket of desired product quantities;
 - a consumption propensity, which limits the budget submitted to markets;
-- wage income, consumption and expenditure records.
+- an explicit period labour-supply ceiling in hours;
+- period and cumulative wage income, non-wage income by source, worked hours, unemployment hours, consumption and expenditure;
+- optional evidence-linked non-wage income payments.
 
-Households are separate agents rather than one representative pooled account. The initial model still uses a simple equal split of each firm's wage bill across the three synthetic households. Wages are credited after the period's market-clearing round, so that wage income affects household purchasing power from the next period onward. Both conventions are placeholders, not claims about actual employment relationships, payroll timing or fair distribution.
+Firm-level `household_labour_shares` are now hiring-preference weights, not automatic wage entitlements. Each period, firms express labour demand from their production plan. Household requests are aggregated across firms and rationed against each household's available hours; production cannot use more hours than were allocated. Wages are then distributed according to actual hours worked, not the original preference weights. The model records labour demand, hired hours, worked hours, unemployment hours and employment rates separately. A small quantity-precision buffer prevents rounding from breaching a household's hard hours ceiling.
+
+The labour market is still an aggregate three-household matching mechanism. It does not yet model individual workers, skills, reservation wages, vacancies, search frictions, contracts, bargaining, participation decisions, migration or endogenous wage rates. The configured hourly wage remains fixed.
+
+Non-wage income can be recorded as dividends, interest, pensions, public transfers, rental income or self-employment income. Each payment must identify a payer, recipient, period and evidence reference. A payment can be funded from an existing firm cash balance or an explicitly pre-funded income-source account; it cannot create cash. Underfunded payments remain as arrears and are retried in later periods. These external source accounts are explicit opening cash balances, not yet a consolidated government, pension-fund or banking balance sheet.
+
+Wages and other income are credited after the period's market-clearing round, so they affect household purchasing power from the next period onward. This timing is a modelling convention, not a universal payroll rule.
 
 ## 3. Production network
 
@@ -85,7 +92,8 @@ After input markets clear, actual production is limited by available input stock
 actual_output = min(
     planned_output,
     min(input_inventory[i] / recipe_coefficient[i] for each required input i),
-    firm_cash / (labour_per_unit * wage_per_labour)
+    firm_cash / (labour_per_unit * wage_per_labour),
+    hired_hours / labour_per_unit
 )
 ```
 
@@ -131,6 +139,7 @@ opening_stock[i]
 + production[i]
 = intermediate_inputs_consumed[i]
 + household_consumption[i]
++ capital_formation[i]
 + closing_stock[i]
 ```
 
@@ -216,8 +225,11 @@ python -m unittest discover -s prototype -p 'test_*.py' -v
 The following are deliberately not claimed as completed:
 
 - trade credit, maturity schedules, receivables/payables, default and bankruptcy;
-- worker-level employment contracts, household heterogeneity beyond three synthetic agents, and contribution attribution;
-- capital accumulation, depreciation, investment goods demand and capacity expansion;
+- worker-level employment contracts, household heterogeneity beyond three synthetic agents, skills, reservation wages, bargaining, participation and contribution attribution; aggregate household labour supply and hours-rationed hiring are now implemented, but not a full worker-level labour market;
+- a consolidated fiscal/pension/banking income-source balance sheet; non-wage income is currently limited to explicitly funded firm payments or pre-funded source accounts, with arrears tracked;
+- full general-purpose integration of every capex order, partial delivery schedule, maintenance/repair, impairment, revaluation, disposal proceeds and the bank SFC; a narrow fully-paid machinery capex vertical slice is integrated into IO production, but it is not yet a complete capital account;
+
+**Capital formation integration boundary (updated 2026-11-15):** the separate B8.1 physical capital-cohort lifecycle (`capital_cohort_bridge.py`) and durable append-only cohort register (`capital_cohort_store.py`) remain independent SCCE infrastructure. The IO model now also has a dedicated fixed-asset ledger (`firm_fixed_assets.py`) and an initial paid-capex bridge. `InputOutputEconomy.place_capex_order()` debits a firm buyer, credits a machinery-producing supplier, requires fully paid purchase and unreserved supplier inventory, and records the credit-event and payment-event identifiers. The physical unit is reserved from ordinary market offers, leaves supplier inventory only on its delivery period, and enters the physical balance as capital formation rather than intermediate consumption. The asset creates additional firm output capacity only from its commissioning period; before that it is work in progress. Production events record active cohort IDs and commissioned capacity. The initial complementarity rule adds labour capacity in proportion to the new machine service capacity, while household labour supply can still bind. The bank-credit experiment now includes a separate `productive_capex` case: one machinery unit is paid for in period 1, delivered in period 2, and commissioned in period 3. This is a controlled vertical slice, not a complete capital-accounting system: impairment, revaluation, disposal proceeds, partial-delivery integration into the IO model, maintenance/repair cost, taxes, and full bank SFC posting remain outside this layer. The B8.1 SCCE cohort subsystem is not implicitly substituted for this fixed-asset ledger.
 - multiple outputs per firm, joint production, by-products and transformation technologies;
 - product quality, geographic transport networks, delivery delays and spoilage;
 - strategic bidding, market power, collusion, entry and exit;
@@ -229,10 +241,20 @@ The following are deliberately not claimed as completed:
 
 The next implementation layer should add payment terms and credit as explicit financial contracts, not as a hidden relaxation of cash constraints. A subsequent layer should add capital and ecological constraints. Institutional comparisons should only follow after these accounting and behavioural modules have independent tests.
 
+
+### Capital investment ledger boundary
+
+The narrow productive-capex vertical slice is called by `InputOutputEconomy.step()` through `place_capex_order()` and `_commission_capex_deliveries()`. A firm must pay the full acquisition cost in cash; the supplier must hold enough unreserved machinery inventory. Payment debits the buyer and credits the supplier immediately, while the physical unit remains in supplier inventory but is reserved against ordinary market offers. On the contracted delivery period the unit leaves supplier inventory and enters the product-by-product physical identity as capital formation, not intermediate consumption. It becomes productive capacity only from its commissioning period. The bank-credit experiment exercises the sequence: credit creation → capex payment → physical delivery → commissioning → increased capacity, with credit and payment event IDs propagated into the production event log. This is referential linkage inside the experiment, not yet a cryptographic verification or live lookup against an authoritative bank-credit/payment register; evidence references are required identifiers, not proof of external settlement.
+
+`firm_fixed_assets.py` separately tracks paid orders, delivery cohorts, commissioning, straight-line depreciation to residual value, work in progress and retirement. Retirement is effective only from its recorded period: historical capacity and carrying values are preserved when a later retirement is appended. The IO bridge currently delivers each order in one complete shipment; the standalone ledger can represent partial cohorts, but partial shipments are not yet wired into IO. Maintenance/repair, impairment, revaluation, disposal proceeds, tax treatment, full double-entry asset accounts and native bank SFC postings remain unfinished. The B8.1 physical cohort subsystem remains a distinct subsystem and is not silently treated as the same register.
+
 ## 10. Validation and interpretation
 
 The test suite is designed to check:
 - deterministic repeatability;
+- labour supply constraints, hiring rationing, unemployment hours and employment rates;
+- separately funded wage, dividend, interest, pension, transfer, rental and self-employment income flows with arrears;
+- paid machinery capex, physical delivery, capital-formation stock balance and commissioning lag;
 - multiple suppliers per product;
 - cash conservation;
 - physical stock conservation product by product;

@@ -51,11 +51,18 @@
       "type": "object"
     },
     "stock_flow_movements": {
-      "type": "array",
-      "items": {
-        "type": "object"
-      },
-      "minItems": 1
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "minItems": 1
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "no_stock_flow_effect": {
       "type": "string",
@@ -91,10 +98,28 @@
     "payload"
   ],
   "additionalProperties": false,
-  "not": {
-    "required": [
-      "stock_flow_movements",
-      "no_stock_flow_effect"
-    ]
-  }
+  "allOf": [
+    {
+      "if": {
+        "required": ["stock_flow_movements"],
+        "properties": {
+          "stock_flow_movements": {"type": "null"}
+        }
+      },
+      "then": {
+        "required": ["no_stock_flow_effect"]
+      }
+    },
+    {
+      "if": {
+        "required": ["stock_flow_movements"],
+        "properties": {
+          "stock_flow_movements": {"type": "array"}
+        }
+      },
+      "then": {
+        "not": {"required": ["no_stock_flow_effect"]}
+      }
+    }
+  ]
 }

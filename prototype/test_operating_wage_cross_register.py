@@ -84,7 +84,7 @@ def build_wage_events(labour, *, payment_amount="40"):
     )
     journal = OperatingWageJournal(
         bank_id="bank-1",
-        sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CBank"},
+        sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CB"},
         opening_deposits={("employer-1", "LCU"): D("1000"), ("worker-1", "LCU"): D("10")},
     )
     accrual = journal.accrue_verified_wage(
@@ -220,7 +220,7 @@ def make_participants(root):
         )
     financial = OperatingFinancialRegister(
         root / "operating-financial.sqlite3",
-        sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CBank"},
+        sectors={"worker-1": "H", "employer-1": "NFC", "bank-1": "CB"},
     )
     if financial.total_event_count == 0:
         financial.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP:F", occurred_at=T)
