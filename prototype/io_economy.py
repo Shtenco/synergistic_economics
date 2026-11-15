@@ -57,6 +57,17 @@ class HouseholdConfig:
     consumption_propensity: D = D("0.35")
     labour_supply_hours: D = D("25")
 
+@dataclass(frozen=True)
+class HouseholdIncomePayment:
+    payment_id: str
+    source_type: str
+    payer_kind: str
+    payer_id: str
+    recipient_id: str
+    amount: D
+    period: int
+    evidence_ref: str
+
 @dataclass
 class FirmState:
     config: FirmConfig
@@ -77,6 +88,8 @@ class HouseholdState:
     period_labour_hours: D = ZERO
     period_unemployment_hours: D = ZERO
     cumulative_unemployment_hours: D = ZERO
+    period_income_by_source: dict = field(default_factory=dict)
+    cumulative_income_by_source: dict = field(default_factory=dict)
     expenditure: D = ZERO
 
 @dataclass
@@ -102,6 +115,9 @@ class PeriodResult:
     household_labour_supply_hours: dict
     household_unemployment_hours: dict
     household_employment_rate: dict
+    household_income_by_source: dict
+    household_total_income: dict
+    household_income_payment_arrears: dict
     household_expenditure: D
     import_expenditure: D
     gross_value_added_proxy: D
@@ -115,7 +131,8 @@ class InputOutputEconomy:
 
     def __init__(self, products=None, firms=None, households=None,
                  price_adjustment=D("0.18"), max_price_change=D("0.35"),
-                 household_demand_multiplier=D("1")):
+                 household_demand_multiplier=D("1"),
+                 income_payments=None, income_source_funds=None):
         self.products = products or self.default_products()
         self.firm_configs = firms or self.default_firms()
         self.household_configs = households or self.default_households()
@@ -129,6 +146,13 @@ class InputOutputEconomy:
             h.household_id: HouseholdState(h, h.initial_cash)
             for h in self.household_configs
         }
+        self.income_source_cash = {key: dec(value) for key, value in (income_source_funds or {}).items()}
+        if any(not isinstance(key, str) or not key or not value.is_finite() or value < 0
+               for key, value in self.income_source_cash.items()):
+            raise EconomyError("income source funds require named non-negative finite opening balances")
+        self.income_payments = list(income_payments or [])
+        self.income_payment_arrears = {}
+        self._validate_income_payments()
         self.prices = {p.product_id: p.base_price for p in self.products}
         self.price_adjustment = dec(price_adjustment)
         self.max_price_change = dec(max_price_change)
@@ -246,8 +270,70 @@ class InputOutputEconomy:
         shares[household_ids[-1]] += D("1") - sum(shares.values(), ZERO)
         return shares
 
+    def _validate_income_payments(self):
+        allowed_sources = {"dividend", "interest", "pension", "public_transfer", "rental", "self_employment"}
+        ids = set()
+        for payment in self.income_payments:
+            if not isinstance(payment, HouseholdIncomePayment):
+                raise EconomyError("income payments must be HouseholdIncomePayment records")
+            if (not payment.payment_id or payment.payment_id in ids
+                    or payment.source_type not in allowed_sources
+                    or payment.recipient_id not in self.households
+                    or not payment.payer_id or not payment.evidence_ref
+                    or payment.payer_kind not in {"firm", "income_fund"}
+                    or not payment.amount.is_finite() or payment.amount <= 0
+                    or not isinstance(payment.period, int) or isinstance(payment.period, bool)
+                    or payment.period < 1):
+                raise EconomyError("invalid or duplicate household income payment")
+            if payment.payer_kind == "firm" and payment.payer_id not in self.firms:
+                raise EconomyError("income payment references an unknown firm payer")
+            if payment.payer_kind == "income_fund" and payment.payer_id not in self.income_source_cash:
+                raise EconomyError("income payment references an unfunded income source account")
+            ids.add(payment.payment_id)
+
+    def _settle_household_income(self, period):
+        due_rows = [p for p in self.income_payments if p.period == period]
+        due_rows += [p for p in self.income_payments if self.income_payment_arrears.get(p.payment_id, ZERO) > 0]
+        seen = set()
+        for payment in sorted(due_rows, key=lambda item: (item.period, item.payment_id)):
+            if payment.payment_id in seen:
+                continue
+            seen.add(payment.payment_id)
+            due = payment.amount if payment.period == period else ZERO
+            due += self.income_payment_arrears.get(payment.payment_id, ZERO)
+            if payment.payer_kind == "firm":
+                payer = self.firms[payment.payer_id]
+                available = payer.cash
+            else:
+                available = self.income_source_cash[payment.payer_id]
+            paid = cash(min(available, due))
+            if paid > 0:
+                if payment.payer_kind == "firm":
+                    payer.cash -= paid
+                else:
+                    self.income_source_cash[payment.payer_id] -= paid
+                household = self.households[payment.recipient_id]
+                household.cash += paid
+                household.period_income_by_source[payment.source_type] = (
+                    household.period_income_by_source.get(payment.source_type, ZERO) + paid
+                )
+                household.cumulative_income_by_source[payment.source_type] = (
+                    household.cumulative_income_by_source.get(payment.source_type, ZERO) + paid
+                )
+            arrears = max(ZERO, due - paid)
+            self.income_payment_arrears[payment.payment_id] = arrears
+            self._event(f"p{period}:income:{payment.payment_id}", "household_income_payment", {
+                "payment_id": payment.payment_id, "source_type": payment.source_type,
+                "payer_kind": payment.payer_kind, "payer_id": payment.payer_id,
+                "recipient_id": payment.recipient_id, "due": str(due),
+                "paid": str(paid), "arrears": str(arrears),
+                "evidence_ref": payment.evidence_ref,
+            })
+
     def _system_cash(self):
-        return sum((f.cash for f in self.firms.values()), ZERO) + sum((h.cash for h in self.households.values()), ZERO) + self.import_cash
+        return (sum((f.cash for f in self.firms.values()), ZERO)
+                + sum((h.cash for h in self.households.values()), ZERO)
+                + sum(self.income_source_cash.values(), ZERO) + self.import_cash)
 
     def _event(self, key, kind, payload):
         if key in self._event_keys:
@@ -484,6 +570,7 @@ class InputOutputEconomy:
         for household in self.households.values():
             household.period_wage_income = ZERO
             household.period_labour_hours = ZERO
+            household.period_income_by_source = {}
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         household_consumption_open = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
@@ -552,6 +639,8 @@ class InputOutputEconomy:
                 household.wage_income += share
                 household.period_wage_income += share
                 household.period_labour_hours += hours_by_household[household_id]
+                household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
+                household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
             self._event(f"p{period}:production:{firm_id}", "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
                 "intermediate_input_value": str(input_value), "wages": str(wage),
@@ -560,6 +649,7 @@ class InputOutputEconomy:
                 "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()},
                 "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()}
             })
+        self._settle_household_income(period)
         for household_id, household in self.households.items():
             used_hours = household.period_labour_hours
             household.period_unemployment_hours = max(ZERO, household.config.labour_supply_hours - used_hours)
@@ -615,6 +705,9 @@ class InputOutputEconomy:
             household_labour_supply_hours={k: str(v.config.labour_supply_hours) for k, v in self.households.items()},
             household_unemployment_hours={k: str(v.period_unemployment_hours) for k, v in self.households.items()},
             household_employment_rate={k: str((v.period_labour_hours / v.config.labour_supply_hours) if v.config.labour_supply_hours > 0 else ZERO) for k, v in self.households.items()},
+            household_income_by_source={k: {source: str(amount) for source, amount in v.period_income_by_source.items()} for k, v in self.households.items()},
+            household_total_income={k: str(sum(v.period_income_by_source.values(), ZERO)) for k, v in self.households.items()},
+            household_income_payment_arrears={p.payment_id: str(self.income_payment_arrears.get(p.payment_id, ZERO)) for p in self.income_payments},
             household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
@@ -652,6 +745,9 @@ class InputOutputEconomy:
             "cumulative_wages": str(sum((r.wages for r in self.period_results), ZERO)),
             "final_household_unemployment_hours": final.household_unemployment_hours,
             "final_household_employment_rate": final.household_employment_rate,
+            "final_household_income_by_source": final.household_income_by_source,
+            "final_household_total_income": final.household_total_income,
+            "outstanding_household_income_payment_arrears": {k: v for k, v in final.household_income_payment_arrears.items() if D(v) > 0},
             "cumulative_household_expenditure": str(sum((r.household_expenditure for r in self.period_results), ZERO)),
             "cumulative_import_expenditure": str(sum((r.import_expenditure for r in self.period_results), ZERO)),
             "cumulative_gross_value_added_proxy": str(sum((r.gross_value_added_proxy for r in self.period_results), ZERO)),
