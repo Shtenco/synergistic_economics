@@ -5,7 +5,7 @@ protocol. It is intentionally not an EntityJournal and does not alter GOLD-2A.
 """
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP, localcontext
 import hashlib
 import json
 from typing import Mapping
@@ -39,7 +39,15 @@ def _decimal(value, field, *, positive=False):
         raise OperatingFinancialRegisterError(f"{field} must be a finite decimal") from exc
     if not number.is_finite() or (positive and number <= 0):
         raise OperatingFinancialRegisterError(f"{field} must be finite" + (" and positive" if positive else ""))
+    if len(number.as_tuple().digits) > 1024 or abs(number.as_tuple().exponent) > 1024:
+        raise OperatingFinancialRegisterError(f"{field} exceeds exact-decimal bounds")
     return number
+
+
+def _sum_decimal_exact(values):
+    with localcontext() as context:
+        context.prec = 4096
+        return sum(values, D("0"))
 
 
 def _identity(position_id, holder, issuer, instrument_id, currency):
@@ -750,6 +758,14 @@ class OperatingFinancialRegister(DurableEventRegister):
         return state
 
     def reduce_event(self, old, event):
+        # Reducer arithmetic is part of the financial source of truth. Keep
+        # enough precision for every accepted source decimal; never inherit
+        # the process-wide Decimal precision (normally only 28 digits).
+        with localcontext() as context:
+            context.prec = 4096
+            return self._reduce_event_exact(old, event)
+
+    def _reduce_event_exact(self, old, event):
         if event["aggregate_id"] != "operating-financial":
             raise OperatingFinancialRegisterError("all operating financial events must use the global financial stream")
         state = old or {"claims": {}, "deposits": {}, "loans": {}, "reserves": {}, "interbank_payments": {}, "refinancing": {}}
@@ -1015,7 +1031,9 @@ class OperatingFinancialRegister(DurableEventRegister):
                 if payload.get(field) != facility[field]:
                     raise OperatingFinancialRegisterError("facility repayment identity differs from its origination")
             if event_period < period_index:
-                facility["opening_balance"] -= amount
+                with localcontext() as context:
+                    context.prec = 4096
+                    facility["opening_balance"] -= amount
                 if facility["opening_balance"] < 0:
                     raise OperatingFinancialRegisterError("facility opening balance became negative during history replay")
                 facility["proof_rows"].append(row)
@@ -1267,18 +1285,18 @@ class OperatingFinancialRegister(DurableEventRegister):
         state, version = self.state("operating-financial", principal_id=principal_id)
         if state is None:
             raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
-        deposits = sum((
+        deposits = _sum_decimal_exact(
             D(item["balance"]) for item in state.get("deposits", {}).values()
             if item["bank_id"] == bank_id and item["currency"] == currency
-        ), D("0"))
-        loans = sum((
+        )
+        loans = _sum_decimal_exact(
             D(item["outstanding_principal"]) for item in state.get("loans", {}).values()
             if item["bank_id"] == bank_id and item["currency"] == currency
-        ), D("0"))
-        reserves = sum((
+        )
+        reserves = _sum_decimal_exact(
             D(item["balance"]) for item in state.get("reserves", {}).values()
             if item["bank_id"] == bank_id and item["currency"] == currency
-        ), D("0"))
+        )
         return {
             "bank_id": bank_id, "currency": currency,
             "deposit_liabilities": deposits, "loan_assets": loans,
