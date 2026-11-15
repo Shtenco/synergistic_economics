@@ -50,10 +50,10 @@ Next:
 Account-opening events now carry an explicit first-active period (defaulting to period 1 for backward-compatible callers). An account is omitted from earlier snapshots, its opening balance is included at its first-active period, and prior movements are replayed only from periods at or after that opening period. The exporter verifies the native register chain and envelope digest, but its digest is not a signed completeness attestation or a source-checkpoint binding. Complete OpeningStockSnapshot composition across every financial instrument is still not automatic.
 
 Next:
-- add period semantics to account-opening records (or a separately governed first-active-period contract) before treating later-created accounts as period-1 openings;
-- compose loan, refinancing, deposit, reserve, wage claims/payables and all other supported positions into one complete snapshot with duplicate/mirror/currency checks;
+- preserve the backward-compatible rule that legacy account-opening events without a period are period-1 openings; do not retroactively reinterpret sealed legacy history;
+- compose loan, refinancing, deposit, reserve, wage claims/payables and all other supported positions into one complete SFC OpeningStockSnapshot with duplicate/mirror/currency checks and conversion to version-resolved SFCIdentity values;
 - bind each snapshot to the exact durable register checkpoint (register identity, sequence and digest) and require signed period-completeness declarations, including explicit zero-activity declarations;
-- test restart/recovery using snapshots derived from actual durable history.
+- test restart/recovery using composed snapshots derived from actual durable history.
 
 ### B4. Sector-flow mapping and mirror integrity
 
@@ -150,4 +150,13 @@ Each emitted opening evidence reference is a deterministic digest over the contr
 
 Regression coverage checks loan openings at origination, immediately before repayment, and after repayment; equivalent refinancing tests cover the advance and repayment boundaries.
 
-**Remaining boundary:** these methods export only the bilateral loan/refinancing principal positions. They do not yet export the shared reserve/deposit counterpart positions changed by those events, do not constitute a complete `OpeningStockSnapshot`, and do not bind a snapshot to a separately persisted projection checkpoint. Reserve/deposit historical reconstruction, full snapshot composition, signed register-period completeness and adapter-level end-to-end replay remain open.
+**Remaining boundary:** loan/refinancing and deposit/reserve historical opening exporters now exist, including the shared deposit/reserve movements caused by prior loan, wage, interbank and refinancing transactions. They still emit legacy `PositionIdentity` rows rather than one composed, registry-resolved SFC `OpeningStockSnapshot`; they do not yet bind the composed snapshot to the persisted financial-register checkpoint or prove signed period completeness. End-to-end adapter replay from automatically composed snapshots remains open.
+
+
+## Addendum — period-pinned account openings and exact financial arithmetic (2026-11-15)
+
+Deposit and reserve account-opening events now carry `period_index` (default 1 for backward-compatible legacy callers), and the reducer retains `opening_period_index`. Historical account-opening exports omit accounts before their first-active period, include the immutable opening balance at that boundary, and replay only prior-period movements. Backdated loan, interbank, refinancing and wage-payment movements that precede any affected account's opening period are rejected at the register boundary.
+
+The financial reducer now executes accepted monetary arithmetic under a bounded high-precision Decimal context, rejects source decimals beyond the exact-decimal bounds, and uses exact summation for bank balance snapshots and historical opening reconstruction. A regression test uses a principal larger than 28 significant digits, repays a unit amount, and checks the exact remaining loan, deposit and aggregate bank balances.
+
+These changes improve the financial register's period semantics and arithmetic; they do not yet compose all exported rows into a source-checkpoint-pinned SFC snapshot or establish six-register closure. Exact-HEAD CI must confirm the current implementation.
