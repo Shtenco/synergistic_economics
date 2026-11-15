@@ -7,7 +7,11 @@ from pathlib import Path
 from operating_financial_register import OperatingFinancialRegister
 from sfc_projection_kernel import SFCIdentity
 
-from operating_financial_register import bank_credit_stock_flow_movement_specs
+from operating_financial_register import (
+    bank_credit_stock_flow_movement_specs,
+    interbank_payment_stock_flow_movement_specs,
+    central_bank_refinancing_movement_specs,
+)
 from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapter,
     OperatingFinancialSFCAdapterError,
@@ -336,6 +340,156 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
                 sector_registry=sectors,
                 opening_snapshots=[first, deposit_only],
             )
+
+    def test_six_sector_interbank_reserves_and_refinancing_close_without_plugs(self):
+        terms = InstrumentTermsRegistry("six-sector-terms-v1", (
+            instrument("DEPOSIT:row-entity:bank-1:LCU", "DEPOSIT"),
+            instrument("DEPOSIT:firm-1:bank-2:LCU", "DEPOSIT"),
+            instrument("DEPOSIT:government-1:bank-2:LCU", "DEPOSIT"),
+            instrument("LOAN:LOAN-GOV", "LOAN"),
+            instrument("LOAN:LOAN-ROW", "LOAN"),
+            instrument("RESERVE:bank-1:central-bank:LCU", "RESERVE"),
+            instrument("RESERVE:bank-2:central-bank:LCU", "RESERVE"),
+            instrument("CBREFI:FACILITY-1", "LOAN"),
+        ))
+        sectors = EffectiveDatedSectorRegistry(
+            "six-sector-membership-v1",
+            frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+            (
+                SectorMembership("row-entity", "ROW", 1, None),
+                SectorMembership("firm-1", "NFC", 1, None),
+                SectorMembership("government-1", "GOV", 1, None),
+                SectorMembership("bank-1", "CB", 1, None),
+                SectorMembership("bank-2", "CB", 1, None),
+                SectorMembership("central-bank", "CBank", 1, None),
+                SectorMembership("household-1", "H", 1, None),
+            ),
+        )
+
+        interbank_payload = {
+            "payment_id": "PAYMENT-ROW-FIRM",
+            "payer_id": "row-entity", "payee_id": "firm-1",
+            "payer_bank_id": "bank-1", "payee_bank_id": "bank-2",
+            "central_bank_id": "central-bank", "currency": "LCU",
+            "amount": "20", "period_index": 3, "evidence_ref": "SETTLEMENT-EVIDENCE",
+        }
+        interbank_event = {
+            "event_id": "INTERBANK-1", "event_type": "bank.interbank_payment_settled",
+            **interbank_payload,
+        }
+        refinancing_payload = {
+            "facility_id": "FACILITY-1", "bank_id": "bank-1",
+            "central_bank_id": "central-bank", "currency": "LCU",
+            "amount": "50", "period_index": 3, "evidence_ref": "REFINANCING-EVIDENCE",
+        }
+        refinancing_event = {
+            "event_id": "REFINANCING-1",
+            "event_type": "central_bank.refinancing_advanced",
+            **refinancing_payload,
+        }
+        government_loan = self.loan_event(
+            "GOV-LOAN-1", "bank.loan_originated", "30", 3, 1
+        )
+        gov_payload = json.loads(government_loan["payload_json"])
+        gov_payload["payload"]["borrower_id"] = "government-1"
+        gov_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
+            "event_id": "GOV-LOAN-1", "event_type": "bank.loan_originated",
+            **gov_payload["payload"],
+        })
+        government_loan["payload_json"] = json.dumps(gov_payload)
+
+        row_loan = self.loan_event(
+            "ROW-LOAN-1", "bank.loan_originated", "10", 3, 2
+        )
+        row_payload = json.loads(row_loan["payload_json"])
+        row_payload["payload"]["borrower_id"] = "row-entity"
+        row_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
+            "event_id": "ROW-LOAN-1", "event_type": "bank.loan_originated",
+            **row_payload["payload"],
+        })
+        row_loan["payload_json"] = json.dumps(row_payload)
+
+        def native_row(event_id, event_type, payload, movements, sequence):
+            envelope = {
+                "event_type": event_type, "effective_at": "2026-11-15T00:00:00Z",
+                "recorded_at": "2026-11-15T00:00:01Z", "actor_id": "sfc-auditor",
+                "authority_ref": "SFC-SIX-SECTOR-TEST",
+                "idempotency_key": event_id, "payload": payload,
+                "stock_flow_movements": movements,
+            }
+            return {
+                "event_id": event_id, "event_type": event_type,
+                "commit_sequence": sequence, "payload_json": json.dumps(envelope),
+                "payload_sha256": f"sha-{event_id}",
+            }
+
+        rows = [
+            government_loan,
+            row_loan,
+            native_row("INTERBANK-1", "bank.interbank_payment_settled",
+                       interbank_payload,
+                       interbank_payment_stock_flow_movement_specs(interbank_event), 3),
+            native_row("REFINANCING-1", "central_bank.refinancing_advanced",
+                       refinancing_payload,
+                       central_bank_refinancing_movement_specs(refinancing_event), 4),
+        ]
+
+        from operating_financial_sfc_adapter import _resolve_identity
+        identities = {}
+        for row in rows:
+            envelope = json.loads(row["payload_json"])
+            for movement in envelope["stock_flow_movements"]:
+                identity = _resolve_identity(
+                    movement["identity"], 3, terms, sectors
+                )
+                identities[identity] = identity
+        initial_balances = {identity: "0" for identity in identities}
+        for identity in identities:
+            if identity.instrument_id == "DEPOSIT:row-entity:bank-1:LCU":
+                initial_balances[identity] = "20"
+            if identity.instrument_id == "RESERVE:bank-1:central-bank:LCU":
+                initial_balances[identity] = "100"
+        snapshots = []
+        for identity in list(identities):
+            mirror = SFCIdentity(
+                identity.instrument_id, identity.instrument_class,
+                identity.issuer_entity_id, identity.issuer_sector,
+                identity.holder_entity_id, identity.holder_sector,
+                identity.currency, identity.maturity, identity.denomination,
+                identity.valuation_basis,
+            )
+            if mirror not in identities:
+                raise AssertionError(f"test fixture missing mirror for {identity.instrument_id}")
+            initial_balances[mirror] = initial_balances[identity]
+        snapshot = OpeningStockSnapshot(
+            "six-sector-opening-v3", 3, terms.version, terms.digest,
+            sectors.version, sectors.digest, tuple(identities),
+            tuple(OpeningPosition(identity, initial_balances[identity],
+                                  f"OPEN-EVIDENCE-{i}", f"OPEN-SOURCE-{i}")
+                  for i, identity in enumerate(identities)),
+        )
+        result = OperatingFinancialSFCAdapter.build(
+            rows, instrument_registry=terms, sector_registry=sectors,
+            opening_snapshots=[snapshot],
+        )
+        active_sectors = {key[1] for key in result.sector_financial_net_lending}
+        self.assertEqual(active_sectors, {"H", "NFC", "CB", "CBank", "GOV", "ROW"})
+        self.assertEqual(
+            sum(result.sector_financial_net_lending.values(), 0), 0
+        )
+        reserve_1 = next(
+            identity for identity in identities
+            if identity.instrument_id == "RESERVE:bank-1:central-bank:LCU"
+            and identity.holder_entity_id == "bank-1"
+        )
+        reserve_2 = next(
+            identity for identity in identities
+            if identity.instrument_id == "RESERVE:bank-2:central-bank:LCU"
+            and identity.holder_entity_id == "bank-2"
+        )
+        self.assertEqual(result.roll_forward[(reserve_1, 3)].closing, 130)
+        self.assertEqual(result.roll_forward[(reserve_2, 3)].closing, 20)
+        self.assertEqual(result.mapped_source_event_count, 4)
 
     def test_snapshot_period_gap_is_rejected(self):
         terms, sectors, _, first = fixture(3)
