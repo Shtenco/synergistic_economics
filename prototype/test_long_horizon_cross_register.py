@@ -538,6 +538,10 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 verify_governance_checkpoint,
                 "SYNERGY-LONG-HORIZON-TEST",
                 approval_verifier,
+                lambda name,key_id,declaration: (
+                    key_id == register_signers[name].key_id
+                    and declaration.get("register_name") == name
+                ),
             )
             close_ref,close_digest=make_checkpoint(
                 0,0,sha("generation-0-projection"),closed_source_root,closed_hashes,8,8)
