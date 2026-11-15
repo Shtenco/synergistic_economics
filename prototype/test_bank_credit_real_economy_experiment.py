@@ -99,6 +99,9 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
             "borrower_principal_liabilities", "borrower_net_worth_proxy",
             "debt_service_liquidity_coverage", "household_wage_income_gini",
             "household_wage_income", "household_labour_hours",
+            "household_unemployment_hours", "household_income_by_source",
+            "capital_formation_by_product", "firm_production_by_firm",
+            "firm_commissioned_capacity_by_firm",
         ):
             self.assertIn(key, row)
         wage_income = {k: D(v) for k, v in row["household_wage_income"].items()}
