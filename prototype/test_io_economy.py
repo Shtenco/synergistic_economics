@@ -378,6 +378,80 @@ class InputOutputEconomyTests(unittest.TestCase):
             model.place_capex_order(**(args | {"order_id": "ORDER-2", "payment_event_id": "PAYMENT-2"}),
                                     order_period=1)
 
+    def test_capex_payment_event_key_collision_fails_before_any_mutation(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[Product("machinery", "unit", D("10"), D("10"), D("0"))],
+            firms=[
+                FirmConfig("buyer", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("100"), {}),
+                FirmConfig("supplier", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("0"), {"machinery": D("2")}),
+            ],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+        )
+        model._event("p1:capex-payment:ORDER-1", "collision_fixture", {})
+        buyer_cash = model.firms["buyer"].cash
+        supplier_cash = model.firms["supplier"].cash
+        supplier_stock = model.firms["supplier"].inventory["machinery"]
+        with self.assertRaisesRegex(EconomyError, "payment event key"):
+            model.place_capex_order(
+                order_id="ORDER-1", credit_event_id="CREDIT-1",
+                payment_event_id="PAYMENT-1", buyer_id="buyer",
+                supplier_id="supplier", asset_type="machinery",
+                quantity=D("1"), unit_cost=D("10"), order_period=1,
+                delivery_period=2, commissioning_period=3,
+                useful_life_periods=5, residual_value_per_unit=D("1"),
+                service_capacity_per_unit=D("1"), currency="LCU",
+                payment_evidence_ref="PAYMENT-EVIDENCE",
+            )
+        self.assertEqual(model.firms["buyer"].cash, buyer_cash)
+        self.assertEqual(model.firms["supplier"].cash, supplier_cash)
+        self.assertEqual(model.firms["supplier"].inventory["machinery"], supplier_stock)
+        self.assertEqual(model.fixed_asset_ledger.orders, {})
+        self.assertEqual(model.capex_supplier_reservations, {})
+        self.assertEqual(model.capex_orders, {})
+
+    def test_capex_delivery_event_key_collision_fails_before_period_or_stock_mutation(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[Product("machinery", "unit", D("10"), D("10"), D("0"))],
+            firms=[
+                FirmConfig("buyer", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("100"), {}),
+                FirmConfig("supplier", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("0"), {"machinery": D("2")}),
+            ],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+        )
+        model.place_capex_order(
+            order_id="ORDER-1", credit_event_id="CREDIT-1",
+            payment_event_id="PAYMENT-1", buyer_id="buyer",
+            supplier_id="supplier", asset_type="machinery",
+            quantity=D("1"), unit_cost=D("10"), order_period=1,
+            delivery_period=2, commissioning_period=3,
+            useful_life_periods=5, residual_value_per_unit=D("1"),
+            service_capacity_per_unit=D("1"), currency="LCU",
+            payment_evidence_ref="PAYMENT-EVIDENCE",
+        )
+        model.step(1)
+        model._event("p2:capex-delivery:ORDER-1", "collision_fixture", {})
+        stock_before = model.firms["supplier"].inventory["machinery"]
+        cash_before = model._system_cash()
+        ledger_events_before = len(model.fixed_asset_ledger.events)
+        delivered_before = model.fixed_asset_ledger.physical_reconciliation("ORDER-1")["delivered"]
+        with self.assertRaisesRegex(EconomyError, "delivery event key"):
+            model.step(2)
+        self.assertEqual(model.current_period, 1)
+        self.assertEqual(model.firms["supplier"].inventory["machinery"], stock_before)
+        self.assertEqual(model._system_cash(), cash_before)
+        self.assertEqual(len(model.fixed_asset_ledger.events), ledger_events_before)
+        self.assertEqual(
+            model.fixed_asset_ledger.physical_reconciliation("ORDER-1")["delivered"],
+            delivered_before,
+        )
+        self.assertEqual(model.capex_supplier_reservations[("supplier", "machinery")], D("1"))
+
     def test_capex_cannot_be_paid_without_supplier_stock_or_buyer_cash(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
         model = InputOutputEconomy(
