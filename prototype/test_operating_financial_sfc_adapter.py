@@ -451,7 +451,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             period3 = snapshot("durable-opening-p3", 3,
                                ["100", "100", "100", "100", "100", "100", "100", "100", "0", "0"])
             period4 = snapshot("durable-opening-p4", 4,
-                               ["80", "80", "120", "120", "80", "80", "120", "120", "50", "50"])
+                               ["80", "80", "120", "120", "130", "130", "120", "120", "50", "50"])
             result = OperatingFinancialSFCAdapter.from_register(
                 register, principal_id="financial-root",
                 instrument_registry=terms, sector_registry=sectors,
@@ -464,6 +464,8 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             self.assertEqual(result.roll_forward[(identities[2], 3)].closing, 120)
             self.assertEqual(result.roll_forward[(identities[4], 3)].closing, 80)
             self.assertEqual(result.roll_forward[(identities[6], 3)].closing, 120)
+            self.assertEqual(result.roll_forward[(identities[4], 4)].closing, 110)
+            self.assertEqual(result.roll_forward[(identities[5], 4)].closing, 110)
             self.assertEqual(result.roll_forward[(identities[8], 3)].closing, 50)
             self.assertEqual(result.roll_forward[(identities[8], 4)].closing, 30)
             self.assertEqual(result.roll_forward[(identities[9], 4)].closing, 30)
