@@ -380,9 +380,39 @@ def run_credit_allocation_experiment(*, credit_amount="50000", periods=12):
     ).run()
 
 
+def main():
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(
+        description="Matched bank-credit allocation experiment over the physical IO economy"
+    )
+    parser.add_argument("--credit-amount", default="50000")
+    parser.add_argument("--periods", type=int, default=12)
+    parser.add_argument("--output", default="")
+    args = parser.parse_args()
+    result = run_credit_allocation_experiment(
+        credit_amount=args.credit_amount,
+        periods=args.periods,
+    )
+    if args.output:
+        Path(args.output).write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\\n",
+            encoding="utf-8",
+        )
+    print(json.dumps({
+        "experiment": result["experiment"],
+        "credit_amount": result["credit_amount"],
+        "periods": result["periods"],
+        "cases": {
+            name: {
+                "credit_principal_outstanding": case["credit_principal_outstanding"],
+                **case["summary"],
+            }
+            for name, case in result["cases"].items()
+        },
+    }, indent=2, sort_keys=True))
+
+
 if __name__ == "__main__":
-    print(json.dumps(
-        run_credit_allocation_experiment(),
-        indent=2,
-        sort_keys=True,
-    ))
+    main()
