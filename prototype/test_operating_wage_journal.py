@@ -179,6 +179,10 @@ class OperatingWageJournalTests(unittest.TestCase):
             event_id="GOOD-PAYMENT", claim_id=accrual.claim_id, amount="1",
             causation_id=accrual.event_id, evidence_ref="BANK-GOOD", period_index=2,
         )
+        with self.assertRaisesRegex(OperatingWageError, "cannot move backwards"):
+            journal.pay_wage(event_id="BAD-BACKWARDS", claim_id=accrual.claim_id, amount="1",
+                             causation_id=payment.event_id, evidence_ref="BANK-BACKWARDS",
+                             period_index=1)
         with self.assertRaisesRegex(OperatingWageError, "immediately preceding"):
             journal.pay_wage(event_id="BAD-CHAIN", claim_id=accrual.claim_id, amount="1",
                              causation_id=accrual.event_id, evidence_ref="BANK-BAD-CHAIN",
