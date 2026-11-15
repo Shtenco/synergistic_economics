@@ -138,7 +138,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
                     source_register_id="caller-controlled-register-id",
                 )
 
-    def test_concurrent_source_append_during_history_read_fails_closed(self):
+    def test_pipeline_requires_atomic_history_checkpoint_api(self):
         terms, sectors, _identities, snapshot = fixture()
         source = FakeFinancialRegister([
             history_row("LOAN-ORIG-1", "bank.loan_originated", {
@@ -147,14 +147,10 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 "period_index": 3, "evidence_ref": "SIGNED-LOAN-1",
             }, sequence=7)
         ])
-        checkpoints = iter((
-            {"register_instance_id": "a" * 32, "event_count": 7, "tail_hash": "b" * 64},
-            {"register_instance_id": "a" * 32, "event_count": 8, "tail_hash": "c" * 64},
-        ))
-        source.source_checkpoint = lambda: next(checkpoints)
+        source.history_with_checkpoint = None
         with tempfile.TemporaryDirectory() as directory:
             store = BankingSFCProjectionStore(Path(directory) / "projection.sqlite")
-            with self.assertRaisesRegex(ValueError, "changed while its history snapshot"):
+            with self.assertRaisesRegex(ValueError, "atomic verified history/checkpoint read"):
                 project_and_persist(
                     source, principal_id="auditor", instrument_registry=terms,
                     sector_registry=sectors, opening_snapshots=[snapshot], store=store,
@@ -181,6 +177,10 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 "event_count": 8,
                 "tail_hash": "c" * 64,
             }
+            source.history_with_checkpoint = lambda aggregate_id, *, principal_id: (
+                source.history(aggregate_id, principal_id=principal_id),
+                {"register_instance_id": "a" * 32, "event_count": 8, "tail_hash": "c" * 64},
+            )
             source.chain_hash_at = lambda sequence: "d" * 64
             with self.assertRaisesRegex(ValueError, "diverges from the previously sealed checkpoint"):
                 project_and_persist(
