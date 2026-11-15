@@ -11,7 +11,7 @@ from bank_credit_real_economy_experiment import (
 class BankCreditRealEconomyExperimentTests(unittest.TestCase):
     def test_equal_principal_is_issued_in_each_credit_scenario(self):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=4)
-        for scenario in ("productive", "consumption", "asset_purchase"):
+        for scenario in ("productive", "productive_capex", "consumption", "asset_purchase"):
             case = result["cases"][scenario]
             self.assertEqual(case["credit_principal_issued"], "12000.00")
             self.assertEqual(case["deposit_money_created"], "12000.00")
@@ -27,7 +27,7 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
 
     def test_net_new_deposit_money_tracks_origination_less_repayment(self):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=5)
-        for scenario in ("productive", "consumption", "asset_purchase"):
+        for scenario in ("productive", "productive_capex", "consumption", "asset_purchase"):
             case = result["cases"][scenario]
             for row in case["periods"]:
                 self.assertEqual(
@@ -59,12 +59,25 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
 
     def test_credit_repayment_reduces_deposit_money_and_loan_principal(self):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=5)
-        for scenario in ("productive", "consumption", "asset_purchase"):
+        for scenario in ("productive", "productive_capex", "consumption", "asset_purchase"):
             case = result["cases"][scenario]
             destroyed = D(case["deposit_money_destroyed"])
             outstanding = D(case["credit_principal_outstanding"])
             self.assertEqual(D("12000.00") - destroyed, outstanding)
             self.assertGreaterEqual(destroyed, D("0"))
+
+    def test_productive_capex_has_delivery_and_commissioning_lags(self):
+        case = run_credit_allocation_experiment(credit_amount="12000", periods=5)["cases"]["productive_capex"]
+        self.assertEqual(case["capex_order"]["delivery_period"], 2)
+        self.assertEqual(case["capex_order"]["commissioning_period"], 3)
+        periods = case["periods"]
+        self.assertEqual(periods[0]["firm_commissioned_capacity_by_firm"]["farm-north"], "0")
+        self.assertEqual(periods[1]["firm_commissioned_capacity_by_firm"]["farm-north"], "0")
+        self.assertEqual(periods[2]["firm_commissioned_capacity_by_firm"]["farm-north"], "3")
+        self.assertEqual(periods[1]["capital_formation_by_product"]["machinery"], "1")
+        self.assertEqual(periods[2]["capital_formation_by_product"]["machinery"], "0")
+        self.assertEqual(case["credit_principal_issued"], "12000.00")
+        self.assertEqual(case["capex_order"]["credit_event_id"], "CREDIT-ORIGINATION-PRODUCTIVE-CAPEX")
 
     def test_ci_scale_credit_experiment_preserves_physical_stocks(self):
         # The CI scenario is intentionally larger than the small unit fixtures.
