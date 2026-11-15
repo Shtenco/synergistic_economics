@@ -306,6 +306,7 @@ class PeriodGovernance:
                 or attestation_manifest.get("event_count") != attestation.get("period_event_count")
                 or attestation_manifest.get("coverage_count") != attestation.get("period_event_count")
                 or attestation_manifest.get("event_log_root") != attestation.get("period_event_root")
+                or attestation_manifest.get("instrument_opening_hash") != attestation.get("opening_state_hash")
                 or attestation_manifest.get("projection_state_hash") != attestation.get("closing_state_hash")
             ):
                 raise PeriodGovernanceError(
