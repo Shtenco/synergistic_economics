@@ -484,7 +484,7 @@ def main():
     )
     if args.output:
         Path(args.output).write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\\n",
+            json.dumps(result, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
     print(json.dumps({
