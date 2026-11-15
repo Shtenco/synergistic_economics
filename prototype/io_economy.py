@@ -670,6 +670,23 @@ class InputOutputEconomy:
             seller_allocations = _scale_allocations(seller_allocations, actual_traded)
         else:
             actual_traded = traded
+        # Preflight seller-side cent settlement before mutating either side. Several
+        # tiny suppliers can each round up to a cent even when the buyer's aggregate
+        # settlement is smaller; fail closed rather than partially debiting buyers.
+        buyer_cash = sum((cash(qty_value * clearing_price)
+                          for qty_value in settled_buyer_allocations.values()), ZERO)
+        seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
+        seller_revenues = {}
+        seller_cash_assigned = ZERO
+        for index, (key, amount) in enumerate(seller_items):
+            revenue = (cash(amount * clearing_price)
+                       if index < len(seller_items) - 1
+                       else buyer_cash - seller_cash_assigned)
+            if revenue < 0:
+                raise EconomyError("seller-side cent rounding exceeds executable buyer settlement")
+            seller_revenues[key] = revenue
+            seller_cash_assigned += revenue
+
         # Allocate only settled quantities to buyers' firm input stocks or household consumption.
         for (kind, buyer_id), amount in settled_buyer_allocations.items():
             payment = cash(amount * clearing_price)
@@ -685,15 +702,8 @@ class InputOutputEconomy:
                 state.expenditure += payment
         imported = ZERO
         domestic_sold = ZERO
-        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in settled_buyer_allocations.values()), ZERO)
-        seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
-        seller_cash_assigned = ZERO
-        for index, ((kind, seller_id), amount) in enumerate(seller_items):
-            # Allocate cent-rounding residual to the final actual seller, not to an artificial plug account.
-            revenue = cash(amount * clearing_price) if index < len(seller_items) - 1 else buyer_cash - seller_cash_assigned
-            if revenue < 0:
-                raise EconomyError("negative seller settlement after rounding")
-            seller_cash_assigned += revenue
+        for (kind, seller_id), amount in seller_items:
+            revenue = seller_revenues[(kind, seller_id)]
             if kind == "firm":
                 seller = self.firms[seller_id]
                 seller.inventory[product_id] = max(ZERO, seller.inventory.get(product_id, ZERO) - amount)
