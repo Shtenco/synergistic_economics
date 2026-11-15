@@ -170,3 +170,14 @@ other. Newer runs of the same event type still supersede older runs, as intended
 Both workflows must be observed on the same final source HEAD before claiming
 the complete validation gate. A cancelled run is not a test failure, but it is
 also not a pass.
+
+
+## Addendum — native durable projection pipeline (2026-11-15 continuation)
+
+A subsequent source inspection found that the earlier statement “no durable native SFC projection store” is stale. The branch contains:
+
+- `prototype/banking_sfc_projection_store.py`: versioned SQLite schema, immutable snapshot/checkpoint rows, one `BEGIN IMMEDIATE` transaction for snapshot plus checkpoint, idempotent same-cursor replay, stale/gap/version-drift rejection, and deterministic recovery comparison;
+- `prototype/banking_sfc_projection_pipeline.py`: `project_and_persist()` and `rebuild_and_verify()`, which verify the financial-register chain, read the authorized aggregate history, rebuild through the native adapter, and append/recover the projection;
+- `prototype/test_banking_sfc_projection_store.py` and `prototype/test_banking_sfc_projection_pipeline.py`: store rollback/idempotency/recovery and pipeline contract tests.
+
+The remaining integration gap is narrower than this audit originally stated: the native financial register now has a durable projection/checkpoint path. It is still not a six-register period-close assembler, not a bridge into the legacy generic `SFCProjectionStore`, and not a complete capital-account reconciliation. The pipeline is single-host SQLite; its test failpoints cover rollback after snapshot/checkpoint writes, but do not establish process-kill testing at every filesystem boundary or distributed recovery. The current Prototype workflow run observed for the previous audited HEAD was cancelled; no green result is claimed for the latest changes until CI completes on the exact HEAD.
