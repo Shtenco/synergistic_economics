@@ -259,6 +259,91 @@ class InputOutputEconomyTests(unittest.TestCase):
             sum((D(v) for v in result.household_unemployment_hours.values()), D("0")),
         )
 
+    def test_nonwage_income_sources_are_funded_and_separately_recorded(self):
+        from io_economy import HouseholdIncomePayment, HouseholdConfig, FirmConfig, Product
+        payments = [
+            HouseholdIncomePayment(
+                "DIVIDEND-1", "dividend", "firm", "firm-1", "household-1",
+                D("30"), 1, "DIVIDEND-EVIDENCE",
+            ),
+            HouseholdIncomePayment(
+                "PENSION-1", "pension", "income_fund", "pension-fund", "household-1",
+                D("20"), 1, "PENSION-EVIDENCE",
+            ),
+            HouseholdIncomePayment(
+                "INTEREST-1", "interest", "income_fund", "interest-fund", "household-1",
+                D("5"), 1, "INTEREST-EVIDENCE",
+            ),
+        ]
+        model = InputOutputEconomy(
+            products=[Product("good", "unit", D("1"), D("1"), D("0"))],
+            firms=[FirmConfig("firm-1", "good", {}, D("1"), D("0"), D("0"),
+                              D("1"), D("100"), {})],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+            income_payments=payments,
+            income_source_funds={"pension-fund": D("20"), "interest-fund": D("5")},
+        )
+        opening_cash = model.initial_cash
+        result = model.step(1)
+        self.assertEqual(result.household_income_by_source["household-1"], {
+            "dividend": "30.00", "pension": "20.00", "interest": "5.00"
+        })
+        self.assertEqual(result.household_total_income["household-1"], "55.00")
+        self.assertEqual(model.households["household-1"].cash, D("55.00"))
+        self.assertEqual(model.firms["firm-1"].cash, D("70.00"))
+        self.assertEqual(model.income_source_cash["pension-fund"], D("0.00"))
+        self.assertEqual(model.income_source_cash["interest-fund"], D("0.00"))
+        self.assertEqual(model._system_cash(), opening_cash)
+        payment_events = [row for row in model.events if row["kind"] == "household_income_payment"]
+        self.assertEqual(len(payment_events), 3)
+        self.assertTrue(all(row["payload"]["evidence_ref"] for row in payment_events))
+
+    def test_unfunded_household_income_carries_arrears_without_creating_cash(self):
+        from io_economy import HouseholdIncomePayment, HouseholdConfig, FirmConfig, Product
+        payment = HouseholdIncomePayment(
+            "PENSION-ARREAR-1", "pension", "income_fund", "pension-fund",
+            "household-1", D("10"), 1, "PENSION-ARREAR-EVIDENCE",
+        )
+        model = InputOutputEconomy(
+            products=[Product("good", "unit", D("1"), D("1"), D("0"))],
+            firms=[FirmConfig("firm-1", "good", {}, D("1"), D("0"), D("0"),
+                              D("1"), D("0"), {})],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+            income_payments=[payment],
+            income_source_funds={"pension-fund": D("4")},
+        )
+        opening_cash = model.initial_cash
+        first = model.step(1)
+        second = model.step(2)
+        self.assertEqual(first.household_income_payment_arrears[payment.payment_id], "6.00")
+        self.assertEqual(second.household_income_payment_arrears[payment.payment_id], "6.00")
+        self.assertEqual(model.households["household-1"].cash, D("4.00"))
+        self.assertEqual(model._system_cash(), opening_cash)
+
+    def test_income_payments_reject_unknown_or_unfunded_payers(self):
+        from io_economy import HouseholdIncomePayment, HouseholdConfig, FirmConfig, Product
+        base = dict(
+            payment_id="INCOME-1", source_type="pension", payer_kind="income_fund",
+            payer_id="missing-fund", recipient_id="household-1", amount=D("1"),
+            period=1, evidence_ref="INCOME-EVIDENCE",
+        )
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(
+                products=[Product("good", "unit", D("1"), D("1"), D("0"))],
+                firms=[FirmConfig("firm-1", "good", {}, D("1"), D("0"), D("0"), D("1"), D("0"), {})],
+                households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+                income_payments=[HouseholdIncomePayment(**base)],
+            )
+        bad = dict(base, source_type="unknown", payer_id="fund")
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(
+                products=[Product("good", "unit", D("1"), D("1"), D("0"))],
+                firms=[FirmConfig("firm-1", "good", {}, D("1"), D("0"), D("0"), D("1"), D("0"), {})],
+                households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+                income_payments=[HouseholdIncomePayment(**bad)],
+                income_source_funds={"fund": D("1")},
+            )
+
     def test_invalid_explicit_household_labour_shares_are_rejected(self):
         firms = InputOutputEconomy.default_firms()
         base = firms[0]
