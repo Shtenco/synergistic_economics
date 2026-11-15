@@ -114,10 +114,19 @@ class AssetCohort:
     commissioning_period: int
     useful_life_periods: int
     retired_quantity: D = ZERO
+    retirement_history: tuple[tuple[int, D], ...] = ()
 
     @property
     def active_quantity(self):
         return self.quantity - self.retired_quantity
+
+    def active_quantity_at(self, period):
+        _period(period, "period")
+        retired_by_period = sum(
+            (quantity for retired_period, quantity in self.retirement_history
+             if retired_period <= period), ZERO
+        )
+        return self.quantity - retired_by_period
 
     def carrying_value(self, period):
         _period(period, "period")
@@ -128,7 +137,7 @@ class AssetCohort:
         depreciation_per_unit = depreciable / D(self.useful_life_periods)
         per_unit = max(self.residual_value_per_unit,
                        self.unit_cost - depreciation_per_unit * D(elapsed))
-        return self.active_quantity * per_unit
+        return self.active_quantity_at(period) * per_unit
 
     def productive_capacity(self, period):
         _period(period, "period")
@@ -136,7 +145,7 @@ class AssetCohort:
             return ZERO
         if period >= self.commissioning_period + self.useful_life_periods:
             return ZERO
-        return self.active_quantity * self.service_capacity_per_unit
+        return self.active_quantity_at(period) * self.service_capacity_per_unit
 
 
 class FixedAssetLedger:
@@ -220,6 +229,7 @@ class FixedAssetLedger:
             cohort.quantity, cohort.unit_cost, cohort.residual_value_per_unit,
             cohort.service_capacity_per_unit, cohort.commissioning_period,
             cohort.useful_life_periods, cohort.retired_quantity + quantity,
+            cohort.retirement_history + ((period, quantity),),
         )
         self._event_ids.add(event_id)
         self.events.append(AssetEvent(event_id, cohort.order_id, "asset_retired",
