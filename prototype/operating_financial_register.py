@@ -163,6 +163,55 @@ def interbank_payment_stock_flow_movement_specs(event):
     return movements
 
 
+def central_bank_refinancing_movement_specs(event):
+    """Canonical SFC movements for central-bank lending to a commercial bank."""
+    event_id = _text(event.get("event_id"), "event_id")
+    event_type = event.get("event_type")
+    facility_id = _text(event.get("facility_id"), "facility_id")
+    bank = _text(event.get("bank_id"), "bank_id")
+    central_bank = _text(event.get("central_bank_id"), "central_bank_id")
+    currency = _text(event.get("currency"), "currency")
+    amount = _decimal(event.get("amount"), "amount", positive=True)
+    period = event.get("period_index")
+    if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+        raise OperatingFinancialRegisterError("period_index must be a positive integer")
+    if bank == central_bank:
+        raise OperatingFinancialRegisterError("commercial bank and central bank must be distinct")
+    if event_type not in {
+        "central_bank.refinancing_advanced",
+        "central_bank.refinancing_principal_repaid",
+    }:
+        raise OperatingFinancialRegisterError("unsupported central-bank refinancing event type")
+    evidence = _text(event.get("evidence_ref"), "evidence_ref")
+    signed = amount if event_type == "central_bank.refinancing_advanced" else -amount
+    loan = f"CBREFI:{facility_id}"
+    reserve = f"RESERVE:{bank}:{central_bank}:{currency}"
+
+    def movement(suffix, position_id, holder, issuer, instrument, mirror_group, side):
+        return {
+            "movement_id": f"{event_id}:{suffix}",
+            "identity": _identity(position_id, holder, issuer, instrument, currency),
+            "period_index": period,
+            "movement_class": "T",
+            "amount": str(signed),
+            "evidence_ref": evidence,
+            "mirror_group_id": f"{event_id}:{mirror_group}",
+            "mirror_side": side,
+            "mirror_policy": "equal",
+        }
+
+    return [
+        movement("CB-LOAN-ASSET", f"{loan}:CB-ASSET", central_bank, bank,
+                 loan, "LOAN", "asset_holder"),
+        movement("BANK-REFINANCING-LIABILITY", f"{loan}:BANK-LIABILITY", bank,
+                 central_bank, loan, "LOAN", "liability_issuer"),
+        movement("BANK-RESERVE-ASSET", f"{reserve}:ASSET", bank, central_bank,
+                 reserve, "RESERVE", "asset_holder"),
+        movement("CB-RESERVE-LIABILITY", f"{reserve}:LIABILITY", central_bank,
+                 bank, reserve, "RESERVE", "liability_issuer"),
+    ]
+
+
 def wage_stock_flow_movement_specs(events):
     """Canonical SFC movements for operating wage accrual and payment events."""
     specs = []
@@ -247,7 +296,9 @@ class OperatingFinancialRegister(DurableEventRegister):
         return "financial:write" if event_type in {
             "wage.event_group_committed", "deposit.account_opened",
             "bank.loan_originated", "bank.loan_principal_repaid",
-            "bank.reserve_account_opened", "bank.interbank_payment_settled"
+            "bank.reserve_account_opened", "bank.interbank_payment_settled",
+            "central_bank.refinancing_advanced",
+            "central_bank.refinancing_principal_repaid",
         } else "financial:admin"
 
     def _validate_postings(self, event):
@@ -585,6 +636,80 @@ class OperatingFinancialRegister(DurableEventRegister):
         }
         return state
 
+    def _reduce_central_bank_refinancing(self, state, event):
+        p = event["payload"]
+        event_type = event["event_type"]
+        facility_id = _text(p.get("facility_id"), "facility_id")
+        bank = _text(p.get("bank_id"), "bank_id")
+        central_bank = _text(p.get("central_bank_id"), "central_bank_id")
+        currency = _text(p.get("currency"), "currency")
+        amount = _decimal(p.get("amount"), "amount", positive=True)
+        minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
+        period = p.get("period_index")
+        evidence = _text(p.get("evidence_ref"), "evidence_ref")
+        event_id = _text(event.get("event_id"), "event_id")
+        if bank == central_bank:
+            raise OperatingFinancialRegisterError("commercial bank and central bank must be distinct")
+        if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
+            raise OperatingFinancialRegisterError("refinancing minor_unit must be a positive fraction no greater than one")
+        if amount / minor_unit != (amount / minor_unit).to_integral_value():
+            raise OperatingFinancialRegisterError("refinancing amount is not an exact multiple of its minor unit")
+        if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+            raise OperatingFinancialRegisterError("period_index must be a positive integer")
+        for entity in (bank, central_bank):
+            if entity not in self.sectors:
+                raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
+        if self.sectors[bank] != SECTOR_COMMERCIAL_BANKS:
+            raise OperatingFinancialRegisterError("refinancing borrower must be a configured commercial bank")
+        if self.sectors[central_bank] != SECTOR_CENTRAL_BANK:
+            raise OperatingFinancialRegisterError("refinancing lender must be a configured central bank")
+        reserve_key = self._reserve_key(bank, central_bank, currency)
+        reserve = state["reserves"].get(reserve_key)
+        if reserve is None:
+            raise OperatingFinancialRegisterError("commercial bank requires a reserve account at the refinancing central bank")
+        if reserve["minor_unit"] != str(minor_unit):
+            raise OperatingFinancialRegisterError("refinancing minor unit differs from reserve account")
+        facility = state["refinancing"].get(facility_id)
+        if event_type == "central_bank.refinancing_advanced":
+            if facility is not None:
+                raise OperatingFinancialRegisterError("refinancing facility ID already exists")
+            state["reserves"][reserve_key]["balance"] = str(D(reserve["balance"]) + amount)
+            state["refinancing"][facility_id] = {
+                "facility_id": facility_id, "bank_id": bank,
+                "central_bank_id": central_bank, "currency": currency,
+                "minor_unit": str(minor_unit), "original_principal": str(amount),
+                "outstanding_principal": str(amount), "last_event_id": event_id,
+                "last_period_index": period, "origination_evidence_ref": evidence,
+                "status": "OUTSTANDING", "event_ids": [event_id],
+            }
+            return state
+        if facility is None:
+            raise OperatingFinancialRegisterError("refinancing repayment requires an existing durable facility")
+        if (facility["bank_id"], facility["central_bank_id"], facility["currency"],
+            facility["minor_unit"]) != (bank, central_bank, currency, str(minor_unit)):
+            raise OperatingFinancialRegisterError("repayment identity differs from the original refinancing facility")
+        if event_id in facility["event_ids"]:
+            raise OperatingFinancialRegisterError("duplicate refinancing event ID")
+        if p.get("causation_id") != facility["last_event_id"]:
+            raise OperatingFinancialRegisterError("refinancing repayment causation must reference the immediately preceding facility event")
+        if period < facility["last_period_index"]:
+            raise OperatingFinancialRegisterError("refinancing event period cannot move backwards")
+        outstanding = D(facility["outstanding_principal"])
+        if amount > outstanding:
+            raise OperatingFinancialRegisterError("refinancing repayment exceeds outstanding principal")
+        reserve_balance = D(reserve["balance"])
+        if amount > reserve_balance:
+            raise OperatingFinancialRegisterError("insufficient bank reserves for central-bank refinancing repayment")
+        remaining = outstanding - amount
+        state["reserves"][reserve_key]["balance"] = str(reserve_balance - amount)
+        state["refinancing"][facility_id] = facility | {
+            "outstanding_principal": str(remaining), "last_event_id": event_id,
+            "last_period_index": period,
+            "status": "REPAID" if remaining == 0 else "OUTSTANDING",
+            "event_ids": list(facility["event_ids"]) + [event_id],
+        }
+        return state
+
     def _reduce_deposit_opening(self, state, event):
         payload = event["payload"]
         entity = _text(payload.get("entity_id"), "deposit entity_id")
@@ -623,12 +748,13 @@ class OperatingFinancialRegister(DurableEventRegister):
     def reduce_event(self, old, event):
         if event["aggregate_id"] != "operating-financial":
             raise OperatingFinancialRegisterError("all operating financial events must use the global financial stream")
-        state = old or {"claims": {}, "deposits": {}, "loans": {}, "reserves": {}, "interbank_payments": {}}
+        state = old or {"claims": {}, "deposits": {}, "loans": {}, "reserves": {}, "interbank_payments": {}, "refinancing": {}}
         state = {"claims": dict(state.get("claims", {})),
                  "deposits": {key: dict(value) for key, value in state.get("deposits", {}).items()},
                  "loans": {key: dict(value) for key, value in state.get("loans", {}).items()},
                  "reserves": {key: dict(value) for key, value in state.get("reserves", {}).items()},
-                 "interbank_payments": dict(state.get("interbank_payments", {}))}
+                 "interbank_payments": dict(state.get("interbank_payments", {})),
+                 "refinancing": {key: dict(value) for key, value in state.get("refinancing", {}).items()}}
         event_type = event["event_type"]
         if event_type == "deposit.account_opened":
             return self._reduce_deposit_opening(state, event)
@@ -636,6 +762,11 @@ class OperatingFinancialRegister(DurableEventRegister):
             return self._reduce_reserve_opening(state, event)
         if event_type == "bank.interbank_payment_settled":
             return self._reduce_interbank_payment(state, event)
+        if event_type in {
+            "central_bank.refinancing_advanced",
+            "central_bank.refinancing_principal_repaid",
+        }:
+            return self._reduce_central_bank_refinancing(state, event)
         if event_type in {"bank.loan_originated", "bank.loan_principal_repaid"}:
             return self._reduce_bank_credit(state, event)
         if event_type != "wage.event_group_committed":
@@ -802,6 +933,52 @@ class OperatingFinancialRegister(DurableEventRegister):
             positions.extend((OpeningPosition(asset, period_index, amount, evidence),
                               OpeningPosition(liability, period_index, amount, evidence)))
         return tuple(positions)
+
+    def commit_central_bank_refinancing(self, *, event_id, event_type, facility_id,
+                                        bank_id, central_bank_id, currency, amount,
+                                        period_index, evidence_ref, actor_id,
+                                        authority_ref, effective_at, recorded_at,
+                                        expected_revision, minor_unit="0.01",
+                                        causation_id=None):
+        if event_type not in {
+            "central_bank.refinancing_advanced",
+            "central_bank.refinancing_principal_repaid",
+        }:
+            raise OperatingFinancialRegisterError("unsupported central-bank refinancing event type")
+        event_id = _text(event_id, "event_id")
+        payload = {
+            "facility_id": _text(facility_id, "facility_id"),
+            "bank_id": _text(bank_id, "bank_id"),
+            "central_bank_id": _text(central_bank_id, "central_bank_id"),
+            "currency": _text(currency, "currency"),
+            "amount": str(_decimal(amount, "amount", positive=True)),
+            "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+            "period_index": period_index,
+            "evidence_ref": _text(evidence_ref, "evidence_ref"),
+        }
+        if causation_id is not None:
+            payload["causation_id"] = _text(causation_id, "causation_id")
+        envelope = {
+            "event_type": event_type, "effective_at": effective_at,
+            "recorded_at": recorded_at, "actor_id": actor_id,
+            "authority_ref": authority_ref, "idempotency_key": event_id,
+            "payload": payload,
+            "stock_flow_movements": central_bank_refinancing_movement_specs(
+                {"event_id": event_id, **payload, "event_type": event_type}
+            ),
+        }
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision, "payload": envelope,
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def refinancing_state(self, facility_id, *, principal_id):
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            return None, version
+        return state.get("refinancing", {}).get(facility_id), version
 
     def settle_interbank_payment(self, *, event_id, payment_id, payer_id, payee_id,
                                  payer_bank_id, payee_bank_id, central_bank_id,
@@ -985,6 +1162,8 @@ class OperatingFinancialRegister(DurableEventRegister):
     def append_event(self, **kwargs):
         if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened",
                                         "bank.loan_originated", "bank.loan_principal_repaid",
-                                        "bank.reserve_account_opened", "bank.interbank_payment_settled"}:
+                                        "bank.reserve_account_opened", "bank.interbank_payment_settled",
+                                        "central_bank.refinancing_advanced",
+                                        "central_bank.refinancing_principal_repaid"}:
             raise OperatingFinancialRegisterError("operating financial events must commit through the native prepare/commit protocol")
         return super().append_event(**kwargs)
