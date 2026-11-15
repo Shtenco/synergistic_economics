@@ -92,6 +92,7 @@ def build_opening_snapshots_from_register(
         "loan_opening_positions",
         "refinancing_opening_positions",
         "wage_opening_positions",
+        "wage_opening_positions",
     )
     if any(not callable(getattr(register, name, None)) for name in exporters):
         raise OperatingFinancialSFCAdapterError(
