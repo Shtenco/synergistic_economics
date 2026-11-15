@@ -1,6 +1,6 @@
 """Durable legal rights, claims, title, encumbrance and dispute register."""
 from __future__ import annotations
-from durable_event_register import DurableEventRegister, RegisterError, required_text, utc_timestamp
+from durable_event_register import DurableEventRegister, RegisterError, required_text, utc_timestamp, finite_decimal
 
 
 class LegalRightsRegisterError(RegisterError):
@@ -13,7 +13,7 @@ class LegalRightsRegister(DurableEventRegister):
 
     @staticmethod
     def write_permission(event_type):
-        if event_type in {"right.created", "right.transferred", "right.encumbered", "right.released", "right.extinguished"}:
+        if event_type in {"right.created", "right.created_and_extinguished", "right.transferred", "right.encumbered", "right.released", "right.extinguished"}:
             return "legal_rights:write"
         if event_type in {"right.disputed", "right.adjudicated", "right.corrected", "right.evidence_attached"}:
             return "legal_rights:adjudicate"
@@ -22,7 +22,7 @@ class LegalRightsRegister(DurableEventRegister):
     def reduce_event(self, old, event):
         typ, p = event["event_type"], event["payload"]
         state = dict(old or {})
-        if typ == "right.created":
+        if typ in {"right.created", "right.created_and_extinguished"}:
             if old is not None:
                 raise LegalRightsRegisterError("legal right/claim identity already exists")
             for field in ("holder_id","right_type","scope","jurisdiction","legal_instrument_ref"):
@@ -35,12 +35,30 @@ class LegalRightsRegister(DurableEventRegister):
                 raise LegalRightsRegisterError("right creation requires evidence references")
             if p.get("obligor_id") is not None and p["holder_id"] == p["obligor_id"]:
                 raise LegalRightsRegisterError("holder and obligor must be distinct identities")
-            return {"holder_id":p["holder_id"],"obligor_id":p.get("obligor_id"),
-                    "right_type":p["right_type"],"scope":p["scope"],
-                    "jurisdiction":p["jurisdiction"],"legal_instrument_ref":p["legal_instrument_ref"],
-                    "effective_from":p["effective_from"],"status":"ACTIVE",
-                    "evidence_refs":list(dict.fromkeys(evidence)),"encumbrances":[],
-                    "dispute_ref":None,"adjudication":None,"correction_event_ids":[]}
+            state = {"holder_id":p["holder_id"],"obligor_id":p.get("obligor_id"),
+                     "right_type":p["right_type"],"scope":p["scope"],
+                     "jurisdiction":p["jurisdiction"],"legal_instrument_ref":p["legal_instrument_ref"],
+                     "effective_from":p["effective_from"],
+                     "status":"ACTIVE" if typ == "right.created" else "EXTINGUISHED",
+                     "evidence_refs":list(dict.fromkeys(evidence)),"encumbrances":[],
+                     "dispute_ref":None,"adjudication":None,"correction_event_ids":[]}
+            if typ == "right.created_and_extinguished":
+                if p["right_type"] != "wage_claim":
+                    raise LegalRightsRegisterError("create-and-extinguish is reserved for wage claims settled at creation")
+                settlement_event_id = required_text(p.get("settlement_event_id"), "settlement_event_id")
+                settlement_evidence_ref = required_text(p.get("settlement_evidence_ref"), "settlement_evidence_ref")
+                settled_amount = finite_decimal(p.get("settled_amount"), "settled_amount", minimum=0)
+                if settled_amount <= 0:
+                    raise LegalRightsRegisterError("settled_amount must be positive")
+                if settlement_evidence_ref not in evidence:
+                    raise LegalRightsRegisterError("settlement evidence must be included in right evidence references")
+                state["extinguishment"] = {
+                    "basis":"paid_at_creation",
+                    "settlement_event_id":settlement_event_id,
+                    "settlement_evidence_ref":settlement_evidence_ref,
+                    "settled_amount":str(settled_amount),
+                }
+            return state
         if old is None:
             raise LegalRightsRegisterError("legal right event references unknown claim")
         if typ == "right.evidence_attached":
