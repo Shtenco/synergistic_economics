@@ -73,7 +73,8 @@ class OperatingWageJournalTests(unittest.TestCase):
         journal = self.journal()
         event = journal.accrue_verified_wage(
             event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
-            contract=self.contract, causation_id="ENG-1",
+            contract=self.contract, causation_id="L5",
+            labour_register=self.labour, principal_id="coordinator",
         )
         self.assertEqual(event.amount, D("40.00"))
         self.assertEqual(event.event_type, "wage_accrual")
@@ -115,13 +116,69 @@ class OperatingWageJournalTests(unittest.TestCase):
         forged = type(self.delivery)(
             engagement_id=self.delivery.engagement_id, delivery_event_id="FORGED-DELIVERY",
             verification_ref=self.delivery.verification_ref, worker_id=self.delivery.worker_id,
-            period_label=self.delivery.period_label, delivered_hours=self.delivery.delivered_hours,
+            employer_id=self.delivery.employer_id, period_label=self.delivery.period_label, delivered_hours=self.delivery.delivered_hours,
             aggregate_version=self.delivery.aggregate_version,
         )
         journal = self.journal()
         with self.assertRaisesRegex(OperatingWageError, "authorized labour-register reader"):
             journal.accrue_verified_wage(event_id="W1", delivery=forged,
                                          contract=self.contract, causation_id="ENG-1")
+
+    def test_stale_delivery_snapshot_is_rejected_after_hours_correction(self):
+        append_labour(self.labour, "L7", "hours.corrected", {
+            "corrects_event_id":"L5", "reason":"Verified timesheet correction",
+            "delta_hours":"-0.5",
+        }, 6)
+        journal = self.journal()
+        with self.assertRaisesRegex(OperatingWageError, "aggregate changed"):
+            journal.accrue_verified_wage(
+                event_id="WAGE-STALE", delivery=self.delivery,
+                contract=self.contract, causation_id="L5",
+                labour_register=self.labour, principal_id="coordinator",
+            )
+
+    def test_contract_must_match_labour_register_employer(self):
+        wrong_employer = WageContract(
+            worker_id="worker-1", employer_id="another-employer", period_label="P1",
+            period_index=1, currency="LCU", hourly_rate=D("20"),
+            contract_ref="WRONG-EMPLOYER", evidence_ref="PAYROLL-RULE-1",
+        )
+        with self.assertRaisesRegex(OperatingWageError, "worker, employer and labour period"):
+            self.journal().accrue_verified_wage(
+                event_id="WAGE-WRONG-EMPLOYER", delivery=self.delivery,
+                contract=wrong_employer, causation_id="L5",
+                labour_register=self.labour, principal_id="coordinator",
+            )
+
+    def test_payment_requires_minor_unit_and_causal_order(self):
+        journal = self.journal()
+        accrual = journal.accrue_verified_wage(
+            event_id="WAGE-ACCRUAL-1", delivery=self.delivery,
+            contract=self.contract, causation_id="L5",
+            labour_register=self.labour, principal_id="coordinator",
+        )
+        with self.assertRaisesRegex(OperatingWageError, "minor unit"):
+            journal.pay_wage(event_id="BAD-FRACTION", claim_id=accrual.claim_id,
+                             amount="1.001", causation_id=accrual.event_id,
+                             evidence_ref="BANK-BAD", period_index=2)
+        with self.assertRaisesRegex(OperatingWageError, "cannot precede"):
+            journal.pay_wage(event_id="BAD-PERIOD", claim_id=accrual.claim_id,
+                             amount="1", causation_id=accrual.event_id,
+                             evidence_ref="BANK-BAD-PERIOD", period_index=0)
+        with self.assertRaisesRegex(OperatingWageError, "causation"):
+            journal.pay_wage(event_id="BAD-CAUSE", claim_id=accrual.claim_id,
+                             amount="1", causation_id="UNRELATED",
+                             evidence_ref="BANK-BAD-CAUSE", period_index=2)
+        payment = journal.pay_wage(
+            event_id="GOOD-PAYMENT", claim_id=accrual.claim_id, amount="1",
+            causation_id=accrual.event_id, evidence_ref="BANK-GOOD", period_index=2,
+        )
+        with self.assertRaisesRegex(OperatingWageError, "immediately preceding"):
+            journal.pay_wage(event_id="BAD-CHAIN", claim_id=accrual.claim_id, amount="1",
+                             causation_id=accrual.event_id, evidence_ref="BANK-BAD-CHAIN",
+                             period_index=2)
+        journal.pay_wage(event_id="GOOD-PAYMENT-2", claim_id=accrual.claim_id, amount="1",
+                         causation_id=payment.event_id, evidence_ref="BANK-GOOD-2", period_index=2)
 
     def test_partial_payment_clears_claim_and_moves_deposits(self):
         journal = self.journal()
@@ -153,10 +210,10 @@ class OperatingWageJournalTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(OperatingWageError, "deposit balance"):
             journal.pay_wage(event_id="P1", claim_id=accrual.claim_id, amount="21",
-                             causation_id="W1", evidence_ref="BANK-1", period_index=2)
+                             causation_id=accrual.event_id, evidence_ref="BANK-1", period_index=2)
         with self.assertRaisesRegex(OperatingWageError, "exceeds outstanding"):
             journal.pay_wage(event_id="P2", claim_id=accrual.claim_id, amount="41",
-                             causation_id="W1", evidence_ref="BANK-2", period_index=2)
+                             causation_id=accrual.event_id, evidence_ref="BANK-2", period_index=2)
 
     def test_duplicate_delivery_cannot_be_accrued_twice(self):
         journal = self.journal()
