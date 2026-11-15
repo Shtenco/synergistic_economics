@@ -175,6 +175,7 @@ def main():
         close_ref, close_digest = _checkpoint(
             signer, anchor, 1, 0, attestation_anchor=attestation_anchor,
             attestation_refs=attestation_refs,
+            register_signers=register_signers, attestation_sequence=attestation_sequence,
         )
         def verify(ref, digest):
             selected_anchor = attestation_anchor if ref in attestation_refs else anchor
@@ -198,9 +199,9 @@ def main():
         # Extend the close chain across three consecutive accounting periods.
         # Each close has its own signed checkpoint; the global checkpoint
         # sequence remains monotonic across period identities.
-        close8_ref, close8_digest = _checkpoint(signer, anchor, 2, 0, period=8, attestation_anchor=attestation_anchor, attestation_refs=attestation_refs)
+        close8_ref, close8_digest = _checkpoint(signer, anchor, 2, 0, period=8, attestation_anchor=attestation_anchor, attestation_refs=attestation_refs, register_signers=register_signers, attestation_sequence=attestation_sequence)
         assert governance.close_period(8, 0, close8_ref, close8_digest, "controller-A")
-        close9_ref, close9_digest = _checkpoint(signer, anchor, 3, 0, period=9, attestation_anchor=attestation_anchor, attestation_refs=attestation_refs)
+        close9_ref, close9_digest = _checkpoint(signer, anchor, 3, 0, period=9, attestation_anchor=attestation_anchor, attestation_refs=attestation_refs, register_signers=register_signers, attestation_sequence=attestation_sequence)
         assert governance.close_period(9, 0, close9_ref, close9_digest, "controller-A")
         assert [governance.active_generation(p) for p in (7, 8, 9)] == [0, 0, 0]
 
