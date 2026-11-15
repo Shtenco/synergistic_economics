@@ -430,7 +430,7 @@ class OperatingFinancialSFCAdapter:
                         f"non-zero position {identity.instrument_id} disappears from period {next_period} opening"
                     )
                 continue
-            next_opening = canonical_decimal(openings[next_key])
+            next_opening = Decimal(canonical_decimal(openings[next_key]))
             if next_opening != roll.closing:
                 raise OperatingFinancialSFCAdapterError(
                     f"opening balance differs from prior-period closing for "
