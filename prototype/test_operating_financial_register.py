@@ -385,6 +385,30 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             period_index=3, principal_id="financial-root",
         )}, {D("60")})
 
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "cannot move backwards"):
+            register.commit_bank_credit(
+                event_id="LEGACY-LOAN-REPAY-BEFORE-OPENING",
+                event_type="bank.loan_principal_repaid",
+                loan_id="LEGACY-LOAN", borrower_id="worker-1", bank_id="bank-1",
+                currency="LCU", amount="1", period_index=2,
+                evidence_ref="EARLY-LOAN-REPAYMENT", actor_id="financial-root",
+                authority_ref="CREDIT-SERVICING", effective_at=T, recorded_at=T,
+                expected_revision=4, causation_id="LEGACY-LOAN-OPEN",
+            )
+        self.assertIsNone(register.status("LEGACY-LOAN-REPAY-BEFORE-OPENING"))
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "cannot move backwards"):
+            register.commit_central_bank_refinancing(
+                event_id="LEGACY-REFI-REPAY-BEFORE-OPENING",
+                event_type="central_bank.refinancing_principal_repaid",
+                facility_id="LEGACY-REFI", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="1",
+                period_index=2, evidence_ref="EARLY-REFI-REPAYMENT",
+                actor_id="financial-root", authority_ref="CBANK-SERVICING",
+                effective_at=T, recorded_at=T, expected_revision=4,
+                causation_id="LEGACY-REFI-OPEN",
+            )
+        self.assertIsNone(register.status("LEGACY-REFI-REPAY-BEFORE-OPENING"))
+
         register.commit_bank_credit(
             event_id="LEGACY-LOAN-REPAY", event_type="bank.loan_principal_repaid",
             loan_id="LEGACY-LOAN", borrower_id="worker-1", bank_id="bank-1",
