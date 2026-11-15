@@ -974,9 +974,9 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             causation_id="LEGACY-REFI-OPENING",
         )
         self.assertEqual(
-            register.reserve_balance(
+            register.bank_reserve_snapshot(
                 "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
-            )[0],
+            )["reserve_balance"],
             D("170"),
         )
         opening_period_2 = register.refinancing_opening_positions(
