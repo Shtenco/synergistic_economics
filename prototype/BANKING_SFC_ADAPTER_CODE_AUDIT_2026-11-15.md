@@ -157,3 +157,16 @@ including the new store and pipeline tests. At the time this note was updated,
 the connector had not returned a workflow run or combined status for the new
 HEAD; no test pass is claimed here. A green run on the exact final HEAD remains
 mandatory.
+
+
+## CI concurrency correction — 2026-11-15
+
+The latest audit identified why otherwise valid CI runs were repeatedly
+cancelled: both workflow files used the same concurrency key for `push` and
+`pull_request` events on a branch. The group now includes
+`${{ github.event_name }}`, so push and PR validation no longer cancel each
+other. Newer runs of the same event type still supersede older runs, as intended.
+
+Both workflows must be observed on the same final source HEAD before claiming
+the complete validation gate. A cancelled run is not a test failure, but it is
+also not a pass.
