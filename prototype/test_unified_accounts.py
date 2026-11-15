@@ -153,10 +153,10 @@ class UnifiedBalanceTests(unittest.TestCase):
     def test_bank_loan_origination_creates_matching_deposit_and_debt(self):
         ledger = DoubleEntryLedger()
         for account in (
-            Account("bank:loan", "bank", "asset"),
-            Account("bank:deposits", "bank", "liability"),
-            Account("borrower:deposit", "borrower", "asset"),
-            Account("borrower:loan", "borrower", "liability"),
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
         ):
             ledger.add_account(account)
         bank_loan_origination(
@@ -176,10 +176,10 @@ class UnifiedBalanceTests(unittest.TestCase):
     def test_bank_loan_principal_repayment_destroys_matching_deposit(self):
         ledger = DoubleEntryLedger()
         for account in (
-            Account("bank:loan", "bank", "asset"),
-            Account("bank:deposits", "bank", "liability"),
-            Account("borrower:deposit", "borrower", "asset"),
-            Account("borrower:loan", "borrower", "liability"),
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
         ):
             ledger.add_account(account)
         bank_loan_origination(
@@ -204,10 +204,10 @@ class UnifiedBalanceTests(unittest.TestCase):
     def test_bank_loan_repayment_cannot_overdraw_deposit_or_partially_post(self):
         ledger = DoubleEntryLedger()
         for account in (
-            Account("bank:loan", "bank", "asset"),
-            Account("bank:deposits", "bank", "liability"),
-            Account("borrower:deposit", "borrower", "asset"),
-            Account("borrower:loan", "borrower", "liability"),
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
         ):
             ledger.add_account(account)
         bank_loan_origination(
@@ -230,6 +230,26 @@ class UnifiedBalanceTests(unittest.TestCase):
         for account_id in ("bank:loan", "bank:deposits",
                            "borrower:deposit", "borrower:loan"):
             self.assertEqual(ledger.balance(account_id), D("100.00"))
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
+
+    def test_bank_credit_rejects_wrong_issuing_bank_counterparty_without_posting(self):
+        ledger = DoubleEntryLedger()
+        for account in (
+            Account("bank:loan", "bank", "asset", counterparty="borrower"),
+            Account("bank:deposits", "bank", "liability", counterparty="borrower"),
+            Account("borrower:deposit", "borrower", "asset", counterparty="other-bank"),
+            Account("borrower:loan", "borrower", "liability", counterparty="bank"),
+        ):
+            ledger.add_account(account)
+        with self.assertRaisesRegex(BalanceError, "counterparties must bind"):
+            bank_loan_origination(
+                ledger, bank_loan_receivable="bank:loan",
+                bank_deposit_liability="bank:deposits",
+                borrower_deposit_asset="borrower:deposit",
+                borrower_loan_payable="borrower:loan",
+                amount=100, entry_id="wrong-bank-counterparty",
+            )
+        self.assertEqual(len(ledger.entries), 0)
         self.assertEqual(ledger.trial_balance(), D("0.00"))
 
 
