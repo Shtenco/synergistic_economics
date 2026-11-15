@@ -40,7 +40,7 @@ jobs:
       - name: Run equal-volume bank-credit allocation experiment
         run: python prototype/bank_credit_real_economy_experiment.py --credit-amount 50000 --periods 12 --output /tmp/bank-credit-real-economy.json
       - name: Run fixed-asset capex lifecycle audit
-        run: python -m unittest prototype.test_firm_fixed_assets -v
+        run: python -m unittest discover -s prototype -p 'test_firm_fixed_assets.py' -v
       - name: Run B8.1 capital cohort lifecycle and SCCE bridge audit
         run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_scce_capital_cohort_bridge.py
       - name: Run durable B8.1 capital cohort store audit
