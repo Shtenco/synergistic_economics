@@ -282,9 +282,14 @@ class InputOutputEconomy:
             for household_id, hours in firm_requests[firm_id].items():
                 requested[household_id] += hours
         scale = {}
+        rounding_buffer = QTY * D(len(self.firms) + 1)
         for household_id, state in self.households.items():
             supply = state.config.labour_supply_hours
-            scale[household_id] = min(D("1"), supply / requested[household_id]) if requested[household_id] > 0 else ZERO
+            # Reserve enough sub-quantum slack for per-firm Decimal rounding
+            # and the per-firm residual assignment below. This prevents the
+            # realized hours from exceeding a hard household supply ceiling.
+            safe_supply = max(ZERO, supply - rounding_buffer)
+            scale[household_id] = min(D("1"), safe_supply / requested[household_id]) if requested[household_id] > 0 else ZERO
         allocations = {}
         firm_hired = {firm_id: ZERO for firm_id in self.firms}
         household_hired = {household_id: ZERO for household_id in self.households}
