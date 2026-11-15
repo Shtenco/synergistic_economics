@@ -44,22 +44,18 @@ def _build_projection(register, *, principal_id, instrument_registry,
                       sector_registry, opening_snapshots, source_register_id):
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("verified native financial register is required")
-    checkpoint_method = getattr(register, "source_checkpoint", None)
-    if not callable(checkpoint_method):
+    history_reader = getattr(register, "history_with_checkpoint", None)
+    if not callable(history_reader):
         raise OperatingFinancialSFCAdapterError(
-            "financial register must expose a verified durable instance/checkpoint identity"
+            "financial register must expose an atomic verified history/checkpoint read"
         )
-    checkpoint_before = checkpoint_method()
-    history = register.history("operating-financial", principal_id=principal_id)
+    history, checkpoint = history_reader(
+        "operating-financial", principal_id=principal_id
+    )
     if not history:
         raise OperatingFinancialSFCAdapterError("financial register has no authorized source history")
-    checkpoint_after = checkpoint_method()
-    if checkpoint_before != checkpoint_after:
-        raise OperatingFinancialSFCAdapterError(
-            "financial source changed while its history snapshot was being read; retry projection"
-        )
     derived_id, sequence, chain_hash = _verified_source_cursor(
-        principal_id, history, checkpoint_after,
+        principal_id, history, checkpoint,
     )
     if source_register_id is not None and source_register_id != derived_id:
         raise OperatingFinancialSFCAdapterError("caller-supplied source_register_id differs from durable register identity")
