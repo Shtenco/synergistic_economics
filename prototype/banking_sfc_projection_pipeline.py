@@ -9,6 +9,8 @@ from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapterError,
 )
 from banking_sfc_projection_store import BankingSFCProjectionStore
+from sfc_projection_kernel import SFCIdentity
+from sfc_source_contracts import OpeningPosition, OpeningStockSnapshot
 
 
 def _opening_digest(snapshots):
@@ -40,6 +42,157 @@ def _verified_source_cursor(principal_id, history, checkpoint):
     return source_id, sequence, chain_hash
 
 
+def build_opening_snapshots_from_register(
+    register, *, principal_id, periods, instrument_registry, sector_registry,
+):
+    """Build complete bilateral opening snapshots from verified native financial stocks.
+
+    The source register is read at one pinned global checkpoint. Existing reducers
+    replay immutable openings and all prior native T-flows for deposits, reserves,
+    loans and central-bank refinancing. A checkpoint change during extraction
+    invalidates the whole build.
+    """
+    if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
+        raise OperatingFinancialSFCAdapterError("verified native financial register is required")
+    if not isinstance(periods, (tuple, list)) or not periods:
+        raise OperatingFinancialSFCAdapterError("one or more opening periods are required")
+    ordered_periods = sorted(periods)
+    if (any(not isinstance(value, int) or isinstance(value, bool) or value < 1
+            for value in ordered_periods)
+            or len(set(ordered_periods)) != len(ordered_periods)
+            or ordered_periods != list(range(ordered_periods[0], ordered_periods[-1] + 1))):
+        raise OperatingFinancialSFCAdapterError(
+            "opening periods must be unique, positive and contiguous"
+        )
+    history_reader = getattr(register, "history_with_checkpoint", None)
+    checkpoint_reader = getattr(register, "source_checkpoint", None)
+    if not callable(history_reader) or not callable(checkpoint_reader):
+        raise OperatingFinancialSFCAdapterError(
+            "financial register must expose atomic history/checkpoint and source checkpoint APIs"
+        )
+    history, checkpoint = history_reader("operating-financial", principal_id=principal_id)
+    if not history:
+        raise OperatingFinancialSFCAdapterError("financial register has no authorized source history")
+    source_register_id, source_sequence, source_chain_hash = _verified_source_cursor(
+        principal_id, history, checkpoint,
+    )
+    exporters = (
+        "deposit_opening_positions",
+        "reserve_opening_positions",
+        "loan_opening_positions",
+        "refinancing_opening_positions",
+    )
+    if any(not callable(getattr(register, name, None)) for name in exporters):
+        raise OperatingFinancialSFCAdapterError(
+            "financial register lacks one or more native opening-position exporters"
+        )
+
+    snapshots = []
+    for period in ordered_periods:
+        native_positions = []
+        for method_name in exporters:
+            native_positions.extend(getattr(register, method_name)(
+                period_index=period, principal_id=principal_id,
+            ))
+        if not native_positions:
+            raise OperatingFinancialSFCAdapterError(
+                f"financial register has no supported opening positions for period {period}"
+            )
+        positions = []
+        expected = []
+        seen = set()
+        for native in native_positions:
+            raw = getattr(native, "identity", None)
+            if raw is None or getattr(native, "period_index", None) != period:
+                raise OperatingFinancialSFCAdapterError(
+                    "native opening exporter returned a malformed or wrong-period position"
+                )
+            if (getattr(raw, "register_id", None) != "financial"
+                    or getattr(raw, "measure", None) != "monetary"
+                    or getattr(raw, "unit", None) != getattr(raw, "currency", None)
+                    or getattr(raw, "valuation_basis", None) != "NOMINAL"):
+                raise OperatingFinancialSFCAdapterError(
+                    "native opening position has unsupported financial identity metadata"
+                )
+            instrument_id = raw.instrument_id
+            try:
+                terms = instrument_registry.resolve(instrument_id, period)
+                holder_sector = sector_registry.resolve(raw.holder_id, period)
+                issuer_sector = sector_registry.resolve(raw.issuer_id, period)
+                identity = SFCIdentity(
+                    instrument_id=instrument_id,
+                    instrument_class=terms.instrument_class,
+                    holder_entity_id=raw.holder_id,
+                    holder_sector=holder_sector,
+                    issuer_entity_id=raw.issuer_id,
+                    issuer_sector=issuer_sector,
+                    currency=raw.currency,
+                    maturity=terms.maturity,
+                    denomination=terms.denomination,
+                    valuation_basis=terms.valuation_basis,
+                )
+            except (ValueError, KeyError, TypeError) as exc:
+                raise OperatingFinancialSFCAdapterError(
+                    f"opening position {instrument_id} cannot be resolved against pinned registries: {exc}"
+                ) from exc
+            if terms.currency != raw.currency or terms.valuation_basis != raw.valuation_basis:
+                raise OperatingFinancialSFCAdapterError(
+                    f"opening position metadata differs from pinned instrument terms for {instrument_id}"
+                )
+            if identity in seen:
+                raise OperatingFinancialSFCAdapterError(
+                    f"duplicate native opening identity for {instrument_id}"
+                )
+            seen.add(identity)
+            expected.append(identity)
+            evidence_ref = getattr(native, "evidence_ref", None)
+            if not isinstance(evidence_ref, str) or not evidence_ref.strip():
+                raise OperatingFinancialSFCAdapterError(
+                    f"opening position {instrument_id} has no evidence provenance"
+                )
+            source_ref = (
+                f"{source_register_id}@{source_sequence}:{source_chain_hash}:"
+                f"{raw.position_id}"
+            )
+            positions.append(OpeningPosition(
+                identity=identity,
+                balance=str(native.amount),
+                evidence_ref=evidence_ref,
+                source_ref=source_ref,
+            ))
+        expected = tuple(sorted(expected, key=lambda item: (
+            item.instrument_id, item.holder_entity_id, item.issuer_entity_id,
+        )))
+        positions = tuple(sorted(positions, key=lambda item: (
+            item.identity.instrument_id, item.identity.holder_entity_id,
+            item.identity.issuer_entity_id,
+        )))
+        snapshot = OpeningStockSnapshot(
+            version=f"financial-opening-v1-period-{period}",
+            period_index=period,
+            instrument_registry_version=instrument_registry.version,
+            instrument_registry_digest=instrument_registry.digest,
+            sector_registry_version=sector_registry.version,
+            sector_registry_digest=sector_registry.digest,
+            expected_identities=expected,
+            positions=positions,
+            source_register_id=source_register_id,
+            source_sequence=source_sequence,
+            source_chain_hash=source_chain_hash,
+        )
+        try:
+            snapshot.validate_against(instrument_registry, sector_registry)
+        except ValueError as exc:
+            raise OperatingFinancialSFCAdapterError(str(exc)) from exc
+        snapshots.append(snapshot)
+
+    if checkpoint_reader() != checkpoint:
+        raise OperatingFinancialSFCAdapterError(
+            "financial source changed while opening snapshots were being assembled; retry build"
+        )
+    return tuple(snapshots)
+
+
 def _build_projection(register, *, principal_id, instrument_registry,
                       sector_registry, opening_snapshots, source_register_id):
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
@@ -59,6 +212,15 @@ def _build_projection(register, *, principal_id, instrument_registry,
     )
     if source_register_id is not None and source_register_id != derived_id:
         raise OperatingFinancialSFCAdapterError("caller-supplied source_register_id differs from durable register identity")
+    for snapshot in opening_snapshots:
+        if (
+            getattr(snapshot, "source_register_id", None) != derived_id
+            or getattr(snapshot, "source_sequence", None) != sequence
+            or getattr(snapshot, "source_chain_hash", None) != chain_hash
+        ):
+            raise OperatingFinancialSFCAdapterError(
+                "opening snapshot is not pinned to the exact verified financial source checkpoint"
+            )
     projection = OperatingFinancialSFCAdapter.build(
         history, instrument_registry=instrument_registry,
         sector_registry=sector_registry, opening_snapshots=opening_snapshots,
@@ -132,4 +294,8 @@ def rebuild_and_verify(register, *, principal_id, instrument_registry,
     return projection, checkpoint
 
 
-__all__ = ["project_and_persist", "rebuild_and_verify"]
+__all__ = [
+    "build_opening_snapshots_from_register",
+    "project_and_persist",
+    "rebuild_and_verify",
+]
