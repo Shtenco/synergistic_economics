@@ -388,8 +388,14 @@ class BankCreditAllocationExperiment:
             sort_keys=True, separators=(",", ":")
         ).encode("utf-8")).hexdigest()
         final = metrics[-1]
+        capex_spend = capex_order.acquisition_cost if capex_order is not None else ZERO
+        principal_issued = self.credit_amount if debt else ZERO
+        capex_share = capex_spend / principal_issued if principal_issued > 0 else ZERO
         return {
             "scenario": scenario,
+            "capex_spend": str(capex_spend),
+            "capex_share_of_issued_principal": str(capex_share),
+            "issued_principal_not_spent_on_capex_at_order_time": str(max(ZERO, principal_issued - capex_spend)),
             "credit_principal_issued": str(self.credit_amount if debt else ZERO),
             "credit_principal_outstanding": final.outstanding_bank_loan_assets,
             "deposit_money_created": str(self.credit_amount if debt else ZERO),
@@ -441,7 +447,7 @@ class BankCreditAllocationExperiment:
             "periods": self.periods,
             "assumptions": {
                 "productive": "working capital distributed equally across firms",
-                "productive_capex": "credit to farm-north pays for one machinery unit; physical delivery in period 2; commissioning and additional capacity in period 3",
+                "productive_capex": "credit to farm-north pays for one machinery unit; physical delivery in period 2; commissioning and additional capacity in period 3; all principal not used for this single capex order remains as borrower liquidity and may fund operations, so this is not an all-capex allocation",
                 "consumption": "new deposits distributed equally across households",
                 "asset_purchase": "household deposits immediately exchanged for an external financial asset",
                 "principal_repayment": "equal principal schedule from period 2; cash-constrained, unpaid amounts become arrears",
