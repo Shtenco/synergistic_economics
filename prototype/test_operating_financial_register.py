@@ -481,6 +481,74 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             D("123456789012345678901234568899.00"),
         )
 
+    def test_historical_account_openings_respect_their_period_and_prior_flows(self):
+        self.register.sectors["late-entity"] = "H"
+        self.register.sectors["central-bank-1"] = "CBank"
+        self.register.open_deposit_account(
+            event_id="OPEN-LATE-DEPOSIT", entity_id="late-entity",
+            bank_id="bank-1", currency="LCU", account_ref="LATE-ACCOUNT",
+            opening_balance="25.00", evidence_ref="LATE-OPEN-EVIDENCE",
+            actor_id="financial-root", authority_ref="BANK-OPENING",
+            effective_at=T, recorded_at=T, expected_revision=2,
+            period_index=4,
+        )
+        self.register.commit_bank_credit(
+            event_id="LATE-LOAN-ORIG", event_type="bank.loan_originated",
+            loan_id="LATE-LOAN", borrower_id="late-entity", bank_id="bank-1",
+            currency="LCU", amount="100.00", period_index=4,
+            evidence_ref="LATE-LOAN-EVIDENCE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+
+        def late_deposit_rows(period):
+            return [
+                row for row in self.register.deposit_opening_positions(
+                    period_index=period, principal_id="financial-root",
+                )
+                if row.identity.instrument_id == "DEPOSIT:late-entity:bank-1:LCU"
+            ]
+
+        self.assertEqual(late_deposit_rows(3), [])
+        self.assertEqual([row.amount for row in late_deposit_rows(4)], [D("25.00"), D("25.00")])
+        self.assertEqual([row.amount for row in late_deposit_rows(5)], [D("125.00"), D("125.00")])
+
+        self.register.open_bank_reserve_account(
+            event_id="OPEN-LATE-RESERVE", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU",
+            account_ref="LATE-RESERVE", opening_balance="40.00",
+            evidence_ref="LATE-RESERVE-EVIDENCE", actor_id="financial-root",
+            authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=4, period_index=4,
+        )
+        self.register.commit_central_bank_refinancing(
+            event_id="LATE-REFI-ADVANCE",
+            event_type="central_bank.refinancing_advanced",
+            facility_id="LATE-FACILITY", bank_id="bank-1",
+            central_bank_id="central-bank-1", currency="LCU", amount="100.00",
+            period_index=4, evidence_ref="LATE-REFI-EVIDENCE",
+            actor_id="financial-root", authority_ref="REFI-POLICY",
+            effective_at=T, recorded_at=T, expected_revision=5,
+        )
+        self.assertEqual(
+            self.register.reserve_opening_positions(
+                period_index=3, principal_id="financial-root",
+            ),
+            (),
+        )
+        self.assertEqual(
+            [row.amount for row in self.register.reserve_opening_positions(
+                period_index=4, principal_id="financial-root",
+            )],
+            [D("40.00"), D("40.00")],
+        )
+        self.assertEqual(
+            [row.amount for row in self.register.reserve_opening_positions(
+                period_index=5, principal_id="financial-root",
+            )],
+            [D("140.00"), D("140.00")],
+        )
+
     def test_refinancing_state_retains_original_advance_period_after_repayment(self):
         register = OperatingFinancialRegister(
             Path(self.tmp.name) / "refinancing-period.sqlite3",
