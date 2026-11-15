@@ -154,6 +154,7 @@ class OperatingEvent:
     amount: Decimal
     causation_id: str
     evidence_ref: str
+    delivery_event_id: str
     delivery_evidence_ref: str
     verification_ref: str
     contract_ref: str
@@ -177,6 +178,7 @@ class OperatingEvent:
             "minor_unit": str(self.minor_unit),
             "causation_id": self.causation_id,
             "evidence_ref": self.evidence_ref,
+            "delivery_event_id": self.delivery_event_id,
             "delivery_evidence_ref": self.delivery_evidence_ref,
             "verification_ref": self.verification_ref,
             "contract_ref": self.contract_ref,
@@ -328,6 +330,7 @@ class OperatingWageJournal:
             claim_id=claim_id, worker_id=contract.worker_id, employer_id=contract.employer_id,
             bank_id=self.bank_id, currency=contract.currency, amount=amount,
             causation_id=causation_id, evidence_ref=contract.evidence_ref,
+            delivery_event_id=delivery.delivery_event_id,
             delivery_evidence_ref=delivery.delivery_evidence_ref,
             verification_ref=delivery.verification_ref, contract_ref=contract.contract_ref,
             contract_evidence_ref=contract.evidence_ref,
@@ -408,6 +411,7 @@ class OperatingWageJournal:
             claim_id=claim_id, worker_id=accrued.worker_id, employer_id=accrued.employer_id,
             bank_id=self.bank_id, currency=accrued.currency, amount=amount,
             causation_id=causation_id, evidence_ref=evidence_ref,
+            delivery_event_id=accrued.delivery_event_id,
             delivery_evidence_ref=accrued.delivery_evidence_ref,
             verification_ref=accrued.verification_ref, contract_ref=accrued.contract_ref,
             contract_evidence_ref=accrued.contract_evidence_ref,
