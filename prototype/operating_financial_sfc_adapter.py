@@ -395,8 +395,13 @@ class OperatingFinancialSFCAdapter:
             nl[key] = financial_net_lending(assets, liabilities)
 
         source_digest = hashlib.sha256(json.dumps(
-            [row.get("payload_sha256", row.get("event_id")) for row in ordered_rows],
-            separators=(",", ":"), ensure_ascii=False,
+            [{
+                "commit_sequence": row.get("commit_sequence"),
+                "event_id": row.get("event_id"),
+                "payload_sha256": row.get("payload_sha256"),
+                "chain_hash": row.get("chain_hash"),
+            } for row in ordered_rows],
+            sort_keys=True, separators=(",", ":"), ensure_ascii=False,
         ).encode("utf-8")).hexdigest()
         return BankingSFCProjection(
             mapping_version=mapping_version,
