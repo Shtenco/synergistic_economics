@@ -77,6 +77,7 @@ class VerifiedLabourDelivery:
     delivery_event_id: str
     verification_ref: str
     worker_id: str
+    employer_id: str
     period_label: str
     delivered_hours: Decimal
     aggregate_version: int
@@ -84,7 +85,7 @@ class VerifiedLabourDelivery:
 
     def validate(self):
         for field in ("engagement_id", "delivery_event_id", "verification_ref",
-                      "worker_id", "period_label"):
+                      "worker_id", "employer_id", "period_label"):
             _text(getattr(self, field), field)
         _positive(self.delivered_hours, "delivered_hours")
         if self._authority_token is not _VERIFIED_TOKEN:
@@ -118,6 +119,7 @@ def verified_delivery_from_register(labour_register, engagement_id, principal_id
         delivery_event_id=delivery_event_id,
         verification_ref=verification_ref,
         worker_id=_text(state.get("person_ref"), "person_ref"),
+        employer_id=_text(state.get("activity_id"), "activity_id"),
         period_label=_text(state.get("period"), "period"),
         delivered_hours=_positive(state.get("delivered_hours"), "delivered_hours"),
         aggregate_version=version,
@@ -181,6 +183,7 @@ class OperatingWageJournal:
         self.events = {}
         self.outstanding = {}
         self._delivery_claims = set()
+        self._claim_contracts = {}
 
     def _sector(self, entity):
         try:
@@ -233,16 +236,39 @@ class OperatingWageJournal:
         ]
 
     def accrue_verified_wage(self, *, event_id, delivery: VerifiedLabourDelivery,
-                             contract: WageContract, causation_id):
+                             contract: WageContract, causation_id,
+                             labour_register, principal_id):
         _text(event_id, "event_id")
         _text(causation_id, "causation_id")
         if not isinstance(delivery, VerifiedLabourDelivery) or not isinstance(contract, WageContract):
             raise OperatingWageError("typed verified delivery and wage contract are required")
         delivery.validate()
         contract.validate()
-        if delivery.worker_id != contract.worker_id or delivery.period_label != contract.period_label:
-            raise OperatingWageError("wage contract does not match verified worker and labour period")
-        if delivery.delivery_event_id in self._delivery_claims:
+        _text(principal_id, "principal_id")
+        if causation_id != delivery.delivery_event_id:
+            raise OperatingWageError("wage accrual causation must reference the verified delivery event")
+        if (delivery.worker_id != contract.worker_id
+                or delivery.employer_id != contract.employer_id
+                or delivery.period_label != contract.period_label):
+            raise OperatingWageError("wage contract does not match verified worker, employer and labour period")
+        current_state, current_version = labour_register.state(
+            delivery.engagement_id, principal_id=principal_id
+        )
+        if current_version != delivery.aggregate_version:
+            raise OperatingWageError("labour aggregate changed after delivery verification; refresh the verified delivery")
+        if not isinstance(current_state, dict) or any((
+            current_state.get("status") != "VERIFIED",
+            current_state.get("classification") != "paid",
+            current_state.get("delivery_event_id") != delivery.delivery_event_id,
+            current_state.get("verification_ref") != delivery.verification_ref,
+            current_state.get("person_ref") != delivery.worker_id,
+            current_state.get("activity_id") != delivery.employer_id,
+            current_state.get("period") != delivery.period_label,
+            D(str(current_state.get("delivered_hours"))) != delivery.delivered_hours,
+        )):
+            raise OperatingWageError("current labour aggregate no longer matches verified delivery")
+        delivery_key = (delivery.engagement_id, delivery.delivery_event_id)
+        if delivery_key in self._delivery_claims:
             raise OperatingWageError("verified labour delivery has already been accrued")
         amount = (delivery.delivered_hours * contract.hourly_rate / contract.minor_unit).quantize(
             D("1"), rounding=ROUND_HALF_UP
@@ -268,7 +294,8 @@ class OperatingWageJournal:
             amount, causation_id, contract.evidence_ref, lines, tuple(MappingProxyType(x) for x in movements))
         self.events[event_id] = event
         self.outstanding[claim_id] = amount
-        self._delivery_claims.add(delivery.delivery_event_id)
+        self._delivery_claims.add(delivery_key)
+        self._claim_contracts[claim_id] = contract
         return event
 
     def pay_wage(self, *, event_id, claim_id, amount, causation_id, evidence_ref, period_index):
@@ -287,6 +314,15 @@ class OperatingWageJournal:
                                    if v.claim_id == claim_id and v.event_type == "wage_accrual")]
         if accrued.currency not in {currency for (entity, currency) in self.deposits if entity == accrued.employer_id}:
             raise OperatingWageError("employer opening deposit account is missing")
+        contract = self._claim_contracts[claim_id]
+        if period_index < accrued.period_index:
+            raise OperatingWageError("wage payment cannot precede its accrual period")
+        units = amount / contract.minor_unit
+        if units != units.to_integral_value():
+            raise OperatingWageError("payment amount must be an exact multiple of the currency minor unit")
+        prior_claim_events = [event for event in self.events.values() if event.claim_id == claim_id]
+        if not prior_claim_events or causation_id != prior_claim_events[-1].event_id:
+            raise OperatingWageError("payment causation must reference the immediately preceding claim event")
         outstanding = self.outstanding[claim_id]
         if amount > outstanding:
             raise OperatingWageError("wage payment exceeds outstanding claim")
