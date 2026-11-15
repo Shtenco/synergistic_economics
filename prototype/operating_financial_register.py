@@ -515,6 +515,11 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("bank credit minor unit differs from deposit account")
         loan = state["loans"].get(loan_id)
         if event_type == "bank.loan_opening_recorded":
+            source_account_ref = _text(payload.get("source_account_ref"), "source_account_ref")
+            if account.get("account_ref") != source_account_ref:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing loan source account reference differs from the borrower's durable deposit account"
+                )
             if loan is not None:
                 raise OperatingFinancialRegisterError("loan ID already exists")
             original = _decimal(payload.get("original_principal"), "original_principal", positive=True)
@@ -645,8 +650,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_bank = _text(p.get("payee_bank_id"), "payee_bank_id")
         central_bank = _text(p.get("central_bank_id"), "central_bank_id")
         currency = _text(p.get("currency"), "currency")
-        amount_field = "outstanding_principal" if event_type == "central_bank.refinancing_opening_recorded" else "amount"
-        amount = _decimal(p.get(amount_field), amount_field, positive=(event_type != "central_bank.refinancing_opening_recorded"))
+        amount = _decimal(p.get("amount"), "amount", positive=True)
         minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
         period = p.get("period_index")
         evidence = _text(p.get("evidence_ref"), "evidence_ref")
@@ -715,7 +719,15 @@ class OperatingFinancialRegister(DurableEventRegister):
         bank = _text(p.get("bank_id"), "bank_id")
         central_bank = _text(p.get("central_bank_id"), "central_bank_id")
         currency = _text(p.get("currency"), "currency")
-        amount = _decimal(p.get("amount"), "amount", positive=True)
+        amount_field = (
+            "outstanding_principal"
+            if event_type == "central_bank.refinancing_opening_recorded"
+            else "amount"
+        )
+        amount = _decimal(
+            p.get(amount_field), amount_field,
+            positive=(event_type != "central_bank.refinancing_opening_recorded"),
+        )
         minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
         period = p.get("period_index")
         evidence = _text(p.get("evidence_ref"), "evidence_ref")
@@ -744,6 +756,11 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("refinancing minor unit differs from reserve account")
         facility = state["refinancing"].get(facility_id)
         if event_type == "central_bank.refinancing_opening_recorded":
+            source_account_ref = _text(p.get("source_account_ref"), "source_account_ref")
+            if reserve.get("account_ref") != source_account_ref:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing refinancing source account reference differs from the bank's durable reserve account"
+                )
             if facility is not None:
                 raise OperatingFinancialRegisterError("refinancing facility ID already exists")
             original = _decimal(p.get("original_principal"), "original_principal", positive=True)
@@ -1520,7 +1537,7 @@ class OperatingFinancialRegister(DurableEventRegister):
     def record_existing_refinancing_facility(
         self, *, event_id, facility_id, bank_id, central_bank_id, currency,
         original_principal, outstanding_principal, origination_period_index,
-        opening_period_index, contract_ref, contract_evidence_ref, evidence_ref,
+        opening_period_index, source_account_ref, contract_ref, contract_evidence_ref, evidence_ref,
         actor_id, authority_ref, effective_at, recorded_at, expected_revision,
         minor_unit="0.01",
     ):
@@ -1536,6 +1553,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
             "origination_period_index": origination_period_index,
             "period_index": opening_period_index,
+            "source_account_ref": _text(source_account_ref, "source_account_ref"),
             "contract_ref": _text(contract_ref, "contract_ref"),
             "contract_evidence_ref": _text(contract_evidence_ref, "contract_evidence_ref"),
             "evidence_ref": _text(evidence_ref, "evidence_ref"),
