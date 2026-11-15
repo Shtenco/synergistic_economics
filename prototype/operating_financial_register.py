@@ -807,9 +807,13 @@ class OperatingFinancialRegister(DurableEventRegister):
         if event_type in {
             "central_bank.refinancing_advanced",
             "central_bank.refinancing_principal_repaid",
+            "central_bank.refinancing_opening_recorded",
         }:
             return self._reduce_central_bank_refinancing(state, event)
-        if event_type in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+        if event_type in {
+            "bank.loan_originated", "bank.loan_principal_repaid",
+            "bank.loan_opening_recorded",
+        }:
             return self._reduce_bank_credit(state, event)
         if event_type != "wage.event_group_committed":
             raise OperatingFinancialRegisterError("unsupported operating financial event type")
@@ -872,6 +876,15 @@ class OperatingFinancialRegister(DurableEventRegister):
             expected = wage_stock_flow_movement_specs(events)
             if envelope.get("stock_flow_movements") != expected:
                 raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
+        elif envelope["event_type"] in {
+            "bank.loan_opening_recorded",
+            "central_bank.refinancing_opening_recorded",
+        }:
+            if envelope.get("stock_flow_movements") is not None:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing principal opening must initialize a stock, not invent a transaction movement"
+                )
+            _text(envelope.get("no_stock_flow_effect"), "opening no_stock_flow_effect")
         elif envelope["event_type"] in {"bank.loan_originated", "bank.loan_principal_repaid"}:
             payload = envelope["payload"]
             expected = bank_credit_stock_flow_movement_specs(
@@ -1711,10 +1724,13 @@ class OperatingFinancialRegister(DurableEventRegister):
         return D(matches[0]["balance"]), version
 
     def append_event(self, **kwargs):
-        if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened",
-                                        "bank.loan_originated", "bank.loan_principal_repaid",
-                                        "bank.reserve_account_opened", "bank.interbank_payment_settled",
-                                        "central_bank.refinancing_advanced",
-                                        "central_bank.refinancing_principal_repaid"}:
+        if kwargs.get("event_type") in {
+            "wage.event_group_committed", "deposit.account_opened",
+            "bank.loan_originated", "bank.loan_principal_repaid",
+            "bank.loan_opening_recorded", "bank.reserve_account_opened",
+            "bank.interbank_payment_settled", "central_bank.refinancing_advanced",
+            "central_bank.refinancing_principal_repaid",
+            "central_bank.refinancing_opening_recorded",
+        }:
             raise OperatingFinancialRegisterError("operating financial events must commit through the native prepare/commit protocol")
         return super().append_event(**kwargs)
