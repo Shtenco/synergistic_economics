@@ -779,14 +779,15 @@ class InputOutputEconomy:
                     self.capex_orders[cohort.order_id].payment_event_id for cohort in active_cohorts
                 ],
             })
-            for household_id, share in wage_by_household.items():
+            for household_id, hours in hours_by_household.items():
+                household = self.households[household_id]
+                household.period_labour_hours += hours
+                share = wage_by_household.get(household_id, ZERO)
                 if share <= 0:
                     continue
-                household = self.households[household_id]
                 household.cash += share
                 household.wage_income += share
                 household.period_wage_income += share
-                household.period_labour_hours += hours_by_household[household_id]
                 household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
                 household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
                 wage_event_id = wage_payment_event_ids[household_id]
