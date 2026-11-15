@@ -40,7 +40,7 @@ def _envelope(operations, register):
         raise CoordinatorError(f"{register} wage transaction envelope is invalid") from exc
 
 
-def _physical_movement_specs(outflow, inflow):
+def _physical_movement_specs(outflow, inflow, *, period_index=1):
     flow_id = _text(outflow.get("flow_id"), "flow_id")
     origin = _text(outflow.get("origin_node"), "origin_node")
     destination = _text(outflow.get("destination_node"), "destination_node")
@@ -60,7 +60,7 @@ def _physical_movement_specs(outflow, inflow):
                 "position_id": f"{origin}:{product}:{grade}",
                 "holder_id": origin, "issuer_id": destination,
             },
-            "period_index": 1, "movement_class": "T", "amount": str(-quantity),
+            "period_index": period_index, "movement_class": "T", "amount": str(-quantity),
             "evidence_ref": _text(outflow.get("measurement_method"), "physical measurement_method"),
             "mirror_group_id": flow_id, "mirror_side": "sender", "mirror_policy": "opposite",
         },
@@ -70,7 +70,7 @@ def _physical_movement_specs(outflow, inflow):
                 "position_id": f"{destination}:{product}:{grade}",
                 "holder_id": destination, "issuer_id": origin,
             },
-            "period_index": 1, "movement_class": "T", "amount": str(quantity),
+            "period_index": period_index, "movement_class": "T", "amount": str(quantity),
             "evidence_ref": _text(outflow.get("evidence_ref", "TIMESHEET-VERIFIED"), "physical evidence_ref"),
             "mirror_group_id": flow_id, "mirror_side": "receiver", "mirror_policy": "opposite",
         },
@@ -148,8 +148,8 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             raise CoordinatorError("physical labour service requires paired outflow/inflow endpoints")
         if (outflow.get("origin_node"), outflow.get("destination_node"),
             outflow.get("product_id"), outflow.get("grade_id"), outflow.get("unit"),
-            _decimal(outflow.get("quantity"), "physical quantity")) != (
-            worker, employer, "labour_service", "verified", "h", delivered_hours):
+            outflow.get("period"), _decimal(outflow.get("quantity"), "physical quantity")) != (
+            worker, employer, "labour_service", "verified", "h", accrual.get("period_label"), delivered_hours):
             raise CoordinatorError("physical service flow differs from verified labour delivery")
         if operations["physical"]["payload"].get("stock_flow_movements") != _physical_movement_specs(outflow, inflow):
             raise CoordinatorError("physical stock-flow movements differ from delivered labour service")
@@ -176,9 +176,11 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
         if not required_evidence.issubset(set(rights_payload.get("evidence_refs", []))):
             raise CoordinatorError("legal wage claim omits one or more source evidence references")
 
-        capital = _envelope(operations, "capital")
-        if capital.get("no_stock_flow_effect") is None and "stock_flow_movements" not in capital:
-            raise CoordinatorError("capital participant must explicitly declare its no-stock-flow effect for this wage transaction")
+        for register in ("capital", "labour", "product", "legal_rights"):
+            participant_envelope = _envelope(operations, register)
+            if ("stock_flow_movements" not in participant_envelope
+                    and not isinstance(participant_envelope.get("no_stock_flow_effect"), str)):
+                raise CoordinatorError(f"{register} participant must explicitly declare its stock-flow effect")
 
         if operations["financial"].get("stream_id") != f"wage:{claim_id}":
             raise CoordinatorError("financial participant stream does not bind the wage claim")
