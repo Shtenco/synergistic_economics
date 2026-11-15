@@ -256,8 +256,8 @@ class BankingSFCPipelineTests(unittest.TestCase):
             tuple(replace(term, effective_from_period=1) for term in base_terms.terms)
             + tuple(replace(instrument(item_id, instrument_class), effective_from_period=1)
                     for item_id, instrument_class in (
-                        (loan_id, "LOAN"), (deposit_id, "DEPOSIT"),
-                        (reserve_id, "RESERVE"), (refi_id, "CBREFI"),
+                        (loan_id, "LOAN"), (reserve_id, "RESERVE"),
+                        (refi_id, "CBREFI"),
                     )),
         )
         sectors = EffectiveDatedSectorRegistry(
