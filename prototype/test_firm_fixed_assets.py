@@ -77,8 +77,31 @@ class FixedAssetLedgerTests(unittest.TestCase):
                        period=2, evidence_ref="receipt:1")
         ledger.retire(event_id="retire-1", cohort_id="cohort:capex-1:delivery-1", quantity="1",
                      period=4, evidence_ref="scrap-certificate:1")
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 3), D("8"))
+        self.assertEqual(ledger.carrying_value("farm-north", 3), D("2000"))
         self.assertEqual(ledger.commissioned_capacity("farm-north", 4), D("4"))
+        self.assertEqual(ledger.carrying_value("farm-north", 4), D("820"))
         self.assertEqual(ledger.cohorts["cohort:capex-1:delivery-1"].active_quantity, D("1"))
+
+    def test_retirement_is_effective_only_from_its_recorded_period(self):
+        ledger = FixedAssetLedger()
+        item = order()
+        ledger.place_paid_order(item, payment_amount="2000", payment_currency="KZT",
+                                order_currency="KZT", payment_evidence_ref="payment:1")
+        ledger.deliver(event_id="delivery-1", order_id=item.order_id, quantity="2",
+                       period=2, evidence_ref="receipt:1")
+        cohort_id = "cohort:capex-1:delivery-1"
+        ledger.retire(event_id="retire-first", cohort_id=cohort_id, quantity="0.5",
+                      period=4, evidence_ref="scrap:1")
+        ledger.retire(event_id="retire-second", cohort_id=cohort_id, quantity="0.5",
+                      period=6, evidence_ref="scrap:2")
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 3), D("8"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 4), D("6"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 5), D("6"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 6), D("4"))
+        self.assertEqual(ledger.carrying_value("farm-north", 3), D("2000"))
+        self.assertEqual(ledger.carrying_value("farm-north", 4), D("1230"))
+        self.assertEqual(ledger.carrying_value("farm-north", 6), D("820"))
 
     def test_capacity_expires_after_useful_life(self):
         ledger = FixedAssetLedger()
