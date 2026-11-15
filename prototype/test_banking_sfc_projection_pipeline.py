@@ -56,7 +56,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
             recovered, checkpoint = rebuild_and_verify(
                 source, principal_id="auditor", instrument_registry=terms,
                 sector_registry=sectors, opening_snapshots=[snapshot], store=store,
-                source_register_id="financial-register:auditor",
+                source_register_id="financial:" + "a" * 32 + ":auditor",
             )
             self.assertEqual(projection.source_digest, recovered.source_digest)
             self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
