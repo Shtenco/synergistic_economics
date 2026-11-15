@@ -176,6 +176,34 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
             self.assertIsNone(governance.active_generation(3))
             self.assertEqual(governance.register_period_attestations(3, 0), ())
 
+    def test_register_completeness_rejects_reused_source_register_identity(self):
+        manifests, ref, _ = make_checkpoint_bundle()
+        att_ref = "attestation:product:3:0"
+        signed_attestation = dict(manifests[att_ref][1])
+        declaration = dict(signed_attestation["register_declaration"])
+        declaration["source_register_id"] = "physical:instance-001"
+        signed_attestation["register_declaration"] = declaration
+        att_digest = digest(signed_attestation)
+        manifests[att_ref] = (att_digest, signed_attestation)
+        close_manifest = dict(manifests[ref][1])
+        references = [dict(item) for item in close_manifest["register_completeness"]]
+        for item in references:
+            if item["register_name"] == "product":
+                item["attestation_digest"] = att_digest
+        close_manifest["register_completeness"] = references
+        close_manifest["register_completeness_digest"] = digest(references)
+        manifests[ref] = (digest(close_manifest), close_manifest)
+
+        with tempfile.TemporaryDirectory() as root:
+            governance = self.make_governance(root, manifests)
+            with self.assertRaisesRegex(
+                PeriodGovernanceError,
+                "each register completeness declaration must identify a distinct source register",
+            ):
+                governance.close_period(3, 0, ref, manifests[ref][0], "period-controller")
+            self.assertIsNone(governance.active_generation(3))
+            self.assertEqual(governance.register_period_attestations(3, 0), ())
+
     def test_zero_activity_must_be_explicit(self):
         manifests, ref, close_digest = make_checkpoint_bundle(zero_status_override="physical")
         with tempfile.TemporaryDirectory() as root:
