@@ -10,10 +10,11 @@ The production `EntityJournal` remains the frozen GOLD-2A bank-credit contract. 
 
 1. Read the engagement through `LabourRegister.state(...)` using an authorized principal.
 2. Require the engagement to be `VERIFIED`, classified `paid`, and to carry a matching verification reference.
-3. Match worker and labour period against an explicit wage contract containing employer, currency, rate, period index and evidence.
-4. Accrue wages using delivered hours × hourly rate, rounded to the declared currency minor unit.
-5. Record the wage payable and receivable as equal mirrored financial positions.
-6. Pay all or part of the claim only if the employer's deposit balance is sufficient. Settlement extinguishes the wage claim and transfers deposit claims from employer to worker.
+3. Match worker, employer (`activity_id`) and labour period against an explicit wage contract containing currency, rate, period index and evidence.
+4. Re-read the labour aggregate immediately before accrual and require the exact verified version and delivery fields to remain unchanged. This is an optimistic freshness check, not an atomic cross-register lock.
+5. Bind the accrual causation ID to the immutable delivery event ID and accrue wages using delivered hours × hourly rate, rounded to the declared currency minor unit.
+6. Record the wage payable and receivable as equal mirrored financial positions.
+7. Pay all or part of the claim only if the employer's deposit balance is sufficient, the amount is an exact multiple of the currency minor unit, the payment period does not precede accrual, and the causation ID points to the immediately preceding claim event. Settlement extinguishes the wage claim and transfers deposit claims from employer to worker.
 
 ## Accounting identities
 
@@ -36,7 +37,10 @@ The settlement event is balanced across all six postings. The stock-flow mapper 
 
 The tests cover:
 - authorized read of the labour aggregate;
-- rejection of an unverified engagement and a forged delivery object;
+- rejection of an unverified engagement, unpaid care work and a forged delivery object;
+- rejection of a stale verified-delivery snapshot after a labour-hours correction;
+- matching of the wage contract to the worker, employer and period in the labour register;
+- rejection of fractional-minor-unit payments and broken causal/period ordering;
 - wage accrual only for a verified paid classification;
 - exact double-entry balance;
 - duplicate-delivery prevention;
@@ -48,8 +52,9 @@ The tests cover:
 
 This is a bounded accounting kernel, not a completed production integration:
 - The operating journal is in-memory; it is not yet append-only or restart-recoverable.
+- The labour version is rechecked immediately before accrual, but this check is not atomic with the journal write. A concurrent labour correction after the re-read remains possible until a durable coordinator transaction reserves the labour aggregate and commits the financial participant.
 - Its verified-delivery token prevents accidental construction through the public API but is not a cryptographic boundary against arbitrary code executing inside the same Python process.
-- The employer, bank, wage contract and sector membership are explicit inputs; they are not inferred from `activity_id`.
+- The employer is matched against the labour register activity reference; the bank, wage contract and sector membership remain explicit inputs.
 - The subledger is not yet a native financial-register participant and is not included in the six-register coordinator commit.
 - It does not model tax, social contributions, benefits, arrears priority, insolvency resolution, price formation or household consumption.
 - It must not be described as part of GOLD-2A or as proof that the full economy is stock-flow consistent.
