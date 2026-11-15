@@ -32,6 +32,11 @@ class FakeFinancialRegister:
             return "0" * 64
         raise AssertionError("unexpected source-chain ancestor cursor")
 
+    def history_with_checkpoint(self, aggregate_id, *, principal_id):
+        if not self.verify():
+            raise ValueError("source register verification failed")
+        return self.history(aggregate_id, principal_id=principal_id), self.source_checkpoint()
+
     def history(self, aggregate_id, *, principal_id):
         if aggregate_id != "operating-financial" or principal_id != "auditor":
             raise AssertionError("unexpected source scope")
