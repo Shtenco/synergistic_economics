@@ -243,6 +243,7 @@ def main():
         wrong_root_ref, wrong_root_digest = _checkpoint(
             signer, anchor, 5, 1, event_root=_sha("wrong-event-root"),
             projection_hash=global_reconciliation,
+            attestation_anchor=attestation_anchor, attestation_refs=attestation_refs,
         )
         _rejects(lambda: governance.publish_generation(
             "reopen-001", global_reconciliation,
@@ -258,6 +259,7 @@ def main():
         generation1_ref, generation1_digest = _checkpoint(
             signer, anchor, 6, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
+            attestation_anchor=attestation_anchor, attestation_refs=attestation_refs,
         )
         assert governance.publish_generation(
             "reopen-001", global_reconciliation,
