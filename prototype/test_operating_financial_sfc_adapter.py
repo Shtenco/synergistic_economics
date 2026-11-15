@@ -391,7 +391,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(
             OperatingFinancialSFCAdapterError,
-            "opening balance differs from prior-period closing",
+            "next-period opening differs from prior closing",
         ):
             OperatingFinancialSFCAdapter.build(
                 [origination],
