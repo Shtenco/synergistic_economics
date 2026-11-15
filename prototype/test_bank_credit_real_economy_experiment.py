@@ -66,6 +66,17 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
             self.assertEqual(D("12000.00") - destroyed, outstanding)
             self.assertGreaterEqual(destroyed, D("0"))
 
+    def test_ci_scale_credit_experiment_preserves_physical_stocks(self):
+        # The CI scenario is intentionally larger than the small unit fixtures.
+        # It exercises cash-cent rounding against eight-decimal physical quantities.
+        result = run_credit_allocation_experiment(credit_amount="50000", periods=12)
+        for case in result["cases"].values():
+            for row in case["periods"]:
+                self.assertLessEqual(
+                    abs(D(row["physical_balance_error"])),
+                    D("0.000001"),
+                )
+
     def test_period_metrics_include_real_and_financial_indicators(self):
         case = BankCreditAllocationExperiment(credit_amount="10000", periods=3).run()["cases"]["productive"]
         row = case["periods"][-1]
