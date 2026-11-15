@@ -30,3 +30,10 @@ These capabilities are **not yet wired into** the six-register `CrossRegisterCoo
 
 The six-register wage coordinator is a domain-specific workflow; it must not be reused for banking events by fabricating labour, physical, product, capital or legal events. The next integration must define explicit participant semantics for financial-only events, preserve the coordinator's visibility barrier, and make projection append/recovery idempotent against the source event IDs. Until that adapter exists, bank-register stock-flow tests are local accounting controls, not proof of a live six-sector SFC close.
 
+
+
+## Addendum — native financial projection path now present (2026-11-15)
+
+The financial-register boundary has advanced since the status above: `prototype/operating_financial_sfc_adapter.py` maps committed immutable financial history into SFC T movements, and `prototype/banking_sfc_projection_pipeline.py` connects that adapter to the durable `BankingSFCProjectionStore` for checkpointed persistence and deterministic recovery. This is a native financial-only path; it does not fabricate participant events in other registers.
+
+This does **not** complete live six-register SFC/GOLD reconciliation. The generic cross-register coordinator still lacks native production adapters and signed per-register period-completeness declarations; the capital account and real-economy counterpart bridge remain open. The old statement that no production financial projection adapter exists should therefore be read as superseded: a native durable financial projection slice exists, but it is not yet the complete six-register close.
