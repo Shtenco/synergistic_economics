@@ -6,6 +6,7 @@ not a ledger, distributed consensus service, or substitute for source replay.
 """
 from __future__ import annotations
 
+from contextlib import closing
 from dataclasses import asdict, is_dataclass
 from decimal import Decimal
 import hashlib
@@ -57,7 +58,7 @@ class BankingSFCProjectionStore:
     def __init__(self, database_path):
         self.path = str(database_path)
         Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS banking_sfc_store_meta(
                     singleton INTEGER PRIMARY KEY CHECK(singleton=1),
@@ -162,7 +163,7 @@ class BankingSFCProjectionStore:
             "projection_digest": projection_digest,
         }
         checkpoint_digest = _digest(checkpoint_body)
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             con.execute("BEGIN IMMEDIATE")
             try:
                 latest = con.execute(
@@ -237,7 +238,7 @@ class BankingSFCProjectionStore:
         })
         encoded = _json(body)
         digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             row = con.execute(
                 "SELECT s.*,c.applied_through_sequence,c.checkpoint_digest "
                 "FROM banking_sfc_snapshots s JOIN banking_sfc_checkpoints c USING(snapshot_id) "
@@ -274,7 +275,7 @@ class BankingSFCProjectionStore:
                 "projection_digest": digest, "applied_through_sequence": source_sequence}
 
     def latest_checkpoint(self, source_register_id):
-        with self._connect() as con:
+        with closing(self._connect()) as con:
             row = con.execute(
                 "SELECT c.*,s.source_digest,s.mapping_version FROM banking_sfc_checkpoints c "
                 "JOIN banking_sfc_snapshots s USING(snapshot_id) WHERE c.source_register_id=? "
