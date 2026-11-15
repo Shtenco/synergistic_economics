@@ -22,6 +22,7 @@ class OperatingFinancialRegisterError(RegisterError):
 
 
 D = Decimal
+NO_STOCK_FLOW_EFFECT = "NO_STOCK_FLOW_EFFECT"
 
 
 def _text(value, field):
@@ -545,7 +546,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError(
                     "opening loan principal is not an exact multiple of its minor unit"
                 )
-            if not _text(event.get("no_stock_flow_effect"), "opening no_stock_flow_effect"):
+            if event.get("no_stock_flow_effect") != NO_STOCK_FLOW_EFFECT:
                 raise OperatingFinancialRegisterError("pre-existing loan opening requires explicit no-stock-flow attestation")
             state["loans"][loan_id] = {
                 "loan_id": loan_id, "borrower_id": borrower, "bank_id": bank,
@@ -793,7 +794,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError(
                     "opening refinancing principal is not an exact multiple of its minor unit"
                 )
-            if not _text(event.get("no_stock_flow_effect"), "opening no_stock_flow_effect"):
+            if event.get("no_stock_flow_effect") != NO_STOCK_FLOW_EFFECT:
                 raise OperatingFinancialRegisterError(
                     "pre-existing refinancing opening requires explicit no-stock-flow attestation"
                 )
@@ -996,7 +997,8 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError(
                     "pre-existing principal opening must initialize a stock, not invent a transaction movement"
                 )
-            _text(envelope.get("no_stock_flow_effect"), "opening no_stock_flow_effect")
+            if envelope.get("no_stock_flow_effect") != NO_STOCK_FLOW_EFFECT:
+                raise OperatingFinancialRegisterError("pre-existing principal opening requires canonical no-stock-flow attestation")
         elif envelope["event_type"] in {"bank.loan_originated", "bank.loan_principal_repaid"}:
             payload = envelope["payload"]
             expected = bank_credit_stock_flow_movement_specs(
@@ -1574,7 +1576,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "idempotency_key": event_id, "payload": payload,
             "stock_flow_movements": None,
             "no_stock_flow_effect": (
-                "historical central-bank refinancing opening position; no current-period reserve issuance"
+                NO_STOCK_FLOW_EFFECT
             ),
         }
         operation = {
@@ -1875,7 +1877,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "idempotency_key": event_id, "payload": payload,
             "stock_flow_movements": None,
             "no_stock_flow_effect": (
-                "historical loan principal opening position; no current-period credit creation or deposit issuance"
+                NO_STOCK_FLOW_EFFECT
             ),
         }
         operation = {
