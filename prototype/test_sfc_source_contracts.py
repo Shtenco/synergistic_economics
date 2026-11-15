@@ -83,7 +83,7 @@ class SFCSourceContractTests(unittest.TestCase):
         registry = sectors()
         self.assertEqual(registry.resolve("firm-1", 2), "NFC")
         self.assertEqual(registry.resolve("firm-1", 3), "H")
-        self.assertNotEqual(registry.digest, sectors().digest + "different")
+        changed = EffectiveDatedSectorRegistry(\n            version="sectors-v2",\n            allowed_sector_codes=registry.allowed_sector_codes,\n            memberships=registry.memberships,\n        )\n        self.assertNotEqual(registry.digest, changed.digest)
 
     def test_sector_registry_rejects_overlapping_or_unknown_membership(self):
         with self.assertRaises(SFCSourceContractError):
