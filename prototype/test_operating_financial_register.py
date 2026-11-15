@@ -1,5 +1,7 @@
 import tempfile
 import unittest
+import sqlite3
+import shutil
 from decimal import Decimal as D
 from pathlib import Path
 
@@ -735,6 +737,93 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertIsNone(self.register.status("BANK-LOAN-REPAY-NO-LOAN"))
         self.assertEqual(self.register.deposit_balance(
             "worker-1", "LCU", principal_id="financial-root")[0], D("10.00"))
+
+
+
+    def test_register_instance_identity_is_stable_across_restart_and_database_copy(self):
+        path = Path(self.tmp.name) / "identity.sqlite3"
+        register = OperatingFinancialRegister(
+            path, sectors={"bank-1": "CB"},
+        )
+        register.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        instance_id = register.register_instance_id
+        self.assertEqual(len(instance_id), 32)
+        reopened = OperatingFinancialRegister(path, sectors={"bank-1": "CB"})
+        self.assertEqual(reopened.register_instance_id, instance_id)
+        self.assertTrue(reopened.verify())
+
+        copied_path = Path(self.tmp.name) / "identity-copy.sqlite3"
+        shutil.copyfile(path, copied_path)
+        copied = OperatingFinancialRegister(
+            copied_path, sectors={"bank-1": "CB"},
+        )
+        self.assertEqual(copied.register_instance_id, instance_id)
+        self.assertTrue(copied.verify())
+
+        with sqlite3.connect(path) as con:
+            with self.assertRaises(sqlite3.IntegrityError):
+                con.execute(
+                    "UPDATE register_meta SET register_instance_id=? WHERE singleton_id=1",
+                    ("22222222222242228222222222222222",),
+                )
+            with self.assertRaises(sqlite3.IntegrityError):
+                con.execute("DELETE FROM register_meta WHERE singleton_id=1")
+
+    def test_v2_register_migration_adds_instance_identity_without_rewriting_history(self):
+        path = Path(self.tmp.name) / "identity-v2-migration.sqlite3"
+        legacy = OperatingFinancialRegister(
+            path, sectors={"bank-1": "CB"},
+        )
+        legacy.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        self.assertTrue(legacy.verify())
+        with sqlite3.connect(path) as con:
+            before = con.execute(
+                "SELECT event_count,tail_hash FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+            con.execute("DROP TRIGGER IF EXISTS register_meta_instance_id_immutable")
+            con.execute("DROP TRIGGER IF EXISTS register_meta_no_delete")
+            con.execute("ALTER TABLE register_meta RENAME TO register_meta_v3")
+            con.execute("""
+                CREATE TABLE register_meta(
+                    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id=1),
+                    register_name TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    event_count INTEGER NOT NULL CHECK(event_count>=0),
+                    tail_hash TEXT NOT NULL
+                )
+            """)
+            con.execute("""
+                INSERT INTO register_meta
+                (singleton_id,register_name,schema_version,event_count,tail_hash)
+                SELECT singleton_id,register_name,2,event_count,tail_hash
+                FROM register_meta_v3
+            """)
+            con.execute("DROP TABLE register_meta_v3")
+            con.commit()
+
+        migrated = OperatingFinancialRegister(
+            path, sectors={"bank-1": "CB"},
+        )
+        self.assertEqual(len(migrated.register_instance_id), 32)
+        self.assertTrue(migrated.verify())
+        with sqlite3.connect(path) as con:
+            after = con.execute(
+                "SELECT schema_version,event_count,tail_hash,register_instance_id "
+                "FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+        self.assertEqual(after[0], 3)
+        self.assertEqual(after[1], before[0])
+        self.assertEqual(after[2], before[1])
+        self.assertEqual(after[3], migrated.register_instance_id)
+        restarted = OperatingFinancialRegister(
+            path, sectors={"bank-1": "CB"},
+        )
+        self.assertEqual(restarted.register_instance_id, migrated.register_instance_id)
+
 
 
 
