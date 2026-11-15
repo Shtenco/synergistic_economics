@@ -370,6 +370,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(version, 3)
         self.assertEqual(loan["outstanding_principal"], "100")
         self.assertEqual(loan["bank_id"], "bank-1")
+        self.assertEqual(loan["origination_period_index"], 3)
         snapshot = self.register.bank_principal_snapshot(
             "bank-1", "LCU", principal_id="financial-root")
         self.assertEqual(snapshot["deposit_liabilities"], D("1110.00"))
@@ -388,6 +389,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         loan, version = self.register.loan_state("LOAN-1", principal_id="financial-root")
         self.assertEqual(version, 4)
         self.assertEqual(loan["outstanding_principal"], "65")
+        self.assertEqual(loan["origination_period_index"], 3)
         self.assertEqual(loan["status"], "OUTSTANDING")
         snapshot = self.register.bank_principal_snapshot(
             "bank-1", "LCU", principal_id="financial-root")
