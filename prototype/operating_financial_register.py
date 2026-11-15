@@ -212,11 +212,11 @@ class OperatingFinancialRegister(DurableEventRegister):
         elif event_type == "wage_payment":
             expected = [
                 ("wage_payable", "D", employer, worker, claim_id),
-                ("deposit_asset", "C", employer, bank, f"DEPOSIT:{employer}"),
-                ("deposit_liability", "D", bank, employer, f"DEPOSIT:{employer}"),
+                ("deposit_asset", "C", employer, bank, f"DEPOSIT:{employer}:{bank}"),
+                ("deposit_liability", "D", bank, employer, f"DEPOSIT:{employer}:{bank}"),
                 ("wage_receivable", "C", worker, employer, claim_id),
-                ("deposit_asset", "D", worker, bank, f"DEPOSIT:{worker}"),
-                ("deposit_liability", "C", bank, worker, f"DEPOSIT:{worker}"),
+                ("deposit_asset", "D", worker, bank, f"DEPOSIT:{worker}:{bank}"),
+                ("deposit_liability", "C", bank, worker, f"DEPOSIT:{worker}:{bank}"),
             ]
         else:
             raise OperatingFinancialRegisterError("unsupported wage subevent type")
@@ -367,6 +367,9 @@ class OperatingFinancialRegister(DurableEventRegister):
         key = self._deposit_key(borrower, bank, currency)
         account = state["deposits"].get(key)
         if account is None:
+            if any(item["entity_id"] == borrower and item["currency"] == currency
+                   for item in state["deposits"].values()):
+                raise OperatingFinancialRegisterError("loan bank differs from borrower deposit bank; open an account at the issuing bank first")
             raise OperatingFinancialRegisterError("borrower requires a durable deposit account before bank credit")
         if account["bank_id"] != bank:
             raise OperatingFinancialRegisterError("loan bank differs from borrower's authoritative deposit bank")
