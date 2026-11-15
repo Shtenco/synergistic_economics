@@ -97,6 +97,10 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
             checkpoint_verifier=verifier,
             service_id="synergy-sfc",
             authorization_verifier=lambda approver, role, context, evidence: True,
+            register_attestation_authorizer=lambda name, key_id, declaration: (
+                key_id == f"{name}-independent-register-key"
+                and declaration.get("register_name") == name
+            ),
         )
 
     def test_period_close_requires_all_six_signed_register_attestations(self):
@@ -124,6 +128,26 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
             with self.assertRaisesRegex(PeriodGovernanceError, "exactly six register completeness"):
                 governance.close_period(3, 0, ref, manifests[ref][0], "period-controller")
             self.assertIsNone(governance.active_generation(3))
+
+    def test_register_attestation_key_must_be_authorized_for_its_register(self):
+        manifests, ref, _ = make_checkpoint_bundle()
+        att_ref = "attestation:physical:3:0"
+        signed_attestation = dict(manifests[att_ref][1])
+        signed_attestation["signer_key_id"] = "untrusted-register-key"
+        att_digest = digest(signed_attestation)
+        manifests[att_ref] = (att_digest, signed_attestation)
+        close_manifest = dict(manifests[ref][1])
+        refs = [dict(item) for item in close_manifest["register_completeness"]]
+        for item in refs:
+            if item["register_name"] == "physical":
+                item["attestation_digest"] = att_digest
+        close_manifest["register_completeness"] = refs
+        close_manifest["register_completeness_digest"] = digest(refs)
+        manifests[ref] = (digest(close_manifest), close_manifest)
+        with tempfile.TemporaryDirectory() as root:
+            governance = self.make_governance(root, manifests)
+            with self.assertRaisesRegex(PeriodGovernanceError, "signing key is not authorized"):
+                governance.close_period(3, 0, ref, manifests[ref][0], "period-controller")
 
     def test_zero_activity_must_be_explicit(self):
         manifests, ref, close_digest = make_checkpoint_bundle(zero_status_override="physical")
