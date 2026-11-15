@@ -400,11 +400,19 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             closed_source_root=source_root
             closed_event_counts=dict(event_counts)
             signer=Ed25519Signer.generate("synergy-period-test-key")
-            trust=TrustedKeyRegistry({signer.key_id:signer.public_bytes()})
+            register_signers={
+                name:Ed25519Signer.generate(f"synergy-period-{name}-test-attestation-key")
+                for name in REGISTERS
+            }
+            trust=TrustedKeyRegistry({
+                signer.key_id:signer.public_bytes(),
+                **{item.key_id:item.public_bytes() for item in register_signers.values()},
+            })
             anchor=LocalImmutableAnchor(root/"period-checkpoint-anchor.sqlite3")
             register_attestation_anchor=LocalImmutableAnchor(
                 root/"register-period-attestations-anchor.sqlite3")
             register_attestation_refs=set()
+            attestation_sequence=[1]
 
             def make_checkpoint(generation, sequence, projection_hash, event_root,
                                 snapshot_hashes, commit_sequence, event_count):
@@ -433,12 +441,11 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                             "period_event_count":register_count,
                         }))
                     )
-                    attestation={
-                        "service_id":"SYNERGY-LONG-HORIZON-TEST",
+                    declaration={
                         "declaration_type":"register_period_completeness",
                         "register_name":name,"period":2033,
                         "projection_generation":generation,"complete":True,
-                        "source_register_id":f"test-register:{name}:generation-{generation}",
+                        "source_register_id":f"test-register:{name}:source-instance",
                         "source_sequence":register_count,
                         "source_chain_hash":sha(canonical({
                             "register":name,"source_event_root":event_root,
@@ -454,8 +461,35 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                             "closing":closing_state_hash,"event_root":period_event_root,
                         })),
                     }
+                    register_signer=register_signers[name]
+                    attestation_manifest={
+                        "manifest_schema_version":1,
+                        "service_id":"SYNERGY-LONG-HORIZON-TEST",
+                        "database_schema_version":4,
+                        "mapper_version":"gold2a-register-period-attestation@1",
+                        "projection_generation":generation,
+                        "commit_sequence":register_count,
+                        "event_count":register_count,
+                        "event_log_root":period_event_root,
+                        "instrument_opening_hash":opening_state_hash,
+                        "control_opening_hash":sha(canonical({
+                            "register":name,"control_opening":generation,
+                        })),
+                        "projection_state_hash":closing_state_hash,
+                        "coverage_count":register_count,
+                        "applied_through_cursor":register_count,
+                        "period":2033,"period_closed":False,
+                        "register_declaration":declaration,
+                        "backup_sha256":sha(canonical({
+                            "register":name,"period":2033,"generation":generation,
+                        })),
+                        "checkpoint_sequence":attestation_sequence[0],
+                        "created_at_utc":"2026-11-13T13:00:00Z",
+                        "signer_key_id":register_signer.key_id,
+                    }
                     attestation_ref,attestation_digest=publish_checkpoint(
-                        attestation,signer,register_attestation_anchor)
+                        attestation_manifest,register_signer,register_attestation_anchor)
+                    attestation_sequence[0]+=1
                     register_attestation_refs.add(attestation_ref)
                     register_completeness.append({
                         "register_name":name,"attestation_ref":attestation_ref,
