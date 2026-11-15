@@ -113,3 +113,12 @@ The banking-to-SFC integration is not complete until:
 - the complete test suite passes on the exact resulting HEAD.
 
 Even a fully closed SFC accounting model does not by itself prove sufficient liquidity, solvency, productive credit allocation, fairness or economic resilience. Those require separate empirical and scenario-based tests covering production, capacity, prices, income distribution, payment timing, maturities, arrears, defaults, bank capital and reserves.
+
+
+## Addendum — corrected status after pipeline inspection (2026-11-15)
+
+The earlier “Not implemented” wording for durable financial projection persistence is superseded. The branch already contains a native `banking_sfc_projection_store.py` and `banking_sfc_projection_pipeline.py`. Together they verify the financial register hash chain, project committed operating-financial history through `OperatingFinancialSFCAdapter`, persist a deterministic SQLite snapshot/checkpoint atomically, and independently rebuild/compare it during recovery. Existing tests cover same-cursor idempotency, changed-content rejection, cursor ordering, pinned digest drift, crash failpoints around the SQLite transaction, and recovery comparison.
+
+A new real-register integration test is being added to ensure the durable `OperatingFinancialRegister` (not only a fake source) flows through `project_and_persist()` and `rebuild_and_verify()`. This test is not yet confirmed by CI.
+
+Still open: authoritative evidence-backed opening exports for all loan/refinancing positions; signed completeness declarations for all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
