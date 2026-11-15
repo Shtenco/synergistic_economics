@@ -302,6 +302,22 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertEqual(D(third.cash_error), D("0"))
         self.assertEqual(model.firms["machine-works"].cash, D("1520.00"))
         self.assertEqual(model.fixed_asset_ledger.carrying_value("farm", 3), D("520"))
+        self.assertEqual(model.fixed_asset_ledger.work_in_progress_value("farm", 1), D("520"))
+        production_event = next(
+            row for row in model.events
+            if row["kind"] == "production"
+            and row["payload"]["firm"] == "farm"
+            and row["payload"]["commissioned_capital_capacity"] == "3"
+        )
+        self.assertEqual(
+            production_event["payload"]["capital_asset_credit_event_ids"],
+            ["CREDIT-ORIGINATION-1"],
+        )
+        delivery_event = next(
+            row for row in model.events if row["kind"] == "capex_physical_delivery"
+        )
+        self.assertEqual(delivery_event["payload"]["credit_event_id"], "CREDIT-ORIGINATION-1")
+        self.assertEqual(delivery_event["payload"]["payment_event_id"], "CAPEX-PAYMENT-1")
 
     def test_capex_cannot_be_paid_without_supplier_stock_or_buyer_cash(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
