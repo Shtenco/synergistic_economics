@@ -191,7 +191,35 @@ class OperatingFinancialSFCAdapter:
             raise OperatingFinancialSFCAdapterError("source must be the native financial register")
         if not register.verify():
             raise OperatingFinancialSFCAdapterError("financial source register hash-chain verification failed")
-        history = register.history("operating-financial", principal_id=principal_id)
+        history_reader = getattr(register, "history_with_checkpoint", None)
+        if not callable(history_reader):
+            raise OperatingFinancialSFCAdapterError(
+                "financial source must expose atomic history/checkpoint reads"
+            )
+        history, checkpoint = history_reader(
+            "operating-financial", principal_id=principal_id,
+        )
+        if not isinstance(checkpoint, Mapping):
+            raise OperatingFinancialSFCAdapterError("financial source checkpoint metadata is invalid")
+        instance_id = checkpoint.get("register_instance_id")
+        sequence = checkpoint.get("event_count")
+        chain_hash = checkpoint.get("tail_hash")
+        if (not isinstance(instance_id, str) or len(instance_id) != 32
+                or any(char not in "0123456789abcdef" for char in instance_id)
+                or not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1
+                or not isinstance(chain_hash, str) or len(chain_hash) != 64
+                or any(char not in "0123456789abcdef" for char in chain_hash)):
+            raise OperatingFinancialSFCAdapterError("financial source checkpoint identity/cursor is malformed")
+        source_id = f"financial:{instance_id}:{principal_id}"
+        for snapshot in opening_snapshots:
+            if (
+                getattr(snapshot, "source_register_id", None) != source_id
+                or getattr(snapshot, "source_sequence", None) != sequence
+                or getattr(snapshot, "source_chain_hash", None) != chain_hash
+            ):
+                raise OperatingFinancialSFCAdapterError(
+                    "opening snapshot is not pinned to the exact verified financial source checkpoint"
+                )
         return OperatingFinancialSFCAdapter.build(
             history,
             instrument_registry=instrument_registry,
