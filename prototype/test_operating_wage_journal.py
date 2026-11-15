@@ -84,8 +84,7 @@ class OperatingWageJournalTests(unittest.TestCase):
         self.assertEqual({x["amount"] for x in event.stock_flow_movements}, {"40.00"})
         self.assertEqual({x["mirror_policy"] for x in event.stock_flow_movements}, {"equal"})
 
-    def test_non_verified_or_unpaid_labour_cannot_accrue_wages(self):
-        state, version = self.labour.state("ENG-1", principal_id="coordinator")
+    def test_non_verified_or_forged_labour_delivery_cannot_accrue_wages(self):
         # A fresh engagement cannot bypass the authoritative status gate.
         self.labour.append_event(
             event_id="ENG-2-OFFER", idempotency_key="ENG-2-OFFER", aggregate_id="ENG-2",
@@ -97,27 +96,16 @@ class OperatingWageJournalTests(unittest.TestCase):
         )
         with self.assertRaises(OperatingWageError):
             verified_delivery_from_register(self.labour, "ENG-2", "coordinator", verification_ref="V2")
-        unpaid = type(self.delivery)(
-            engagement_id=self.delivery.engagement_id, delivery_event_id="OTHER-DELIVERY",
+        forged = type(self.delivery)(
+            engagement_id=self.delivery.engagement_id, delivery_event_id="FORGED-DELIVERY",
             verification_ref=self.delivery.verification_ref, worker_id=self.delivery.worker_id,
             period_label=self.delivery.period_label, delivered_hours=self.delivery.delivered_hours,
             aggregate_version=self.delivery.aggregate_version,
         )
         journal = self.journal()
-        unpaid_contract = WageContract(
-            worker_id="worker-1", employer_id="employer-1", period_label="P1",
-            period_index=1, currency="LCU", hourly_rate=D("20"),
-            contract_ref="C", evidence_ref="E",
-        )
-        # A delivery object alone is not accepted as authoritative unless its
-        # verification came from the labour register. The journal accepts only
-        # typed delivery evidence; the register adapter above supplies it.
-        self.assertEqual(state["status"], "VERIFIED")
-        self.assertEqual(version, 6)
-        self.assertEqual(unpaid.verification_ref, "SUPERVISOR-VERIFY-1")
-        journal.accrue_verified_wage(event_id="W1", delivery=unpaid,
-                                     contract=unpaid_contract, causation_id="ENG-1")
-        self.assertEqual(journal.outstanding["ENG-1:OTHER-DELIVERY"], D("40.00"))
+        with self.assertRaisesRegex(OperatingWageError, "authorized labour-register reader"):
+            journal.accrue_verified_wage(event_id="W1", delivery=forged,
+                                         contract=self.contract, causation_id="ENG-1")
 
     def test_partial_payment_clears_claim_and_moves_deposits(self):
         journal = self.journal()
