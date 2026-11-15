@@ -188,8 +188,8 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
             },
         },
         "financial": {
-            "stream_id": f"wage:{claim_id}", "native_event_id": "WAGE-GROUP-1",
-            "expected_revision": 0,
+            "stream_id": "operating-financial", "native_event_id": "WAGE-GROUP-1",
+            "expected_revision": 2,
             "payload": envelope("wage.event_group_committed", financial_payload, "WAGE-GROUP-1")
                        | {"stock_flow_movements": financial_movements},
         },
@@ -229,6 +229,18 @@ def make_participants(root):
             permissions=["financial:read", "financial:write"], actor_id="financial-root",
             authority_ref="POLICY:F", occurred_at=T,
         )
+        financial.open_deposit_account(
+            event_id="OPEN-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="EMPLOYER-ACCOUNT-1", opening_balance="1000",
+            evidence_ref="BANK-OPEN-EMPLOYER", actor_id="coordinator",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=0,
+        )
+        financial.open_deposit_account(
+            event_id="OPEN-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="WORKER-ACCOUNT-1", opening_balance="10",
+            evidence_ref="BANK-OPEN-WORKER", actor_id="coordinator",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=1,
+        )
     return {
         "physical": make_physical_participant(physical, AUTH),
         "capital": make_capital_participant(capital, AUTH),
@@ -263,13 +275,15 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(labour_version, 7)
 
             financial = participants["financial"]
-            financial_state, financial_version = financial.state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
+            financial_state, financial_version = financial.claim_state(
+                events[0].claim_id, principal_id="coordinator",
             )
             self.assertEqual(financial_state["status"], "PAID")
             self.assertEqual(financial_state["outstanding_amount"], "0.00")
             self.assertEqual(financial_state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
-            self.assertEqual(financial_version, 1)
+            self.assertEqual(financial_version, 3)
+            self.assertEqual(financial.deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("960.00"))
+            self.assertEqual(financial.deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("50.00"))
             self.assertTrue(financial.verify())
 
             rights_state, rights_version = participants["legal_rights"].state(
@@ -319,10 +333,13 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             )
             self.assertTrue(restarted.is_visible("TX-WAGE-1"))
             self.assertEqual(restarted.committed_event_group("TX-WAGE-1"), group)
-            replayed, _ = reopened["financial"].state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
+            replayed, replayed_version = reopened["financial"].claim_state(
+                events[0].claim_id, principal_id="coordinator",
             )
             self.assertEqual(replayed["outstanding_amount"], "0.00")
+            self.assertEqual(replayed_version, 3)
+            self.assertEqual(reopened["financial"].deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("960.00"))
+            self.assertEqual(reopened["financial"].deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("50.00"))
             self.assertTrue(reopened["financial"].verify())
 
 
@@ -426,9 +443,9 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(labour_version, 7)
             self.assertEqual(labour_state["status"], "VERIFIED")
             self.assertEqual(labour_state["delivered_hours"], "1.5")
-            self.assertEqual(participants["financial"].state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
-            ), (None, 0))
+            self.assertEqual(participants["financial"].claim_state(
+                events[0].claim_id, principal_id="coordinator",
+            ), (None, 2))
             self.assertEqual(participants["financial"].status("TX-WAGE-STALE"), None)
             self.assertEqual(participants["legal_rights"].status("TX-WAGE-STALE"), None)
             self.assertEqual(participants["physical"].status("TX-WAGE-STALE")["state"], "ABORTED")
