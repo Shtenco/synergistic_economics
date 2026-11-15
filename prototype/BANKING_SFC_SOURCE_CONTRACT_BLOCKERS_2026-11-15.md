@@ -65,13 +65,15 @@ Still required:
 
 ### B5. Period-close completeness and durable projection
 
-**Not implemented.** The adapter can replay a supplied history sequence, but the repository does not yet have signed period-close declarations from each required register, a six-register completeness assembler, or an atomic native SFC projection store with sealed checkpoints.
+**Partially implemented — financial-only snapshot/checkpoint path exists; six-register close does not.** The native financial adapter can replay verified financial-register history, and `banking_sfc_projection_pipeline.py` persists a deterministic SQLite snapshot/checkpoint atomically and rebuilds it for recovery. Store tests cover idempotent replay, changed-content rejection, stale cursors, registry/opening digest drift, injected rollback at both snapshot/checkpoint write boundaries, immutable rows and deterministic recovery comparison. A real durable-register integration test now exercises the financial history → adapter → store → rebuild path.
+
+The cross-register coordinator separately implements a six-participant prepare/commit visibility barrier and an append-only committed event-group stream. It remains a protocol/conformance harness: its source documentation explicitly requires authoritative native-domain adapters before production use. It does not yet provide signed period-close completeness declarations or a capital-account reconciler.
 
 Next:
-- require signed period-close declarations for each source register, including explicit zero-activity declarations;
-- include period bounds, source sequence/checkpoint, registry versions/digests and evidence references;
-- persist source-event coverage, movement coverage, opening snapshot digests, mapper version, roll-forward and sector aggregates atomically;
-- add idempotent replay, crash injection, checkpoint recovery and versioned reprojection tests;
+- require signed period-close declarations for each authoritative source register, including explicit zero-activity declarations;
+- include period bounds, source sequence/checkpoint, registry versions/digests, completeness scope and evidence references;
+- retain the native financial snapshot/checkpoint as a separate projection until a governed six-register close contract is defined;
+- add source-event/movement coverage manifests and versioned reprojection rules;
 - never fabricate physical, capital, labour, product or legal-rights participant events for a financial-only transaction.
 
 ## Current mandatory test coverage
@@ -93,10 +95,10 @@ The remaining required tests include durable-history integration of interbank an
 2. **Done, partial scope:** effective-dated sector registry with digest pinning at projection.
 3. **Partially done:** complete explicit opening snapshot contract; durable loan/refinancing opening exporters remain.
 4. **Done, supported events only:** separate native financial SFC adapter and movement mapper.
-5. **Not done:** native financial projection store/checkpoint and atomic persistence.
-6. **Partially done:** deterministic mapping/replay and hash-chain verification; crash-injection and durable adapter recovery remain.
-7. **Not done:** period-close assembler for all required registers; do not synthesize six-register events for a financial-only source event.
-8. **Not done:** integrated multi-period sector financial accounts, complete capital account and real-economy reconciliation.
+5. **Done, limited scope:** native financial SQLite projection snapshot/checkpoint with atomic persistence; normalized per-event/per-movement relational coverage tables remain future work.
+6. **Partially done:** deterministic mapping/replay, hash-chain verification, real-register persistence/recovery integration and transaction failpoint tests; subprocess kill/restart testing at filesystem boundaries remains.
+7. **Not done:** signed period-close assembler for all authoritative registers; do not synthesize six-register events for a financial-only source event.
+8. **Not done:** integrated multi-period six-register SFC close, complete capital account and real-economy reconciliation.
 
 ## Definition of done
 
