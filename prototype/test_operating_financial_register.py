@@ -396,6 +396,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertTrue(self.register.verify())
 
     def test_bank_credit_rejects_wrong_bank_and_unmatched_repayment_without_commit(self):
+        self.register.sectors["other-bank"] = "CBank"
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "deposit bank"):
             self.register.commit_bank_credit(
                 event_id="BANK-LOAN-WRONG-BANK", event_type="bank.loan_originated",
