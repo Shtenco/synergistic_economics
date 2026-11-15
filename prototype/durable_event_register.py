@@ -184,6 +184,38 @@ class DurableEventRegister:
                 raise RegisterError("persisted event chain hash mismatch")
             event = dict(row)
             event["payload"] = payload
+            # Reattach verified envelope metadata: the immutable event row stores
+            # domain payload, while the committed prepare inbox stores its full envelope.
+            prepared = con.execute(
+                "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                (row["event_id"],),
+            ).fetchone()
+            if prepared is not None:
+                raw_envelope = prepared["payload_json"]
+                if prepared["state"] != "COMMITTED" or not isinstance(raw_envelope, str):
+                    raise RegisterError("event has a missing or non-committed native envelope")
+                if hashlib.sha256(raw_envelope.encode("utf-8")).hexdigest() != prepared["payload_digest"]:
+                    raise RegisterError("committed native envelope digest mismatch")
+                try:
+                    native_envelope = json.loads(raw_envelope)
+                except (TypeError, json.JSONDecodeError) as exc:
+                    raise RegisterError("committed native envelope is invalid JSON") from exc
+                if canonical_json(native_envelope) != raw_envelope:
+                    raise RegisterError("committed native envelope is not canonical")
+                for field, expected_value in (
+                    ("event_type", row["event_type"]),
+                    ("effective_at", row["effective_at"]),
+                    ("recorded_at", row["recorded_at"]),
+                    ("actor_id", row["actor_id"]),
+                    ("authority_ref", row["authority_ref"]),
+                    ("idempotency_key", row["idempotency_key"]),
+                    ("payload", payload),
+                ):
+                    if native_envelope.get(field) != expected_value:
+                        raise RegisterError(f"committed native envelope {field} differs from immutable event")
+                for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                    if field in native_envelope:
+                        event[field] = native_envelope[field]
             if row["event_type"] == "acl.granted":
                 principal = required_text(payload.get("principal_id"), "principal_id")
                 permissions = payload.get("permissions")
@@ -263,12 +295,14 @@ class DurableEventRegister:
                     "SELECT 1 FROM native_participant_inbox WHERE state='PREPARED' LIMIT 1").fetchone():
                     raise RegisterError("ACL changes are serialized behind prepared domain transactions")
                 prepared_authority = False
+                prepared_envelope = None
                 if allow_prepared_txid is not None:
                     prepared = con.execute("SELECT state,payload_json FROM native_participant_inbox WHERE transaction_id=?",
                                            (allow_prepared_txid,)).fetchone()
                     if prepared is None or prepared["state"] != "PREPARED":
                         raise RegisterError("native commit is missing its durable prepared authority record")
                     envelope = json.loads(prepared["payload_json"])
+                    prepared_envelope = envelope
                     if (envelope.get("event_type"),envelope.get("effective_at"),envelope.get("recorded_at"),
                         envelope.get("actor_id"),envelope.get("authority_ref"),envelope.get("idempotency_key"),
                         envelope.get("payload")) != (event_type,effective_at,recorded_at,actor_id,authority_ref,
@@ -297,6 +331,10 @@ class DurableEventRegister:
                              "aggregate_version":current+1,"effective_at":effective_at,
                              "recorded_at":recorded_at,"actor_id":actor_id,
                              "authority_ref":authority_ref,"payload":dict(payload)}
+                    if prepared_envelope is not None:
+                        for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                            if field in prepared_envelope:
+                                event[field] = prepared_envelope[field]
                     states[aggregate_id] = self.reduce_event(states.get(aggregate_id), event)
                 meta = con.execute("SELECT event_count,tail_hash FROM register_meta WHERE singleton_id=1").fetchone()
                 sequence = meta["event_count"] + 1
