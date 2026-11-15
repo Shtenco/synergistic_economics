@@ -1,8 +1,6 @@
 """Integration tests for source-verified banking SFC persistence/recovery."""
 import tempfile
 import unittest
-from decimal import Decimal
-from decimal import Decimal
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
