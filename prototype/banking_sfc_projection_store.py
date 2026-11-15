@@ -16,7 +16,7 @@ import sqlite3
 from typing import Mapping
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 STORE_ID = "native-banking-sfc-projection"
 
 
@@ -69,6 +69,7 @@ class BankingSFCProjectionStore:
                     snapshot_id TEXT PRIMARY KEY,
                     source_register_id TEXT NOT NULL,
                     source_sequence INTEGER NOT NULL CHECK(source_sequence>=0),
+                    source_chain_hash TEXT NOT NULL,
                     source_digest TEXT NOT NULL,
                     mapping_version TEXT NOT NULL,
                     instrument_registry_digest TEXT NOT NULL,
@@ -83,6 +84,7 @@ class BankingSFCProjectionStore:
                     snapshot_id TEXT NOT NULL UNIQUE REFERENCES banking_sfc_snapshots(snapshot_id),
                     source_register_id TEXT NOT NULL,
                     applied_through_sequence INTEGER NOT NULL CHECK(applied_through_sequence>=0),
+                    source_chain_hash TEXT NOT NULL,
                     projection_digest TEXT NOT NULL,
                     checkpoint_digest TEXT NOT NULL UNIQUE
                 );
@@ -121,7 +123,7 @@ class BankingSFCProjectionStore:
             raise BankingSFCStoreError(f"{field} must be trimmed non-empty text")
         return value
 
-    def append(self, projection, *, source_register_id, source_sequence,
+    def append(self, projection, *, source_register_id, source_sequence, source_chain_hash,
                instrument_registry_digest, sector_registry_digest,
                opening_snapshot_digest, fault_at=None):
         """Persist a complete deterministic projection and cursor in one transaction.
@@ -131,7 +133,8 @@ class BankingSFCProjectionStore:
         if fault_at not in (None, "after_snapshot", "after_checkpoint"):
             raise BankingSFCStoreError("unsupported persistence failpoint")
         source_register_id = self._required(source_register_id, "source_register_id")
-        for value, name in ((instrument_registry_digest, "instrument_registry_digest"),
+        for value, name in ((source_chain_hash, "source_chain_hash"),
+                            (instrument_registry_digest, "instrument_registry_digest"),
                             (sector_registry_digest, "sector_registry_digest"),
                             (opening_snapshot_digest, "opening_snapshot_digest")):
             self._required(value, name)
@@ -153,11 +156,12 @@ class BankingSFCProjectionStore:
         })
         projection_json = _json(body)
         projection_digest = hashlib.sha256(projection_json.encode("utf-8")).hexdigest()
-        snapshot_id = _digest([source_register_id, source_sequence, source_digest, mapping_version])
+        snapshot_id = _digest([source_register_id, source_sequence, source_chain_hash, source_digest, mapping_version])
         checkpoint_body = {
             "store_id": STORE_ID, "schema_version": SCHEMA_VERSION,
             "snapshot_id": snapshot_id, "source_register_id": source_register_id,
             "applied_through_sequence": source_sequence,
+            "source_chain_hash": source_chain_hash,
             "source_digest": source_digest, "mapping_version": mapping_version,
             "instrument_registry_digest": instrument_registry_digest,
             "sector_registry_digest": sector_registry_digest,
@@ -171,7 +175,8 @@ class BankingSFCProjectionStore:
                 latest = con.execute(
                     "SELECT s.snapshot_id,s.source_sequence,s.source_digest,s.mapping_version,"
                     "s.projection_digest,s.instrument_registry_digest,s.sector_registry_digest,"
-                    "s.opening_snapshot_digest,s.projection_json,c.source_register_id AS checkpoint_source_register_id,"
+                    "s.opening_snapshot_digest,s.projection_json,s.source_chain_hash,"
+                    "c.source_register_id AS checkpoint_source_register_id,c.source_chain_hash AS checkpoint_source_chain_hash,"
                     "c.applied_through_sequence,c.projection_digest AS checkpoint_projection_digest,"
                     "c.checkpoint_digest FROM banking_sfc_snapshots s "
                     "LEFT JOIN banking_sfc_checkpoints c USING(snapshot_id) "
@@ -184,6 +189,7 @@ class BankingSFCProjectionStore:
                     # independently revalidated. SQLite triggers protect normal
                     # writes, but offline/file-level corruption must fail closed too.
                     if (latest["checkpoint_source_register_id"] != source_register_id
+                            or latest["checkpoint_source_chain_hash"] != latest["source_chain_hash"]
                             or latest["applied_through_sequence"] != latest["source_sequence"]
                             or latest["checkpoint_projection_digest"] != latest["projection_digest"]
                             or latest["checkpoint_digest"] is None):
@@ -193,6 +199,7 @@ class BankingSFCProjectionStore:
                         "snapshot_id": latest["snapshot_id"],
                         "source_register_id": source_register_id,
                         "applied_through_sequence": latest["source_sequence"],
+                        "source_chain_hash": latest["source_chain_hash"],
                         "source_digest": latest["source_digest"],
                         "mapping_version": latest["mapping_version"],
                         "instrument_registry_digest": latest["instrument_registry_digest"],
@@ -209,10 +216,10 @@ class BankingSFCProjectionStore:
                     if source_sequence < latest["source_sequence"]:
                         raise BankingSFCStoreError("stale source cursor")
                     if source_sequence == latest["source_sequence"]:
-                        if (snapshot_id, source_digest, mapping_version, projection_digest,
+                        if (snapshot_id, source_chain_hash, source_digest, mapping_version, projection_digest,
                             instrument_registry_digest, sector_registry_digest, opening_snapshot_digest,
                             projection_json) == (
-                            latest["snapshot_id"], latest["source_digest"], latest["mapping_version"],
+                            latest["snapshot_id"], latest["source_chain_hash"], latest["source_digest"], latest["mapping_version"],
                             latest["projection_digest"], latest["instrument_registry_digest"],
                             latest["sector_registry_digest"], latest["opening_snapshot_digest"],
                             latest["projection_json"]
@@ -227,15 +234,17 @@ class BankingSFCProjectionStore:
                         raise BankingSFCStoreError("source cursor must advance monotonically")
                     if mapping_version != latest["mapping_version"]:
                         raise BankingSFCStoreError("mapping version changed; explicit rebuild required")
+                    if (source_chain_hash != latest["source_chain_hash"]):
+                        raise BankingSFCStoreError("source chain checkpoint changed; explicit rebuild required")
                     if (instrument_registry_digest != latest["instrument_registry_digest"]
                             or sector_registry_digest != latest["sector_registry_digest"]
                             or opening_snapshot_digest != latest["opening_snapshot_digest"]):
                         raise BankingSFCStoreError("pinned registry/opening digest changed; explicit rebuild required")
                 con.execute(
-                    "INSERT INTO banking_sfc_snapshots(snapshot_id,source_register_id,source_sequence,"
+                    "INSERT INTO banking_sfc_snapshots(snapshot_id,source_register_id,source_sequence,source_chain_hash,"
                     "source_digest,mapping_version,instrument_registry_digest,sector_registry_digest,"
-                    "opening_snapshot_digest,projection_digest,projection_json) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                    (snapshot_id, source_register_id, source_sequence, source_digest, mapping_version,
+                    "opening_snapshot_digest,projection_digest,projection_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                    (snapshot_id, source_register_id, source_sequence, source_chain_hash, source_digest, mapping_version,
                      instrument_registry_digest, sector_registry_digest, opening_snapshot_digest,
                      projection_digest, projection_json)
                 )
@@ -243,8 +252,8 @@ class BankingSFCProjectionStore:
                     raise RuntimeError("injected crash after snapshot write")
                 con.execute(
                     "INSERT INTO banking_sfc_checkpoints(snapshot_id,source_register_id,"
-                    "applied_through_sequence,projection_digest,checkpoint_digest) VALUES(?,?,?,?,?)",
-                    (snapshot_id, source_register_id, source_sequence, projection_digest, checkpoint_digest)
+                    "applied_through_sequence,source_chain_hash,projection_digest,checkpoint_digest) VALUES(?,?,?,?,?,?)",
+                    (snapshot_id, source_register_id, source_sequence, source_chain_hash, projection_digest, checkpoint_digest)
                 )
                 if fault_at == "after_checkpoint":
                     raise RuntimeError("injected crash after checkpoint write")
@@ -256,14 +265,15 @@ class BankingSFCProjectionStore:
         return {"snapshot_id": snapshot_id, "checkpoint_digest": checkpoint_digest,
                 "projection_digest": projection_digest, "replayed": False}
 
-    def recover(self, expected_projection, *, source_register_id, source_sequence,
+    def recover(self, expected_projection, *, source_register_id, source_sequence, source_chain_hash,
                 instrument_registry_digest, sector_registry_digest,
                 opening_snapshot_digest):
         """Compare a freshly re-derived projection to the immutable stored checkpoint."""
         source_register_id = self._required(source_register_id, "source_register_id")
         if not isinstance(source_sequence, int) or isinstance(source_sequence, bool) or source_sequence < 0:
             raise BankingSFCStoreError("source_sequence must be a non-negative integer")
-        for value, name in ((instrument_registry_digest, "instrument_registry_digest"),
+        for value, name in ((source_chain_hash, "source_chain_hash"),
+                            (instrument_registry_digest, "instrument_registry_digest"),
                             (sector_registry_digest, "sector_registry_digest"),
                             (opening_snapshot_digest, "opening_snapshot_digest")):
             self._required(value, name)
@@ -292,11 +302,11 @@ class BankingSFCProjectionStore:
             if row is None:
                 raise BankingSFCStoreError("sealed projection checkpoint is missing")
             expected_meta = (
-                source_digest, mapping_version, instrument_registry_digest,
+                source_digest, mapping_version, source_chain_hash, instrument_registry_digest,
                 sector_registry_digest, opening_snapshot_digest, digest
             )
             stored_meta = (
-                row["source_digest"], row["mapping_version"], row["instrument_registry_digest"],
+                row["source_digest"], row["mapping_version"], row["source_chain_hash"], row["instrument_registry_digest"],
                 row["sector_registry_digest"], row["opening_snapshot_digest"], row["projection_digest"]
             )
             if stored_meta != expected_meta or row["applied_through_sequence"] != source_sequence:
@@ -306,8 +316,8 @@ class BankingSFCProjectionStore:
             checkpoint_body = {
                 "store_id": STORE_ID, "schema_version": SCHEMA_VERSION,
                 "snapshot_id": row["snapshot_id"], "source_register_id": source_register_id,
-                "applied_through_sequence": source_sequence, "source_digest": source_digest,
-                "mapping_version": mapping_version,
+                "applied_through_sequence": source_sequence, "source_chain_hash": source_chain_hash,
+                "source_digest": source_digest, "mapping_version": mapping_version,
                 "instrument_registry_digest": instrument_registry_digest,
                 "sector_registry_digest": sector_registry_digest,
                 "opening_snapshot_digest": opening_snapshot_digest,
