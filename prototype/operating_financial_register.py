@@ -1360,32 +1360,10 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "revision": version}
 
     def deposit_opening_positions(self, *, period_index, principal_id):
-        """Export opening deposit assets/liabilities from the durable account-opening events."""
-        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index != 1:
-            raise OperatingFinancialRegisterError("deposit opening positions currently support only the initial period")
-        state, _ = self.state("operating-financial", principal_id=principal_id)
-        if state is None:
-            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
-        from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
-        positions = []
-        for account in state["deposits"].values():
-            entity, bank, currency = account["entity_id"], account["bank_id"], account["currency"]
-            instrument = f"DEPOSIT:{entity}:{bank}:{currency}"
-            amount = D(account["opening_balance"])
-            evidence = account["opening_evidence_ref"]
-            asset = PositionIdentity(
-                "financial", f"{instrument}:ASSET", "monetary", currency, currency,
-                "NOMINAL", entity, bank, instrument,
-            )
-            liability = PositionIdentity(
-                "financial", f"{instrument}:LIABILITY", "monetary", currency, currency,
-                "NOMINAL", bank, entity, instrument,
-            )
-            positions.extend((
-                OpeningPosition(asset, period_index, amount, evidence),
-                OpeningPosition(liability, period_index, amount, evidence),
-            ))
-        return tuple(positions)
+        """Export deposit openings after replaying all prior deposit-affecting flows."""
+        return self._account_opening_positions(
+            period_index=period_index, principal_id=principal_id, account_kind="deposit",
+        )
 
     def commit_bank_credit(self, *, event_id, event_type, loan_id, borrower_id,
                            bank_id, currency, amount, period_index, evidence_ref,
