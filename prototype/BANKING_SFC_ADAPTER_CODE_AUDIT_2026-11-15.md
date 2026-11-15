@@ -103,3 +103,57 @@ this audit note. The most recent observed commit in this continuation was
 run `43707978636` was cancelled. A new exact-HEAD green run is required after
 subsequent changes. Keep PR #13 Draft and unmerged until the complete suite and
 the relevant long-running validation gates pass on one unchanged HEAD.
+
+
+## Follow-up implementation — durable projection snapshot v1
+
+Implemented on the PR branch after the source audit:
+
+- `banking_sfc_projection_store.py` adds a schema-versioned SQLite store with
+  immutable snapshot and checkpoint tables, SHA-256 projection/checkpoint
+  digests, explicit source-register identity and applied-through global commit
+  sequence, pinned instrument/sector/opening digests, and one transaction for
+  snapshot plus checkpoint.
+- `banking_sfc_projection_pipeline.py` verifies the native financial register
+  hash chain, reads the authorized aggregate history, checks ordered unique
+  commit-sequence metadata, rebuilds through the pure adapter, and persists or
+  independently recovers the projection.
+- Store tests cover deterministic idempotent replay, changed content at the
+  same cursor, stale cursors, allowed gaps in the global register sequence
+  (other aggregate events may occupy sequence numbers), registry/opening drift,
+  deterministic recovery mismatch, transaction rollback after each database
+  write boundary, and immutable persisted rows.
+- Pipeline tests cover source verification before persistence and a full
+  deterministic project/persist/rebuild/recover pass.
+
+The source cursor is a global register commit sequence, not an aggregate-local
+counter; therefore monotonicity is required, but consecutive integer values
+are not. This avoids rejecting valid histories containing unrelated register
+events between financial aggregate events.
+
+### Exact current implementation boundary
+
+This is a durable **single-host projection snapshot/checkpoint**, not yet the
+complete release gate specified above. The store currently persists the
+projection's complete deterministic canonical JSON as one immutable snapshot;
+it does not yet normalize every source event, movement, position, sector
+aggregate and source cursor into independently queryable relational coverage
+tables. Recovery compares the whole canonical snapshot and checkpoint digest
+against a fresh projection; it does not yet independently compare separately
+stored per-row tables because those tables do not exist.
+
+The pipeline's `source_register_id` is an explicit caller-supplied stable
+identity. The adapter still needs a first-class source-register identity
+contract, key/authority governance, signed multi-register period-close
+assembler, complete loan/refinancing opening exporters, capital-account
+integration, and instrument lifecycle events for interest, arrears, impairment,
+default, restructuring and write-off. No distributed consensus or off-host
+disaster recovery is claimed.
+
+### Validation status after this follow-up
+
+The repository workflow is configured to run all `prototype/test_*.py` tests,
+including the new store and pipeline tests. At the time this note was updated,
+the connector had not returned a workflow run or combined status for the new
+HEAD; no test pass is claimed here. A green run on the exact final HEAD remains
+mandatory.
