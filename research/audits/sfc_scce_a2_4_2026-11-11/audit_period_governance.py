@@ -77,6 +77,7 @@ def _checkpoint(signer, anchor, sequence, generation, event_root=None, projectio
             attestation_manifest, register_signer, attestation_anchor,
         )
         attestation_sequence[0] += 1
+        attestation_ref = "register-attestation://" + attestation_ref
         attestation_refs.add(attestation_ref)
         register_completeness.append({
             "register_name": name,
@@ -178,8 +179,13 @@ def main():
             register_signers=register_signers, attestation_sequence=attestation_sequence,
         )
         def verify(ref, digest):
-            selected_anchor = attestation_anchor if ref in attestation_refs else anchor
-            return _verify_bool(ref, digest, trust, selected_anchor)
+            if ref.startswith("register-attestation://"):
+                selected_ref = ref[len("register-attestation://"):]
+                selected_anchor = attestation_anchor
+            else:
+                selected_ref = ref
+                selected_anchor = anchor
+            return _verify_bool(selected_ref, digest, trust, selected_anchor)
         register_authorizer = lambda name,key_id,declaration: (
             key_id == register_signers[name].key_id
             and declaration.get("register_name") == name
