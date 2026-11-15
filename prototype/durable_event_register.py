@@ -192,7 +192,7 @@ class DurableEventRegister:
             ).fetchone()
             if prepared is not None:
                 raw_envelope = prepared["payload_json"]
-                if prepared["state"] != "COMMITTED" or not isinstance(raw_envelope, str):
+                if prepared["state"] not in {"PREPARED", "COMMITTED"} or not isinstance(raw_envelope, str):
                     raise RegisterError("event has a missing or non-committed native envelope")
                 if hashlib.sha256(raw_envelope.encode("utf-8")).hexdigest() != prepared["payload_digest"]:
                     raise RegisterError("committed native envelope digest mismatch")
