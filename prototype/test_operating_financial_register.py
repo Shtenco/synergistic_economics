@@ -1,3 +1,4 @@
+import sqlite3
 import tempfile
 import unittest
 from decimal import Decimal as D
@@ -126,6 +127,29 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(advanced["register_instance_id"], initial["register_instance_id"])
         self.assertGreater(advanced["event_count"], initial["event_count"])
         self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
+
+    def test_legacy_v2_register_metadata_receives_persistent_instance_id(self):
+        legacy_path = Path(self.tmp.name) / "legacy-financial.sqlite3"
+        with sqlite3.connect(legacy_path) as con:
+            con.execute(
+                "CREATE TABLE register_meta("
+                "singleton_id INTEGER PRIMARY KEY,register_name TEXT NOT NULL,"
+                "schema_version INTEGER NOT NULL,event_count INTEGER NOT NULL,tail_hash TEXT NOT NULL)"
+            )
+            con.execute(
+                "INSERT INTO register_meta VALUES(1,'financial',2,0,?)", ("0" * 64,)
+            )
+        migrated = OperatingFinancialRegister(
+            legacy_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        first = migrated.source_checkpoint()
+        reopened = OperatingFinancialRegister(
+            legacy_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        self.assertEqual(reopened.source_checkpoint(), first)
+        self.assertEqual(len(first["register_instance_id"]), 32)
 
     def test_verified_wage_group_commits_to_durable_financial_register(self):
         operation = self.operation()
