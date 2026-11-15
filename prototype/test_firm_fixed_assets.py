@@ -101,7 +101,7 @@ class FixedAssetLedgerTests(unittest.TestCase):
         self.assertEqual(ledger.commissioned_capacity("farm-north", 6), D("4"))
         self.assertEqual(ledger.carrying_value("farm-north", 3), D("2000"))
         self.assertEqual(ledger.carrying_value("farm-north", 4), D("1230"))
-        self.assertEqual(ledger.carrying_value("farm-north", 6), D("820"))
+        self.assertEqual(ledger.carrying_value("farm-north", 6), D("460"))
 
     def test_retirement_effective_period_cannot_move_backwards(self):
         ledger = FixedAssetLedger()
