@@ -424,6 +424,8 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         sector = self._sector_at(state["sector_memberships"], instant)
         latest = history[-1]
         return {
+            "schema_id": "synergy.economic.canonical-entity-snapshot",
+            "schema_version": 1,
             "tenant_id": state["tenant_id"],
             "entity_id": state["entity_id"],
             "entity_kind": state["entity_kind"],
