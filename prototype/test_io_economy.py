@@ -579,6 +579,39 @@ class InputOutputEconomyTests(unittest.TestCase):
             )
 
 
+    def test_unsettleable_micro_trade_does_not_transfer_stock_or_seller_cash(self):
+        from io_economy import FirmConfig, HouseholdConfig, MarketOrder, Product
+
+        model = InputOutputEconomy(
+            products=[Product("grain", "unit", D("1"), D("1"), D("0"))],
+            firms=[
+                FirmConfig(
+                    "seller", "grain", {}, D("1"), D("0"), D("0"),
+                    D("0"), D("1"), {"grain": D("0.00000001")},
+                )
+            ],
+            households=[
+                HouseholdConfig("buyer", D("1"), {}, D("0"), D("0"))
+            ],
+        )
+        seller = model.firms["seller"]
+        buyer = model.households["buyer"]
+        seller_stock_before, seller_cash_before = seller.inventory["grain"], seller.cash
+        buyer_cash_before = buyer.cash
+        result = model._clear_product(
+            "grain",
+            [MarketOrder("buyer", "grain", D("0.00000001"), "household")],
+            1,
+            {("household", "buyer"): D("1")},
+        )
+
+        self.assertEqual(result["traded"], D("0"))
+        self.assertEqual(seller.inventory["grain"], seller_stock_before)
+        self.assertEqual(seller.cash, seller_cash_before)
+        self.assertEqual(buyer.cash, buyer_cash_before)
+        self.assertEqual(buyer.consumption.get("grain", D("0")), D("0"))
+
+
     def test_recipe_rounding_never_consumes_more_than_available_input_stock(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
 
