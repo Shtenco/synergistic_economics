@@ -49,7 +49,8 @@ class FixedAssetLedgerTests(unittest.TestCase):
                                 order_currency="KZT", payment_evidence_ref="payment:1")
         ledger.deliver(event_id="delivery-1", order_id=item.order_id, quantity="1",
                        period=2, evidence_ref="receipt:1")
-        self.assertEqual(ledger.commissioned_capacity("farm-north", 3), D("0"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 2), D("0"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 3), D("4"))
         self.assertEqual(ledger.physical_reconciliation(item.order_id)["undelivered"], D("1"))
 
     def test_rejects_underpayment_currency_mismatch_and_overdelivery(self):
