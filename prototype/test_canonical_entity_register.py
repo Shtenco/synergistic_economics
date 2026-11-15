@@ -60,6 +60,7 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
         self.authority = SignedAuthority()
         self.store = CanonicalEconomicEntityRegister(
             self.path, authority_verifier=self.authority.verifier,
+            tenant_authorizer=self.tenant_authorizer,
             clock=lambda: datetime(2026, 11, 15, 9, 0, tzinfo=timezone.utc),
         )
         self.store.bootstrap_admin(
@@ -84,6 +85,17 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    @staticmethod
+    def tenant_authorizer(principal_id, tenant_id, permission, authority_ref):
+        if tenant_id != "tenant-kz":
+            return False
+        grants = {
+            "registrar": {"entity:write"},
+            "admin": {"entity:write", "entity:admin"},
+            "auditor": {"entity:read"},
+        }
+        return permission in grants.get(principal_id, set())
 
     def _register(self, *, entity_id="entity-001", tenant_id="tenant-kz", sector="NFC",
                   event_id="ENTITY-REGISTERED", actor="registrar", authority_ref="AUTHORITY:KZ"):
@@ -129,6 +141,8 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
     def test_register_resolves_metaverse_contract_with_verified_chain_digest(self):
         self._register()
         snapshot = self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+        self.assertEqual(snapshot["schema_id"], "synergy.economic.canonical-entity-snapshot")
+        self.assertEqual(snapshot["schema_version"], 1)
         self.assertEqual(snapshot["tenant_id"], "tenant-kz")
         self.assertEqual(snapshot["entity_id"], "entity-001")
         self.assertEqual(snapshot["institutional_sector"], "NFC")
@@ -171,6 +185,10 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
             self.store.resolve_entity("tenant-other", "entity-001", principal_id="auditor")
         with self.assertRaises(RegisterError):
             self.store.resolve_entity("tenant-kz", "entity-001", principal_id="intruder")
+        with self.assertRaises(EconomicEntityRegisterError):
+            self.store.state("tenant-other::entity-001", principal_id="auditor")
+        with self.assertRaises(EconomicEntityRegisterError):
+            self.store.history("tenant-other::entity-001", principal_id="auditor")
 
     def test_sector_is_never_inferred_and_invalid_sector_rejected(self):
         with self.assertRaises(EconomicEntityRegisterError):
@@ -208,6 +226,18 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
                 payload={"reason": "invalid", "evidence_ref": "evidence:bad"},
                 version=4, actor="admin",
             )
+
+
+    def test_tenant_policy_denial_blocks_writes_before_event_append(self):
+        self._register()
+        before = self.store.total_event_count
+        self.store.tenant_authorizer = lambda *_: False
+        with self.assertRaises(EconomicEntityRegisterError):
+            self._event(
+                event_id="TENANT-DENIED", event_type="entity.updated",
+                payload={"changes": {"jurisdiction": "RU"}}, version=1,
+            )
+        self.assertEqual(self.store.total_event_count, before)
 
     def test_signature_tampering_and_wrong_tenant_authority_fail_closed(self):
         self._register()
