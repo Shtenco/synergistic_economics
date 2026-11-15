@@ -188,6 +188,27 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
         with self.assertRaisesRegex(BankingSFCStoreError, "no valid matching checkpoint"):
             self.append()
 
+    def test_idempotent_append_rejects_offline_source_tail_copy_corruption(self):
+        self.append()
+        with sqlite3.connect(self.path) as con:
+            con.execute("DROP TRIGGER banking_sfc_checkpoints_no_update")
+            con.execute("UPDATE banking_sfc_checkpoints SET source_chain_hash=?", ("d" * 64,))
+        with self.assertRaisesRegex(BankingSFCStoreError, "no valid matching checkpoint"):
+            self.append()
+
+    def test_legacy_projection_store_schema_requires_explicit_migration(self):
+        legacy_path = str(Path(self.tmp.name) / "legacy-projection.sqlite")
+        with sqlite3.connect(legacy_path) as con:
+            con.execute(
+                "CREATE TABLE banking_sfc_store_meta("
+                "singleton INTEGER PRIMARY KEY,store_id TEXT NOT NULL,schema_version INTEGER NOT NULL)"
+            )
+            con.execute(
+                "INSERT INTO banking_sfc_store_meta VALUES(1,'native-banking-sfc-projection',1)"
+            )
+        with self.assertRaisesRegex(BankingSFCStoreError, "explicit migration required"):
+            BankingSFCProjectionStore(legacy_path)
+
     def test_persisted_rows_are_immutable(self):
         self.append()
         with sqlite3.connect(self.path) as con:
