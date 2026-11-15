@@ -383,6 +383,23 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
                 )),
             )
 
+    def test_next_period_opening_must_equal_prior_period_closing(self):
+        terms, sectors, identities, first = fixture(3)
+        inconsistent = fixture(4, ["99", "99", "99", "99"])[3]
+        origination = self.loan_event(
+            "LOAN-ORIG-1", "bank.loan_originated", "100", 3, 1
+        )
+        with self.assertRaisesRegex(
+            OperatingFinancialSFCAdapterError,
+            "opening balance differs from prior-period closing",
+        ):
+            OperatingFinancialSFCAdapter.build(
+                [origination],
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[first, inconsistent],
+            )
+
     def test_nonzero_position_cannot_disappear_from_next_period_snapshot(self):
         terms, sectors, identities, first = fixture(3)
         deposit_only = OpeningStockSnapshot(
