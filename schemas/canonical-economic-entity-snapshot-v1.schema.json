@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://synergy.example/schemas/canonical-economic-entity-snapshot-v1.schema.json",
+  "title": "SYNERGY Canonical Economic Entity Snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_id",
+    "schema_version",
+    "tenant_id",
+    "entity_id",
+    "entity_kind",
+    "jurisdiction",
+    "institutional_sector",
+    "version",
+    "status",
+    "authority_system",
+    "authority_event_ref",
+    "source_digest",
+    "verified",
+    "effective_as_of",
+    "external_refs"
+  ],
+  "properties": {
+    "schema_id": {
+      "const": "synergy.economic.canonical-entity-snapshot"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "tenant_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "entity_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "entity_kind": {
+      "enum": [
+        "company",
+        "sole_proprietor",
+        "household",
+        "bank",
+        "government_unit",
+        "cooperative",
+        "non_profit",
+        "other"
+      ]
+    },
+    "jurisdiction": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "institutional_sector": {
+      "enum": [
+        "H",
+        "NFC",
+        "CB",
+        "CBank",
+        "GOV",
+        "ROW"
+      ]
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "status": {
+      "enum": [
+        "ACTIVE",
+        "SUSPENDED",
+        "RETIRED"
+      ]
+    },
+    "authority_system": {
+      "const": "synergistic_economics"
+    },
+    "authority_event_ref": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "source_digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "verified": {
+      "const": true
+    },
+    "effective_as_of": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "display_name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 512
+    },
+    "external_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "value",
+          "issuer",
+          "evidence_ref"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "issuer": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "evidence_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          }
+        }
+      }
+    }
+  }
+}
