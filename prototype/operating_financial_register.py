@@ -120,9 +120,14 @@ class OperatingFinancialRegister(DurableEventRegister):
         if not isinstance(sectors, Mapping):
             raise OperatingFinancialRegisterError("explicit institutional sector mapping is required")
         self.sectors = dict(sectors)
+        allowed_sectors = {"H", "NFC", "CB", "CBank", "GOV", "ROW"}
+        if not self.sectors:
+            raise OperatingFinancialRegisterError("at least one explicit institutional sector mapping is required")
         for entity, sector in self.sectors.items():
             _text(entity, "sector entity")
             _text(sector, "institutional sector")
+            if sector not in allowed_sectors:
+                raise OperatingFinancialRegisterError(f"unsupported institutional sector for {entity}")
         super().__init__(database_path)
 
     @staticmethod
@@ -136,6 +141,11 @@ class OperatingFinancialRegister(DurableEventRegister):
         bank = _text(event.get("bank_id"), "bank_id")
         currency = _text(event.get("currency"), "currency")
         claim_id = _text(event.get("claim_id"), "claim_id")
+        if worker == employer or bank in {worker, employer}:
+            raise OperatingFinancialRegisterError("worker, employer and bank must be distinct entities")
+        for entity in (worker, employer, bank):
+            if entity not in self.sectors:
+                raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
         event_type = event.get("event_type")
         if event_type == "wage_accrual":
             expected = [
@@ -166,7 +176,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 posting.get("counterparty_id"), posting.get("instrument_id"), posting.get("currency")) != (
                 account, side, entity, counterparty, instrument, currency):
                 raise OperatingFinancialRegisterError("posting identity differs from the canonical wage account template")
-            if posting.get("sector") != self.sectors.get(entity):
+            if entity not in self.sectors or posting.get("sector") != self.sectors[entity]:
                 raise OperatingFinancialRegisterError("posting institutional sector differs from configured entity sector")
             line_amount = _decimal(posting.get("amount"), "posting amount", positive=True)
             if line_amount != amount:
@@ -206,6 +216,9 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("labour_aggregate_version must be positive")
         engagement_id = _text(event.get("engagement_id"), "engagement_id")
         period_label = _text(event.get("period_label"), "period_label")
+        delivery_event_id = _text(event.get("delivery_event_id"), "delivery_event_id")
+        if claim_id != f"{engagement_id}:{delivery_event_id}":
+            raise OperatingFinancialRegisterError("wage claim ID must bind the engagement and verified delivery event")
         delivered_hours = _decimal(event.get("delivered_hours"), "delivered_hours", positive=True)
         hourly_rate = _decimal(event.get("hourly_rate"), "hourly_rate", positive=True)
         self._validate_postings(event)
