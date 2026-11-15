@@ -117,7 +117,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
     def test_registry_or_opening_drift_is_rejected(self):
         self.append()
         with self.assertRaisesRegex(BankingSFCStoreError, "pinned registry/opening"):
-            self.append(source_sequence=5, sector_registry_digest="changed")
+            self.append(source_sequence=5, source_chain_hash="c" * 64, sector_registry_digest="changed")
 
     def test_recovery_rejects_changed_replay_without_advancing_checkpoint(self):
         self.append()
