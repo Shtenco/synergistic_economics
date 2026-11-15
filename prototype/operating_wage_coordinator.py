@@ -71,7 +71,7 @@ def _physical_movement_specs(outflow, inflow, *, period_index=1):
                 "holder_id": destination, "issuer_id": origin,
             },
             "period_index": period_index, "movement_class": "T", "amount": str(quantity),
-            "evidence_ref": _text(outflow.get("evidence_ref", "TIMESHEET-VERIFIED"), "physical evidence_ref"),
+            "evidence_ref": _text(outflow.get("measurement_method"), "physical measurement_method"),
             "mirror_group_id": flow_id, "mirror_side": "receiver", "mirror_policy": "opposite",
         },
     ]
@@ -151,7 +151,9 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             outflow.get("period"), _decimal(outflow.get("quantity"), "physical quantity")) != (
             worker, employer, "labour_service", "verified", "h", accrual.get("period_label"), delivered_hours):
             raise CoordinatorError("physical service flow differs from verified labour delivery")
-        if operations["physical"]["payload"].get("stock_flow_movements") != _physical_movement_specs(outflow, inflow):
+        if physical.get("stock_flow_movements") != _physical_movement_specs(
+            outflow, inflow, period_index=accrual.get("period_index")
+        ):
             raise CoordinatorError("physical stock-flow movements differ from delivered labour service")
 
         product = _envelope(operations, "product")
