@@ -4,7 +4,9 @@ A paid investment order is not productive capacity: payment, physical delivery
 and commissioning are separate, identity-preserving events. The IO adapter
 reserves supplier inventory, settles buyer/supplier cash and posts delivered
 units to capital formation. This ledger owns cohort valuation and lifecycle.
-All amounts and physical quantities use Decimal; missing evidence fails closed.
+Evidence references are required identifiers, not cryptographic proof or an
+external payment/credit-register lookup. All amounts and physical quantities
+use Decimal; missing evidence references fail closed.
 """
 from __future__ import annotations
 
