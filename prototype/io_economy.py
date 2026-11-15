@@ -770,7 +770,7 @@ class InputOutputEconomy:
                 if share > 0:
                     wage_event_id = f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
                     wage_payment_event_ids[household_id] = wage_event_id
-                    self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "household_wage_payment", {
+                    self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "wage_payment", {
                         "event_id": wage_event_id, "firm_id": firm_id,
                         "household_id": household_id, "amount": str(share),
                         "labour_hours": str(hours_by_household[household_id]),
