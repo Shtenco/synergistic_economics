@@ -141,6 +141,18 @@ class SFCSourceContractTests(unittest.TestCase):
         with self.assertRaises(SFCSourceContractError):
             snapshot.validate_against(registry, sector_registry)
 
+    def test_nonnegative_instrument_terms_reject_negative_opening_stock(self):
+        ident = identity()
+        registry = InstrumentTermsRegistry("terms-v1", (terms(),))
+        sector_registry = sectors()
+        snapshot = OpeningStockSnapshot(
+            "open-v1", 2, registry.version, registry.digest,
+            sector_registry.version, sector_registry.digest,
+            (ident,), (OpeningPosition(ident, "-1", "CERT", "SOURCE"),),
+        )
+        with self.assertRaises(SFCSourceContractError):
+            snapshot.validate_against(registry, sector_registry)
+
     def test_opening_balance_rejects_float_nan_and_implicit_evidence(self):
         ident = identity()
         with self.assertRaises(SFCSourceContractError):
