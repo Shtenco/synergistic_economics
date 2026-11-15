@@ -410,6 +410,45 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(len({row.evidence_ref for row in opening_after_repayment}), 1)
         self.assertTrue(self.register.verify())
 
+    def test_large_principal_repayments_preserve_all_accepted_decimal_digits(self):
+        principal = "123456789012345678901234567890.00"
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-LARGE", event_type="bank.loan_originated",
+            loan_id="LOAN-LARGE", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount=principal, period_index=3,
+            evidence_ref="SIGNED-LOAN-LARGE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        self.register.commit_bank_credit(
+            event_id="BANK-LOAN-LARGE-REPAY", event_type="bank.loan_principal_repaid",
+            loan_id="LOAN-LARGE", borrower_id="worker-1", bank_id="bank-1",
+            currency="LCU", amount="1.00", period_index=4,
+            evidence_ref="BANK-LOAN-LARGE-REPAYMENT",
+            causation_id="BANK-LOAN-LARGE", actor_id="financial-root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=3,
+        )
+        expected = D("123456789012345678901234567889.00")
+        loan, _ = self.register.loan_state(
+            "LOAN-LARGE", principal_id="financial-root",
+        )
+        self.assertEqual(D(loan["outstanding_principal"]), expected)
+        self.assertEqual(
+            self.register.deposit_balance(
+                "worker-1", "LCU", principal_id="financial-root",
+            )[0],
+            expected + D("9.00"),
+        )
+        snapshot = self.register.bank_principal_snapshot(
+            "bank-1", "LCU", principal_id="financial-root",
+        )
+        self.assertEqual(snapshot["loan_assets"], expected)
+        self.assertEqual(
+            snapshot["deposit_liabilities"],
+            expected + D("1009.00"),
+        )
+
     def test_refinancing_state_retains_original_advance_period_after_repayment(self):
         register = OperatingFinancialRegister(
             Path(self.tmp.name) / "refinancing-period.sqlite3",
