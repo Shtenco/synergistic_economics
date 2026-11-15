@@ -31,69 +31,63 @@ Reviewed source: `operating_financial_sfc_adapter.py`, `sfc_source_contracts.py`
 
 ## Remaining blockers — still release-blocking
 
-1. **No durable native SFC projection store.** The adapter returns an in-memory
-   `BankingSFCProjection`. There is no atomic persisted transaction spanning
-   source cursor, source-event coverage, movement coverage, openings,
-   roll-forward rows, sector aggregates and mapper version.
-2. **No durable adapter checkpoint/recovery.** There is no restart path that
-   reloads a sealed projection, re-verifies the source history and registries,
-   independently re-derives every movement, and compares the persisted
-   projection before advancing an applied-through cursor.
-3. **No signed period-close assembler.** No complete six-register close protocol
-   requires each domain register to attest its period boundary, source sequence,
-   checkpoint, registry versions and either activity or an explicit
-   zero-activity declaration. Absence of events is not evidence of zero activity.
-4. **Opening exports remain incomplete.** The durable register exports deposit
+1. **Opening exports remain incomplete.** The durable register exports deposit
    and reserve opening evidence, but loan and refinancing opening positions in
    the multi-period fixture are caller-supplied synthetic snapshots. Every
    first-active-period opening needs a durable evidence reference and source
-   checkpoint.
-5. **No complete capital account.** Financial net lending is transaction-mapped
+   checkpoint. Current reducers store origination principal and outstanding
+   principal for post-opening advances, but do not distinguish an independently
+   evidenced pre-existing opening principal.
+2. **No signed period-close assembler.** No complete six-register close protocol
+   requires each domain register to attest its period boundary, source sequence,
+   checkpoint, registry versions and either activity or an explicit
+   zero-activity declaration. Absence of events is not evidence of zero activity.
+3. **No complete capital account.** Financial net lending is transaction-mapped
    for supported financial instruments only. Capital transfers, non-financial
    investment acquisition/disposal, saving, capital-account counterpart flows
    and any governed statistical discrepancy are not yet integrated into one
    same-cohort six-sector reconciliation.
-6. **Instrument lifecycle remains principal-only.** Rate metadata is not an
+4. **Instrument lifecycle remains principal-only.** Rate metadata is not an
    interest engine. Interest accrual/payment, fees, arrears, maturity cashflows,
    impairment, default, restructuring, write-off and collateral valuation remain
    unsupported and must continue to fail closed until their contracts exist.
-7. **Sector authority is split.** The adapter pins a versioned effective-dated
+5. **Sector authority is split.** The adapter pins a versioned effective-dated
    sector registry, while write-side financial authorization still uses a
    constructor-supplied static sector map. Governance and sealed-period
    reclassification/reprojection rules remain necessary.
+6. **Projection normalization remains incomplete.** The SQLite store persists a
+   canonical immutable projection snapshot and checkpoint atomically, but does
+   not yet expose independently queryable relational rows for each source event,
+   movement, position and sector aggregate. Existing rollback failpoints do not
+   prove process-kill recovery at every filesystem boundary.
 
 ## Required next implementation slice
 
-Implement a native SQLite projection store with an explicit schema/version and
-one atomic append operation. The transaction must persist:
+Implement evidence-backed opening records for pre-existing loan and central-bank
+refinancing principal, keeping them distinct from post-opening origination and
+advance events. Each opening record must bind the instrument/facility identity,
+holder and issuer, currency, exact principal, first active period, source
+account reference, evidence reference and authority envelope. It must not
+create a deposit or reserve transaction, and it must not be treated as a T
+movement. Its opening principal must remain immutable after later repayments;
+the live outstanding principal must continue to evolve independently.
 
-- pinned mapper version, instrument-registry digest, sector-registry digest and
-  ordered opening-snapshot digests;
-- source register identity, source event IDs, idempotency keys, aggregate
-  revisions, commit sequence, source payload/envelope digests and chain cursor;
-- one-to-one source-event and movement coverage;
-- canonical position identity, period, T/V/O components, opening and closing;
-- sector transaction asset/liability totals and financial net lending;
-- an immutable checkpoint containing the applied-through source sequence and
-  deterministic projection digest.
+The exporter must derive both reciprocal SFC identities from the opening event,
+resolve effective-dated sectors and instrument terms, and produce evidence-backed
+opening positions for both mirror sides. It must never infer a zero balance,
+current outstanding amount, maturity, denomination or rate term. Duplicate
+instrument openings, account/facility mismatches, missing evidence, unsupported
+periods and incomplete mirror pairs must fail closed.
 
-The append path must reject stale cursors, duplicate or changed-content source
-events, changed mapper/registry versions, incomplete openings, missing mirror
-sides and non-contiguous periods before commit. Replaying identical source
-history must be idempotent. Reusing an event ID with changed bytes must fail.
-
-Recovery must verify the source register, load the pinned registries and
-openings, rebuild the expected projection through the pure adapter/kernel,
-compare every persisted coverage/position/sector/checkpoint row, and fail closed
-without mutating the cursor on any mismatch. Add subprocess crash injection at
-each SQLite write boundary and verify both pre-COMMIT rollback and post-COMMIT
-restart/replay. This is a single-host SQLite guarantee, not distributed
-consensus or external disaster recovery.
-
-Only after this financial projection slice is durable should the period-close
-assembler bind independently declared domain-register completeness and the
-capital-account bridge. Do not fabricate events in physical, capital, labour,
-product or legal-rights registers for a bank-only transaction.
+Add tests for opening -> later origination/repayment -> restart/replay, including
+proof that the opening snapshot remains unchanged while outstanding principal
+changes. Add negative tests for duplicate opening, wrong account/counterparty,
+wrong currency/minor unit, missing evidence, non-initial period and an opening
+record that attempts to create deposit/reserve money. Only after the financial
+opening exporter is evidence-backed should period-close assembly bind
+independently declared domain-register completeness and the capital-account
+bridge. Do not fabricate events in physical, capital, labour, product or
+legal-rights registers for a bank-only transaction.
 
 ## Validation status
 
