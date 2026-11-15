@@ -50,10 +50,10 @@ def build_opening_snapshots_from_register(
 ):
     """Build complete bilateral opening snapshots from verified native financial stocks.
 
-    The source register is read at one pinned global checkpoint. Existing reducers
-    replay immutable openings and all prior native T-flows for deposits, reserves,
-    loans and central-bank refinancing. A checkpoint change during extraction
-    invalidates the whole build.
+    The source register is read at one pinned global checkpoint. Native exporters
+    reconstruct deposits, reserves, loans, central-bank refinancing and wage claims/
+    payables from durable history. A checkpoint change during extraction invalidates
+    the whole build.
     """
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("verified native financial register is required")
