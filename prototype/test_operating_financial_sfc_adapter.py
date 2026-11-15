@@ -1,5 +1,6 @@
 """Adversarial tests for the native banking-to-SFC adapter."""
 import json
+from decimal import Decimal
 import tempfile
 import unittest
 from pathlib import Path
@@ -503,8 +504,8 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             for movement in envelope["stock_flow_movements"]:
                 identity = _resolve_identity(movement["identity"], 3, terms, sectors)
                 period3_closing[identity] = (
-                    __import__("decimal").Decimal(period3_closing[identity])
-                    + __import__("decimal").Decimal(movement["amount"])
+                    Decimal(period3_closing[identity])
+                    + Decimal(movement["amount"])
                 )
         snapshot4 = OpeningStockSnapshot(
             "six-sector-opening-v4", 4, terms.version, terms.digest,
