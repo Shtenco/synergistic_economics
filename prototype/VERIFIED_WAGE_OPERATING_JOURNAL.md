@@ -4,7 +4,7 @@
 
 The research branch now contains a six-register wage transaction path. It commits a measured physical labour-service flow, a capital no-effect period marker, a verified labour settlement, a non-stockable product specification, a legal wage claim and the durable operating-financial event group through the existing coordinator. The integration test verifies the committed event group, all six native receipts, restart visibility and stock-flow reconciliation.
 
-The production `EntityJournal` remains the frozen GOLD-2A bank-credit contract. This experiment therefore does **not** add wage event types to GOLD-2A or weaken its validation. It introduces a separately versioned operating wage subledger and a durable native financial register for the first missing bridge: verified paid labour -> wage payable/receivable -> bank-deposit settlement. The durable register is separate from GOLD-2A and uses the existing native event-envelope and append-only register substrate.
+The production `EntityJournal` remains the frozen GOLD-2A bank-credit contract. This experiment therefore does **not** add wage event types to GOLD-2A or weaken its validation. It introduces a separately versioned operating wage subledger and a durable native financial register for the first missing bridge: verified paid labour -> wage payable/receivable -> bank-deposit settlement. The durable register is separate from GOLD-2A and uses the existing native event-envelope and append-only register substrate. The global `operating-financial` stream now stores both wage claims and durable deposit accounts, so a wage payment can atomically reduce the employer deposit and increase the worker deposit.
 
 ## Flow
 
@@ -17,9 +17,11 @@ The production `EntityJournal` remains the frozen GOLD-2A bank-credit contract. 
 7. Serialize accrual/payment events with their delivery, verification, contract and bank-evidence references; preserve the labour aggregate version and currency minor unit.
 8. Submit all six native operations to `OperatingWageCoordinator`. It cross-checks the live labour state, physical service quantity, product specification, legal claim and financial postings before the coordinator begins prepare/commit.
 9. For a fully paid claim, the legal-rights register records `right.created_and_extinguished` with the final payment event and evidence reference in the same six-register transaction. For an unpaid or partially paid claim, the legal right remains active.
-10. The financial register checks canonical postings, causal order, claim balance, currency precision, sector mapping and exact SFC movement metadata; it appends a hash-chained event and can replay the claim after restart.
-11. The physical labour service is recorded as a non-stockable period flow. It is not misrepresented as an opening/closing inventory of hours; only financial instrument positions enter the current T/V/O stock-flow reconciliation.
-12. The in-memory journal prechecks employer deposit availability before it creates a payment event. The durable register records the supplied bank evidence reference but does not independently query or authenticate the bank settlement.
+10. Deposit accounts are opened as durable, versioned financial events with owner, bank, currency, account reference, opening balance, minor unit and opening evidence.
+11. The financial register checks canonical postings, causal order, claim balance, currency precision, sector mapping, matching bank/currency/minor-unit account identities and sufficient employer deposit balance. It debits the employer account and credits the worker account in the same append-only event as the wage claim settlement; the whole stream replays after restart.
+12. The financial register exports opening deposit positions from its durable account-opening records to the SFC reconciliation kernel.
+13. The physical labour service is recorded as a non-stockable period flow. It is not misrepresented as an opening/closing inventory of hours; only financial instrument positions enter the current T/V/O stock-flow reconciliation.
+14. The in-memory journal prechecks employer deposit availability for early feedback; the durable financial register independently rechecks the authoritative persisted balance before commit. It records the supplied bank evidence reference but does not independently query or authenticate the external bank settlement.
 
 ## Accounting identities
 
@@ -53,6 +55,8 @@ The tests cover:
 - no payment above the outstanding claim or available employer deposits;
 - two-period stock-flow reconciliation of wage claims and bank deposits;
 - durable append-only financial event commit, receipt replay and restart recovery;
+- durable opening of employer/worker deposit accounts, atomic balance movement on wage settlement and overdraft rejection even when the in-memory precheck has a larger balance;
+- SFC opening positions derived from the durable deposit-account opening records;
 - rejection of a payment without a prior accrual, altered movement metadata, altered postings and unauthorized actors;
 - separate accrual and later payment commits against consecutive financial aggregate revisions;
 - one six-register transaction that commits physical, capital, labour, product, legal-rights and financial participant events;
@@ -71,8 +75,8 @@ This is a bounded accounting kernel, not a completed production integration:
 - Its verified-delivery token prevents accidental construction through the public API but is not a cryptographic boundary against arbitrary code executing inside the same Python process.
 - The employer is matched against the labour register activity reference; the bank, wage contract and sector membership remain explicit inputs.
 - The six-register path is a research prototype with one tested paid-labour transaction shape. It does not yet provide a general operating-accounting integration for all wages, transfers, taxes, benefits or consumption. Later partial-payment transactions need a corresponding legal-rights and six-register settlement workflow; the financial subledger alone can already replay sequential partial payments.
-- The durable financial register does not independently validate bank account balances or authenticate external bank settlement evidence. The in-memory cash sufficiency check is not a substitute for an authoritative bank/deposit register and is not restart-safe.
+- The durable financial register now enforces its own append-only deposit-account balances and prevents overdraw on its internal ledger. However, account-opening balances and payment evidence are supplied by authorized actors; the prototype does not independently authenticate bank statements, query a live bank, or prove that an external transfer actually settled.
 - It does not model tax, social contributions, benefits, arrears priority, insolvency resolution, price formation or household consumption.
 - It must not be described as part of GOLD-2A or as proof that the full economy is stock-flow consistent.
 
-The next integration step is an authoritative deposit/bank-balance participant so payment capacity and bank evidence are verified from durable source records rather than the in-memory precheck. Then extend the same six-register pattern to later partial settlements and household purchases/firm receipts. The frozen GOLD-2A journal remains unchanged.
+The next integration step is an external bank-evidence verifier (for example, a signed statement/transfer feed) and a coordinated workflow for later partial settlements and household purchases/firm receipts. The frozen GOLD-2A journal remains unchanged.

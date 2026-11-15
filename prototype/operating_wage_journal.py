@@ -439,7 +439,7 @@ class OperatingWageJournal:
 
 
 def native_financial_operation(events, *, actor_id, authority_ref, effective_at, recorded_at,
-                               expected_revision=0):
+                               expected_revision):
     """Build one immutable native financial event group from wage journal events."""
     if not isinstance(events, (tuple, list)) or not events:
         raise OperatingWageError("at least one wage event is required")
@@ -468,7 +468,7 @@ def native_financial_operation(events, *, actor_id, authority_ref, effective_at,
         "stock_flow_movements": movements,
     }
     return {
-        "stream_id": f"wage:{claim_id}",
+        "stream_id": "operating-financial",
         "native_event_id": native_id,
         "expected_revision": expected_revision,
         "payload": envelope,

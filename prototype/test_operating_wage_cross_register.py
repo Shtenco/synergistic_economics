@@ -188,8 +188,8 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
             },
         },
         "financial": {
-            "stream_id": f"wage:{claim_id}", "native_event_id": "WAGE-GROUP-1",
-            "expected_revision": 0,
+            "stream_id": "operating-financial", "native_event_id": "WAGE-GROUP-1",
+            "expected_revision": 2,
             "payload": envelope("wage.event_group_committed", financial_payload, "WAGE-GROUP-1")
                        | {"stock_flow_movements": financial_movements},
         },
@@ -229,6 +229,18 @@ def make_participants(root):
             permissions=["financial:read", "financial:write"], actor_id="financial-root",
             authority_ref="POLICY:F", occurred_at=T,
         )
+        financial.open_deposit_account(
+            event_id="OPEN-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="EMPLOYER-ACCOUNT-1", opening_balance="1000",
+            evidence_ref="BANK-OPEN-EMPLOYER", actor_id="coordinator",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=0,
+        )
+        financial.open_deposit_account(
+            event_id="OPEN-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="WORKER-ACCOUNT-1", opening_balance="10",
+            evidence_ref="BANK-OPEN-WORKER", actor_id="coordinator",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=1,
+        )
     return {
         "physical": make_physical_participant(physical, AUTH),
         "capital": make_capital_participant(capital, AUTH),
@@ -263,13 +275,15 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(labour_version, 7)
 
             financial = participants["financial"]
-            financial_state, financial_version = financial.state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
+            financial_state, financial_version = financial.claim_state(
+                events[0].claim_id, principal_id="coordinator",
             )
             self.assertEqual(financial_state["status"], "PAID")
             self.assertEqual(financial_state["outstanding_amount"], "0.00")
             self.assertEqual(financial_state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
-            self.assertEqual(financial_version, 1)
+            self.assertEqual(financial_version, 3)
+            self.assertEqual(financial.deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("960.00"))
+            self.assertEqual(financial.deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("50.00"))
             self.assertTrue(financial.verify())
 
             rights_state, rights_version = participants["legal_rights"].state(
@@ -284,20 +298,22 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual({event["register_id"] for event in group["events"]}, set(PARTICIPANTS))
             movements = movements_from_event_groups((group,))
             identities = sorted({movement.identity for movement in movements})
+            durable_openings = {
+                row.identity: (row.amount, row.evidence_ref)
+                for row in participants["financial"].deposit_opening_positions(
+                    period_index=1, principal_id="coordinator",
+                )
+            }
             openings, closings = [], []
             for identity in identities:
-                if identity.instrument_id.startswith("WAGE:"):
-                    initial = D("0")
-                elif identity.instrument_id == "DEPOSIT:employer-1:LCU":
-                    initial = D("1000")
-                elif identity.instrument_id == "DEPOSIT:worker-1:LCU":
-                    initial = D("10")
-                else:
-                    self.fail(f"unexpected stock-flow identity: {identity}")
+                initial, opening_evidence = durable_openings.get(
+                    identity, (D("0"), f"OPEN-WAGE:{identity.position_id}"),
+                )
                 balance = initial
                 for period in (1, 2):
                     openings.append(OpeningPosition(
-                        identity, period, balance, f"OPEN:{identity.position_id}:{period}",
+                        identity, period, balance,
+                        opening_evidence if period == 1 else f"OPEN:{identity.position_id}:{period}",
                     ))
                     delta = sum((m.amount for m in movements
                                  if m.identity == identity and m.period_index == period), D("0"))
@@ -319,10 +335,13 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             )
             self.assertTrue(restarted.is_visible("TX-WAGE-1"))
             self.assertEqual(restarted.committed_event_group("TX-WAGE-1"), group)
-            replayed, _ = reopened["financial"].state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
+            replayed, replayed_version = reopened["financial"].claim_state(
+                events[0].claim_id, principal_id="coordinator",
             )
             self.assertEqual(replayed["outstanding_amount"], "0.00")
+            self.assertEqual(replayed_version, 3)
+            self.assertEqual(reopened["financial"].deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("960.00"))
+            self.assertEqual(reopened["financial"].deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("50.00"))
             self.assertTrue(reopened["financial"].verify())
 
 
@@ -344,12 +363,14 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             ))
             self.assertEqual(coordinator.execute("TX-WAGE-PARTIAL"), "COMMITTED")
             claim_id = events[0].claim_id
-            financial_state, financial_version = participants["financial"].state(
-                f"wage:{claim_id}", principal_id="coordinator",
+            financial_state, financial_version = participants["financial"].claim_state(
+                claim_id, principal_id="coordinator",
             )
             self.assertEqual(financial_state["status"], "OUTSTANDING")
             self.assertEqual(financial_state["outstanding_amount"], "25.00")
-            self.assertEqual(financial_version, 1)
+            self.assertEqual(financial_version, 3)
+            self.assertEqual(participants["financial"].deposit_balance("employer-1", "LCU", principal_id="coordinator")[0], D("985.00"))
+            self.assertEqual(participants["financial"].deposit_balance("worker-1", "LCU", principal_id="coordinator")[0], D("25.00"))
             legal_state, legal_version = participants["legal_rights"].state(
                 f"WAGE-RIGHT:{claim_id}", principal_id="coordinator",
             )
@@ -426,9 +447,9 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual(labour_version, 7)
             self.assertEqual(labour_state["status"], "VERIFIED")
             self.assertEqual(labour_state["delivered_hours"], "1.5")
-            self.assertEqual(participants["financial"].state(
-                f"wage:{events[0].claim_id}", principal_id="coordinator",
-            ), (None, 0))
+            self.assertEqual(participants["financial"].claim_state(
+                events[0].claim_id, principal_id="coordinator",
+            ), (None, 2))
             self.assertEqual(participants["financial"].status("TX-WAGE-STALE"), None)
             self.assertEqual(participants["legal_rights"].status("TX-WAGE-STALE"), None)
             self.assertEqual(participants["physical"].status("TX-WAGE-STALE")["state"], "ABORTED")

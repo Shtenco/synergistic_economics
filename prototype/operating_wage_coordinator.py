@@ -191,10 +191,17 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
                     and not isinstance(participant_envelope.get("no_stock_flow_effect"), str)):
                 raise CoordinatorError(f"{register} participant must explicitly declare its stock-flow effect")
 
-        if operations["financial"].get("stream_id") != f"wage:{claim_id}":
-            raise CoordinatorError("financial participant stream does not bind the wage claim")
-        if operations["financial"].get("expected_revision") != 0:
-            raise CoordinatorError("initial wage accrual group must start at financial revision zero")
+        if operations["financial"].get("stream_id") != "operating-financial":
+            raise CoordinatorError("financial participant must target the authoritative operating-financial stream")
+        financial_register = self.participants["financial"]
+        try:
+            _, current_financial_revision = financial_register.state(
+                "operating-financial", principal_id=financial["actor_id"]
+            )
+        except Exception as exc:
+            raise CoordinatorError("financial actor cannot read the authoritative deposit and wage ledger") from exc
+        if operations["financial"].get("expected_revision") != current_financial_revision:
+            raise CoordinatorError("financial operation expected_revision is stale")
         expected_movements = wage_stock_flow_movement_specs(financial_events)
         if financial.get("stock_flow_movements") != expected_movements:
             raise CoordinatorError("financial movements do not match wage event postings")

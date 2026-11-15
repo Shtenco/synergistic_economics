@@ -84,6 +84,18 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.register.bootstrap_admin(
             principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
         )
+        self.register.open_deposit_account(
+            event_id="OPEN-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="EMPLOYER-ACCOUNT-1", opening_balance="1000",
+            evidence_ref="BANK-OPEN-EMPLOYER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=0,
+        )
+        self.register.open_deposit_account(
+            event_id="OPEN-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="WORKER-ACCOUNT-1", opening_balance="10",
+            evidence_ref="BANK-OPEN-WORKER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=1,
+        )
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -93,6 +105,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             events or (self.accrual, self.payment),
             actor_id="financial-root", authority_ref="AUTH:PAYROLL",
             effective_at=T, recorded_at=T,
+            expected_revision=self.register.state("operating-financial", principal_id="financial-root")[1],
         )
 
     def test_verified_wage_group_commits_to_durable_financial_register(self):
@@ -103,11 +116,14 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(receipt["native_event_id"], operation["native_event_id"])
         self.assertEqual(self.register.status("TX-WAGE-1")["state"], "COMMITTED")
         self.assertEqual(self.register.event_count("TX-WAGE-1"), 1)
-        state, version = self.register.state(operation["stream_id"], principal_id="financial-root")
-        self.assertEqual(version, 1)
-        self.assertEqual(state["status"], "PAID")
-        self.assertEqual(state["outstanding_amount"], "0.00")
-        self.assertEqual(state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
+        state, version = self.register.state("operating-financial", principal_id="financial-root")
+        claim = state["claims"][self.accrual.claim_id]
+        self.assertEqual(version, 3)
+        self.assertEqual(claim["status"], "PAID")
+        self.assertEqual(claim["outstanding_amount"], "0.00")
+        self.assertEqual(claim["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
+        self.assertEqual(self.register.deposit_balance("employer-1", "LCU", principal_id="financial-root")[0], D("960.00"))
+        self.assertEqual(self.register.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0], D("50.00"))
         self.assertTrue(self.register.verify())
 
 
@@ -115,22 +131,24 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         accrual_operation = self.operation((self.accrual,))
         accrual_token = self.register.prepare("TX-WAGE-ACCRUAL", accrual_operation)
         self.register.commit("TX-WAGE-ACCRUAL", accrual_token)
-        state, version = self.register.state(accrual_operation["stream_id"], principal_id="financial-root")
-        self.assertEqual(version, 1)
-        self.assertEqual(state["status"], "OUTSTANDING")
-        self.assertEqual(state["outstanding_amount"], "40.00")
+        state, version = self.register.state("operating-financial", principal_id="financial-root")
+        claim = state["claims"][self.accrual.claim_id]
+        self.assertEqual(version, 3)
+        self.assertEqual(claim["status"], "OUTSTANDING")
+        self.assertEqual(claim["outstanding_amount"], "40.00")
 
         payment_operation = native_financial_operation(
             (self.payment,), actor_id="financial-root", authority_ref="AUTH:PAYROLL",
-            effective_at=T, recorded_at=T, expected_revision=1,
+            effective_at=T, recorded_at=T, expected_revision=3,
         )
         payment_token = self.register.prepare("TX-WAGE-PAYMENT", payment_operation)
         self.register.commit("TX-WAGE-PAYMENT", payment_token)
-        state, version = self.register.state(payment_operation["stream_id"], principal_id="financial-root")
-        self.assertEqual(version, 2)
-        self.assertEqual(state["status"], "PAID")
-        self.assertEqual(state["outstanding_amount"], "0.00")
-        self.assertEqual(state["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
+        state, version = self.register.state("operating-financial", principal_id="financial-root")
+        claim = state["claims"][self.accrual.claim_id]
+        self.assertEqual(version, 4)
+        self.assertEqual(claim["status"], "PAID")
+        self.assertEqual(claim["outstanding_amount"], "0.00")
+        self.assertEqual(claim["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
         self.assertTrue(self.register.verify())
 
     def test_restart_replays_claim_and_preserves_commit_receipt(self):
@@ -143,9 +161,12 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         self.assertEqual(reopened.status("TX-WAGE-RESTART")["state"], "COMMITTED")
         self.assertEqual(reopened.commit("TX-WAGE-RESTART", token), receipt)
-        state, version = reopened.state(operation["stream_id"], principal_id="financial-root")
-        self.assertEqual(version, 1)
-        self.assertEqual(state["outstanding_amount"], "0.00")
+        state, version = reopened.state("operating-financial", principal_id="financial-root")
+        claim = state["claims"][self.accrual.claim_id]
+        self.assertEqual(version, 3)
+        self.assertEqual(claim["outstanding_amount"], "0.00")
+        self.assertEqual(reopened.deposit_balance("employer-1", "LCU", principal_id="financial-root")[0], D("960.00"))
+        self.assertEqual(reopened.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0], D("50.00"))
         self.assertTrue(reopened.verify())
 
 
@@ -170,18 +191,23 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         movements = movements_from_event_groups(groups)
         self.assertEqual(len(movements), 8)
         identities = sorted({movement.identity for movement in movements})
+        durable_openings = {
+            row.identity: (row.amount, row.evidence_ref)
+            for row in self.register.deposit_opening_positions(
+                period_index=1, principal_id="financial-root",
+            )
+        }
         openings, closings = [], []
         for identity in identities:
-            instrument = identity.instrument_id
-            if instrument.startswith("DEPOSIT:employer-1:"):
-                initial = D("1000")
-            elif instrument.startswith("DEPOSIT:worker-1:"):
-                initial = D("10")
-            else:
-                initial = D("0")
+            initial, opening_evidence = durable_openings.get(
+                identity, (D("0"), f"OPEN-WAGE:{identity.position_id}"),
+            )
             balance = initial
             for period in (1, 2):
-                openings.append(OpeningPosition(identity, period, balance, f"OPEN:{identity.position_id}:{period}"))
+                openings.append(OpeningPosition(
+                    identity, period, balance,
+                    opening_evidence if period == 1 else f"OPEN:{identity.position_id}:{period}",
+                ))
                 balance += sum((movement.amount for movement in movements
                                 if movement.identity == identity and movement.period_index == period), D("0"))
                 closings.append(ClosingPosition(identity, period, balance, f"CLOSE:{identity.position_id}:{period}"))
@@ -219,6 +245,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             actor_id="financial-root", authority_ref="POLICY", occurred_at=T,
         )
         operation = self.operation()
+        operation["expected_revision"] = 0
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "missing explicit institutional sector for bank-1"):
             missing_bank.prepare("TX-MISSING-BANK", operation)
 
@@ -249,6 +276,69 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "canonical wage mapper|balanced|equal"):
             self.register.prepare("TX-WAGE-POSTING-TAMPER", operation)
         self.assertIsNone(self.register.status("TX-WAGE-POSTING-TAMPER"))
+
+
+
+    def test_deposit_opening_balance_requires_currency_minor_unit_precision(self):
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "exact multiple of its minor unit"):
+            self.register.open_deposit_account(
+                event_id="BAD-OPENING-PRECISION", entity_id="worker-2", bank_id="bank-1",
+                currency="LCU", account_ref="BAD-PRECISION-ACCOUNT", opening_balance="1.001",
+                evidence_ref="BANK-BAD-PRECISION", actor_id="financial-root",
+                authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+                expected_revision=2, minor_unit="0.01",
+            )
+        self.assertIsNone(self.register.status("BAD-OPENING-PRECISION"))
+
+    def test_payment_minor_unit_must_match_both_durable_deposit_accounts(self):
+        mismatch_path = Path(self.tmp.name) / "minor-mismatch.sqlite3"
+        mismatch = OperatingFinancialRegister(
+            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+        )
+        mismatch.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
+        mismatch.open_deposit_account(
+            event_id="MISMATCH-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="MISMATCH-EMPLOYER-ACCOUNT", opening_balance="1000",
+            evidence_ref="BANK-MISMATCH-EMPLOYER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0, minor_unit="0.001",
+        )
+        mismatch.open_deposit_account(
+            event_id="MISMATCH-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="MISMATCH-WORKER-ACCOUNT", opening_balance="10",
+            evidence_ref="BANK-MISMATCH-WORKER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1, minor_unit="0.001",
+        )
+        operation = self.operation()
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "minor unit differs"):
+            mismatch.prepare("TX-MINOR-UNIT-MISMATCH", operation)
+        self.assertIsNone(mismatch.status("TX-MINOR-UNIT-MISMATCH"))
+
+    def test_durable_deposit_balance_blocks_overdraw_after_memory_precheck(self):
+        low_path = Path(self.tmp.name) / "low-balance.sqlite3"
+        low = OperatingFinancialRegister(
+            low_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+        )
+        low.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
+        low.open_deposit_account(
+            event_id="LOW-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="LOW-EMPLOYER-ACCOUNT", opening_balance="20",
+            evidence_ref="BANK-LOW-EMPLOYER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=0,
+        )
+        low.open_deposit_account(
+            event_id="LOW-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="LOW-WORKER-ACCOUNT", opening_balance="10",
+            evidence_ref="BANK-LOW-WORKER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T, expected_revision=1,
+        )
+        operation = self.operation()
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "insufficient durable employer deposit balance"):
+            low.prepare("TX-LOW-DURABLE-CASH", operation)
+        self.assertIsNone(low.status("TX-LOW-DURABLE-CASH"))
+        self.assertEqual(low.deposit_balance("employer-1", "LCU", principal_id="financial-root")[0], D("20"))
+        self.assertEqual(low.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0], D("10"))
 
     def test_payment_cannot_be_committed_without_accrual_in_group_or_stream(self):
         operation = self.operation((self.payment,))
