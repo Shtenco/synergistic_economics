@@ -65,7 +65,7 @@ def bank_credit_stock_flow_movement_specs(event):
         raise OperatingFinancialRegisterError("period_index must be a positive integer")
     if borrower == bank:
         raise OperatingFinancialRegisterError("bank and borrower must be distinct")
-    if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid",\n            "bank.reserve_account_opened", "bank.interbank_payment_settled"}:
+    if event_type != "bank.interbank_payment_settled":
         raise OperatingFinancialRegisterError("unsupported bank credit event type")
     evidence = _text(event.get("evidence_ref"), "evidence_ref")
     signed = amount if event_type == "bank.loan_originated" else -amount
@@ -241,7 +241,8 @@ class OperatingFinancialRegister(DurableEventRegister):
     def write_permission(event_type):
         return "financial:write" if event_type in {
             "wage.event_group_committed", "deposit.account_opened",
-            "bank.loan_originated", "bank.loan_principal_repaid"
+            "bank.loan_originated", "bank.loan_principal_repaid",
+            "bank.reserve_account_opened", "bank.interbank_payment_settled"
         } else "financial:admin"
 
     def _validate_postings(self, event):
@@ -471,6 +472,110 @@ class OperatingFinancialRegister(DurableEventRegister):
         }
         return state
 
+
+    @staticmethod
+    def _reserve_key(bank_id, central_bank_id, currency):
+        return f"{_text(bank_id, 'reserve bank')}:{_text(central_bank_id, 'central bank')}:{_text(currency, 'reserve currency')}"
+
+    def _reduce_reserve_opening(self, state, event):
+        payload = event["payload"]
+        bank = _text(payload.get("bank_id"), "reserve bank_id")
+        central_bank = _text(payload.get("central_bank_id"), "central_bank_id")
+        currency = _text(payload.get("currency"), "currency")
+        account_ref = _text(payload.get("account_ref"), "reserve account_ref")
+        evidence = _text(payload.get("evidence_ref"), "reserve evidence_ref")
+        balance = _decimal(payload.get("opening_balance"), "reserve opening_balance")
+        minor_unit = _decimal(payload.get("minor_unit", "0.01"), "reserve minor_unit", positive=True)
+        if bank == central_bank or balance < 0:
+            raise OperatingFinancialRegisterError("reserve bank and central bank must differ and opening balance cannot be negative")
+        if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
+            raise OperatingFinancialRegisterError("reserve minor_unit must be a positive fraction no greater than one")
+        if balance / minor_unit != (balance / minor_unit).to_integral_value():
+            raise OperatingFinancialRegisterError("reserve opening balance is not an exact multiple of its minor unit")
+        if bank not in self.sectors or self.sectors[bank] != "CBank":
+            raise OperatingFinancialRegisterError("reserve account holder must be a configured commercial bank")
+        if central_bank not in self.sectors or self.sectors[central_bank] != "CB":
+            raise OperatingFinancialRegisterError("reserve issuer must be an explicitly configured central bank sector")
+        key = self._reserve_key(bank, central_bank, currency)
+        if key in state["reserves"]:
+            raise OperatingFinancialRegisterError("bank reserve account already has an opening record")
+        if any(item["account_ref"] == account_ref for item in state["reserves"].values()):
+            raise OperatingFinancialRegisterError("reserve account reference already exists")
+        state["reserves"][key] = {
+            "bank_id": bank, "central_bank_id": central_bank, "currency": currency,
+            "account_ref": account_ref, "opening_balance": str(balance),
+            "balance": str(balance), "minor_unit": str(minor_unit),
+            "opening_evidence_ref": evidence,
+        }
+        return state
+
+    def _reduce_interbank_payment(self, state, event):
+        p = event["payload"]
+        payment_id = _text(p.get("payment_id"), "payment_id")
+        payer = _text(p.get("payer_id"), "payer_id")
+        payee = _text(p.get("payee_id"), "payee_id")
+        payer_bank = _text(p.get("payer_bank_id"), "payer_bank_id")
+        payee_bank = _text(p.get("payee_bank_id"), "payee_bank_id")
+        central_bank = _text(p.get("central_bank_id"), "central_bank_id")
+        currency = _text(p.get("currency"), "currency")
+        amount = _decimal(p.get("amount"), "amount", positive=True)
+        minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
+        period = p.get("period_index")
+        evidence = _text(p.get("evidence_ref"), "evidence_ref")
+        event_id = _text(event.get("event_id"), "event_id")
+        if len({payer, payee, payer_bank, payee_bank, central_bank}) != 5:
+            raise OperatingFinancialRegisterError("interbank payment parties must be distinct")
+        if payer_bank == payee_bank:
+            raise OperatingFinancialRegisterError("interbank settlement requires two different banks")
+        if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+            raise OperatingFinancialRegisterError("period_index must be a positive integer")
+        if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
+            raise OperatingFinancialRegisterError("interbank minor_unit must be a positive fraction no greater than one")
+        if amount / minor_unit != (amount / minor_unit).to_integral_value():
+            raise OperatingFinancialRegisterError("interbank amount is not an exact multiple of its minor unit")
+        if payment_id in state["interbank_payments"]:
+            raise OperatingFinancialRegisterError("interbank payment ID already exists")
+        for entity in (payer, payee, payer_bank, payee_bank, central_bank):
+            if entity not in self.sectors:
+                raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
+        if self.sectors[central_bank] != "CB":
+            raise OperatingFinancialRegisterError("interbank reserve issuer must be a central bank")
+        if self.sectors[payer_bank] != "CBank" or self.sectors[payee_bank] != "CBank":
+            raise OperatingFinancialRegisterError("interbank participants must be commercial banks")
+        payer_key = self._deposit_key(payer, payer_bank, currency)
+        payee_key = self._deposit_key(payee, payee_bank, currency)
+        payer_account = state["deposits"].get(payer_key)
+        payee_account = state["deposits"].get(payee_key)
+        if payer_account is None or payee_account is None:
+            raise OperatingFinancialRegisterError("payer and payee must have durable deposit accounts at their respective banks")
+        if payer_account["minor_unit"] != str(minor_unit) or payee_account["minor_unit"] != str(minor_unit):
+            raise OperatingFinancialRegisterError("interbank minor unit differs from deposit account")
+        payer_reserve_key = self._reserve_key(payer_bank, central_bank, currency)
+        payee_reserve_key = self._reserve_key(payee_bank, central_bank, currency)
+        payer_reserve = state["reserves"].get(payer_reserve_key)
+        payee_reserve = state["reserves"].get(payee_reserve_key)
+        if payer_reserve is None or payee_reserve is None:
+            raise OperatingFinancialRegisterError("both banks require reserve accounts at the same central bank")
+        if payer_reserve["minor_unit"] != str(minor_unit) or payee_reserve["minor_unit"] != str(minor_unit):
+            raise OperatingFinancialRegisterError("interbank minor unit differs from reserve account")
+        payer_balance = D(payer_account["balance"])
+        payer_reserve_balance = D(payer_reserve["balance"])
+        if payer_balance < amount:
+            raise OperatingFinancialRegisterError("insufficient payer deposit balance for interbank payment")
+        if payer_reserve_balance < amount:
+            raise OperatingFinancialRegisterError("insufficient payer bank reserves for interbank settlement")
+        state["deposits"][payer_key]["balance"] = str(payer_balance - amount)
+        state["deposits"][payee_key]["balance"] = str(D(payee_account["balance"]) + amount)
+        state["reserves"][payer_reserve_key]["balance"] = str(payer_reserve_balance - amount)
+        state["reserves"][payee_reserve_key]["balance"] = str(D(payee_reserve["balance"]) + amount)
+        state["interbank_payments"][payment_id] = {
+            "payment_id": payment_id, "event_id": event_id, "payer_id": payer,
+            "payee_id": payee, "payer_bank_id": payer_bank, "payee_bank_id": payee_bank,
+            "central_bank_id": central_bank, "currency": currency, "amount": str(amount),
+            "period_index": period, "evidence_ref": evidence, "status": "SETTLED",
+        }
+        return state
+
     def _reduce_deposit_opening(self, state, event):
         payload = event["payload"]
         entity = _text(payload.get("entity_id"), "deposit entity_id")
@@ -516,6 +621,10 @@ class OperatingFinancialRegister(DurableEventRegister):
         event_type = event["event_type"]
         if event_type == "deposit.account_opened":
             return self._reduce_deposit_opening(state, event)
+        if event_type == "bank.reserve_account_opened":
+            return self._reduce_reserve_opening(state, event)
+        if event_type == "bank.interbank_payment_settled":
+            return self._reduce_interbank_payment(state, event)
         if event_type in {"bank.loan_originated", "bank.loan_principal_repaid"}:
             return self._reduce_bank_credit(state, event)
         if event_type != "wage.event_group_committed":
