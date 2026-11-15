@@ -131,8 +131,12 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertGreater(advanced["event_count"], initial["event_count"])
         self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
         self.assertEqual(reopened.chain_hash_at(initial["event_count"]), initial["tail_hash"])
-        with self.assertRaisesRegex(RegisterError, "non-negative integer"):
+        # Catch the ValueError contract rather than relying on one import path for
+        # RegisterError: unittest discovery can load this shared module under a
+        # different qualified name in composed prototype test runs.
+        with self.assertRaisesRegex(ValueError, "non-negative integer") as caught:
             reopened.chain_hash_at(True)
+        self.assertEqual(type(caught.exception).__name__, "RegisterError")
 
     def test_legacy_v2_register_metadata_receives_persistent_instance_id(self):
         legacy_path = Path(self.tmp.name) / "legacy-financial.sqlite3"
