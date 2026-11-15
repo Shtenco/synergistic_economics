@@ -628,6 +628,44 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertEqual(buyer.consumption.get("grain", D("0")), D("0"))
 
 
+    def test_seller_rounding_overrun_fails_before_any_buyer_or_seller_mutation(self):
+        from io_economy import FirmConfig, HouseholdConfig, MarketOrder, Product
+
+        sellers = [
+            FirmConfig(
+                f"seller-{index}", "widgets", {}, D("0"), D("0"), D("0"),
+                D("0"), D("0"), {"widgets": D("0.005")},
+            )
+            for index in range(5)
+        ]
+        model = InputOutputEconomy(
+            products=[Product("widgets", "unit", D("1"), D("1"), D("0"))],
+            firms=sellers,
+            households=[HouseholdConfig("buyer", D("0.03"), {}, D("0"), D("0"))],
+        )
+        buyer = model.households["buyer"]
+        before_cash = model._system_cash()
+        before_stocks = {
+            key: state.inventory["widgets"] for key, state in model.firms.items()
+        }
+        before_buyer_cash = buyer.cash
+        before_events = len(model.events)
+        with self.assertRaisesRegex(EconomyError, "seller-side cent rounding"):
+            model._clear_product(
+                "widgets",
+                [MarketOrder("buyer", "widgets", D("0.025"), "household")],
+                1,
+                {("household", "buyer"): D("0.03")},
+            )
+        self.assertEqual(model._system_cash(), before_cash)
+        self.assertEqual(buyer.cash, before_buyer_cash)
+        self.assertEqual(buyer.consumption.get("widgets", D("0")), D("0"))
+        self.assertEqual(
+            {key: state.inventory["widgets"] for key, state in model.firms.items()},
+            before_stocks,
+        )
+        self.assertEqual(len(model.events), before_events)
+
     def test_recipe_rounding_never_consumes_more_than_available_input_stock(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
 
