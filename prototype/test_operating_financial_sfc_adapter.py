@@ -144,6 +144,36 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             sequence,
         )
 
+    def test_malformed_history_rows_fail_closed_before_sorting(self):
+        terms, sectors, identities, snapshot = fixture()
+        valid = self.loan_event("LOAN-ORIG-1", "bank.loan_originated", "100", 3)
+        cases = (
+            ([None], "history row must be a mapping"),
+            ([{**valid, "commit_sequence": True}], "commit_sequence must be a positive integer"),
+            ([{**valid, "commit_sequence": 0}], "commit_sequence must be a positive integer"),
+            ([{**valid, "commit_sequence": "1"}], "commit_sequence must be a positive integer"),
+            ([{**valid, "commit_sequence": None}], "commit_sequence must be a positive integer"),
+            ([valid, {**valid, "event_id": "LOAN-ORIG-2"}], "duplicate financial history commit_sequence"),
+        )
+        for rows, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(OperatingFinancialSFCAdapterError, message):
+                    OperatingFinancialSFCAdapter.build(
+                        rows, instrument_registry=terms,
+                        sector_registry=sectors, opening_snapshots=[snapshot],
+                    )
+
+    def test_history_rows_are_sorted_by_unique_durable_commit_sequence(self):
+        terms, sectors, identities, snapshot = fixture(3)
+        first = self.loan_event("LOAN-ORIG-1", "bank.loan_originated", "100", 3, 10)
+        second = self.loan_event("LOAN-REPAY-1", "bank.loan_principal_repaid", "35", 3, 20)
+        result = OperatingFinancialSFCAdapter.build(
+            [second, first], instrument_registry=terms,
+            sector_registry=sectors, opening_snapshots=[snapshot],
+        )
+        self.assertEqual([item["event_id"] for item in result.events],
+                         ["LOAN-ORIG-1::LOAN-ORIG-1", "LOAN-REPAY-1::LOAN-REPAY-1"])
+        self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 65)
     def test_loan_creation_maps_four_mirrored_positions_and_no_net_financial_wealth(self):
         terms, sectors, identities, snapshot = fixture()
         row = self.loan_event("LOAN-ORIG-1", "bank.loan_originated", "100", 3)
