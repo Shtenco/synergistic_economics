@@ -1246,7 +1246,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                     "NOMINAL", holder, issuer, instrument,
                 )
                 positions.append(OpeningPosition(
-                    period_index, identity, item["opening_balance"], evidence,
+                    identity, period_index, item["opening_balance"], evidence,
                 ))
         return tuple(positions)
 
