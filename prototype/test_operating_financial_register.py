@@ -279,6 +279,41 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertTrue(all(item.closing == D("50.00") for item in worker_positions if item.period_index == 2))
 
 
+
+    def test_wage_opening_positions_replay_prior_accruals_and_settlements(self):
+        accrual_operation = self.operation((self.accrual,))
+        accrual_token = self.register.prepare("TX-WAGE-OPENING-ACCRUAL", accrual_operation)
+        self.register.commit("TX-WAGE-OPENING-ACCRUAL", accrual_token)
+        payment_operation = native_financial_operation(
+            (self.payment,), actor_id="financial-root", authority_ref="AUTH:PAYROLL",
+            effective_at=T, recorded_at=T, expected_revision=3,
+        )
+        payment_token = self.register.prepare("TX-WAGE-OPENING-PAYMENT", payment_operation)
+        self.register.commit("TX-WAGE-OPENING-PAYMENT", payment_token)
+
+        period_one = self.register.wage_opening_positions(
+            period_index=1, principal_id="financial-root",
+        )
+        period_two = self.register.wage_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        period_three = self.register.wage_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        self.assertEqual(len(period_one), 2)
+        self.assertEqual(len(period_two), 2)
+        self.assertEqual(len(period_three), 2)
+        self.assertTrue(all(row.amount == D("0") for row in period_one))
+        self.assertTrue(all(row.amount == D("40.00") for row in period_two))
+        self.assertTrue(all(row.amount == D("0") for row in period_three))
+        self.assertEqual(
+            {row.identity.holder_id for row in period_two},
+            {"worker-1", "employer-1"},
+        )
+        self.assertEqual(len({row.evidence_ref for row in period_two}), 1)
+        self.assertTrue(all(row.evidence_ref.startswith("financial-opening-v1:wage:2:") for row in period_two))
+        self.assertTrue(self.register.verify())
+
     def test_register_rejects_unknown_sector_codes(self):
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "unsupported institutional sector"):
             OperatingFinancialRegister(
