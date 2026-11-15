@@ -490,6 +490,7 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                     attestation_ref,attestation_digest=publish_checkpoint(
                         attestation_manifest,register_signer,register_attestation_anchor)
                     attestation_sequence[0]+=1
+                    attestation_ref="register-attestation://"+attestation_ref
                     register_attestation_refs.add(attestation_ref)
                     register_completeness.append({
                         "register_name":name,"attestation_ref":attestation_ref,
@@ -526,11 +527,14 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                 is_revoked=lambda issuer,kid,jti: False,
             )
             def verify_governance_checkpoint(ref,digest):
-                selected_anchor=(
-                    register_attestation_anchor if ref in register_attestation_refs else anchor
-                )
+                if ref.startswith("register-attestation://"):
+                    selected_ref=ref[len("register-attestation://"):]
+                    selected_anchor=register_attestation_anchor
+                else:
+                    selected_ref=ref
+                    selected_anchor=anchor
                 return verify_checkpoint(
-                    ref,digest,trust,selected_anchor,require_latest=False,
+                    selected_ref,digest,trust,selected_anchor,require_latest=False,
                 )
 
             governance=PeriodGovernance(
