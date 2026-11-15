@@ -50,6 +50,14 @@ def _sum_decimal_exact(values):
         return sum(values, D("0"))
 
 
+def _require_account_active(account, period, label):
+    opening_period = account.get("opening_period_index", 1)
+    if not isinstance(opening_period, int) or isinstance(opening_period, bool) or opening_period < 1:
+        raise OperatingFinancialRegisterError(f"{label} opening period is invalid")
+    if period < opening_period:
+        raise OperatingFinancialRegisterError(f"{label} movement precedes account opening period")
+
+
 def _identity(position_id, holder, issuer, instrument_id, currency):
     return {
         "register_id": "financial",
@@ -499,6 +507,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("borrower requires a durable deposit account before bank credit")
         if account["bank_id"] != bank:
             raise OperatingFinancialRegisterError("loan bank differs from borrower's authoritative deposit bank")
+        _require_account_active(account, period, "deposit")
         if account["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("bank credit minor unit differs from deposit account")
         loan = state["loans"].get(loan_id)
@@ -622,6 +631,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_account = state["deposits"].get(payee_key)
         if payer_account is None or payee_account is None:
             raise OperatingFinancialRegisterError("payer and payee must have durable deposit accounts at their respective banks")
+        _require_account_active(payer_account, period, "payer deposit")
+        _require_account_active(payee_account, period, "payee deposit")
         if payer_account["minor_unit"] != str(minor_unit) or payee_account["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("interbank minor unit differs from deposit account")
         payer_reserve_key = self._reserve_key(payer_bank, central_bank, currency)
@@ -630,6 +641,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_reserve = state["reserves"].get(payee_reserve_key)
         if payer_reserve is None or payee_reserve is None:
             raise OperatingFinancialRegisterError("both banks require reserve accounts at the same central bank")
+        _require_account_active(payer_reserve, period, "payer reserve")
+        _require_account_active(payee_reserve, period, "payee reserve")
         if payer_reserve["minor_unit"] != str(minor_unit) or payee_reserve["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("interbank minor unit differs from reserve account")
         payer_balance = D(payer_account["balance"])
@@ -681,6 +694,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         reserve = state["reserves"].get(reserve_key)
         if reserve is None:
             raise OperatingFinancialRegisterError("commercial bank requires a reserve account at the refinancing central bank")
+        _require_account_active(reserve, period, "reserve")
         if reserve["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("refinancing minor unit differs from reserve account")
         facility = state["refinancing"].get(facility_id)
@@ -824,6 +838,8 @@ class OperatingFinancialRegister(DurableEventRegister):
                 worker_account = state["deposits"].get(worker_key)
                 if employer_account is None or worker_account is None:
                     raise OperatingFinancialRegisterError("both employer and worker require durable deposit accounts")
+                _require_account_active(employer_account, subevent.get("period_index"), "employer deposit")
+                _require_account_active(worker_account, subevent.get("period_index"), "worker deposit")
                 if (employer_account["bank_id"] != bank or worker_account["bank_id"] != bank):
                     raise OperatingFinancialRegisterError("wage payment bank differs from the authoritative deposit accounts")
                 if (employer_account["minor_unit"] != str(subevent.get("minor_unit"))
