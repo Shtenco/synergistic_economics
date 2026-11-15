@@ -31,17 +31,29 @@ Reviewed source: `operating_financial_sfc_adapter.py`, `sfc_source_contracts.py`
 
 ## Remaining blockers — still release-blocking
 
-1. **Opening exports are complete for recorded lifecycles, but not for pre-existing principal.**
-   The durable register now exports deposit, reserve, wage-claim/payable,
-   loan-principal and refinancing-principal opening positions. Loan and
-   refinancing reducers reconstruct opening balances from immutable origination/
-   advance and prior repayment events, with event-chain evidence digests. They
-   correctly exclude originations/advances and repayments in the requested
-   period from that period's opening balance. They cannot, however, represent
-   a loan or refinancing facility whose principal existed before the durable
-   source history began: there is no separately attested pre-existing opening
-   principal event/contract. Synthetic opening fixtures remain useful for pure
-   adapter tests but must not be presented as production source evidence.
+1. **Opening exports now cover recorded and declared pre-existing principal, with an authentication boundary still open.**
+   The durable register exports deposit, reserve, wage-claim/payable,
+   loan-principal and refinancing-principal opening positions. In addition to
+   replaying immutable originations/advances and prior repayments, it now has
+   explicit `record_existing_bank_loan()` and
+   `record_existing_refinancing_facility()` stock-only events. Each records
+   original and outstanding principal, historical origination period, first
+   modeled opening period, the authoritative deposit/reserve account reference,
+   contract reference, contract-evidence reference and opening-evidence
+   reference. Reducers bind the account reference to the durable account,
+   enforce principal/minor-unit/period bounds and cause-link subsequent
+   repayments. These events declare no stock-flow movement and do not create
+   deposits or reserves. The native opening exporters carry the opening stock
+   into its first modeled period and reduce later openings only by repayments
+   in earlier periods; the integration test also checks projection recovery
+   and unchanged account balances at opening.
+   
+   **Limit:** the contract/evidence/authority references are durable references
+   in an authorized event envelope, not themselves cryptographically verified
+   signatures. This closes the missing domain-event and stock-replay path, but
+   does not establish independent issuer-key authentication, revocation,
+   WORM custody or production signing authority. Do not describe these
+   references as cryptographically signed attestations.
 2. **Signed period-close governance exists but is not production-connected.**
    `period_governance.py` verifies a signed global close checkpoint containing
    six independently authorized register attestations, each binding period,
