@@ -278,6 +278,43 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertIsNone(self.register.status("TX-WAGE-POSTING-TAMPER"))
 
 
+
+    def test_deposit_opening_balance_requires_currency_minor_unit_precision(self):
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "exact multiple of its minor unit"):
+            self.register.open_deposit_account(
+                event_id="BAD-OPENING-PRECISION", entity_id="worker-2", bank_id="bank-1",
+                currency="LCU", account_ref="BAD-PRECISION-ACCOUNT", opening_balance="1.001",
+                evidence_ref="BANK-BAD-PRECISION", actor_id="financial-root",
+                authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+                expected_revision=2, minor_unit="0.01",
+            )
+        self.assertIsNone(self.register.status("BAD-OPENING-PRECISION"))
+
+    def test_payment_minor_unit_must_match_both_durable_deposit_accounts(self):
+        mismatch_path = Path(self.tmp.name) / "minor-mismatch.sqlite3"
+        mismatch = OperatingFinancialRegister(
+            mismatch_path, sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CBank"},
+        )
+        mismatch.bootstrap_admin(principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T)
+        mismatch.open_deposit_account(
+            event_id="MISMATCH-EMPLOYER", entity_id="employer-1", bank_id="bank-1",
+            currency="LCU", account_ref="MISMATCH-EMPLOYER-ACCOUNT", opening_balance="1000",
+            evidence_ref="BANK-MISMATCH-EMPLOYER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=0, minor_unit="0.001",
+        )
+        mismatch.open_deposit_account(
+            event_id="MISMATCH-WORKER", entity_id="worker-1", bank_id="bank-1",
+            currency="LCU", account_ref="MISMATCH-WORKER-ACCOUNT", opening_balance="10",
+            evidence_ref="BANK-MISMATCH-WORKER", actor_id="financial-root",
+            authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
+            expected_revision=1, minor_unit="0.001",
+        )
+        operation = self.operation()
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "minor unit differs"):
+            mismatch.prepare("TX-MINOR-UNIT-MISMATCH", operation)
+        self.assertIsNone(mismatch.status("TX-MINOR-UNIT-MISMATCH"))
+
     def test_durable_deposit_balance_blocks_overdraw_after_memory_precheck(self):
         low_path = Path(self.tmp.name) / "low-balance.sqlite3"
         low = OperatingFinancialRegister(
