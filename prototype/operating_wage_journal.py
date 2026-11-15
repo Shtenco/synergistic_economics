@@ -49,7 +49,6 @@ def _minor_unit(value):
 class WageContract:
     worker_id: str
     employer_id: str
-    delivery_evidence_ref: str
     period_label: str
     period_index: int
     currency: str
@@ -79,6 +78,7 @@ class VerifiedLabourDelivery:
     verification_ref: str
     worker_id: str
     employer_id: str
+    delivery_evidence_ref: str
     period_label: str
     delivered_hours: Decimal
     aggregate_version: int
