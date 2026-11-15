@@ -154,6 +154,9 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             rights_payload.get("legal_instrument_ref")) != (
             expected_right_type, worker, employer, "wage_claim", claim_id, accrual.get("contract_ref")):
             raise CoordinatorError("legal wage claim state does not match the wage payment state")
+        if (_decimal(rights_payload.get("claim_amount"), "legal claim principal") != accrual_amount
+                or _text(rights_payload.get("currency"), "legal claim currency") != accrual.get("currency")):
+            raise CoordinatorError("legal wage claim principal or currency differs from the financial accrual")
         required_evidence = {
             accrual.get("contract_ref"), accrual.get("contract_evidence_ref"),
             accrual.get("delivery_evidence_ref"), accrual.get("verification_ref"),
