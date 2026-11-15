@@ -200,6 +200,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
 
     def test_forked_source_cannot_advance_a_sealed_projection_checkpoint(self):
         terms, sectors, _identities, snapshot = fixture()
+        snapshot = self.pinned(snapshot)
         source = FakeFinancialRegister([
             history_row("LOAN-ORIG-1", "bank.loan_originated", {
                 "loan_id": "LOAN-1", "borrower_id": "household-1",
