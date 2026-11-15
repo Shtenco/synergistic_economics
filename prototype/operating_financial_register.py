@@ -507,10 +507,12 @@ class OperatingFinancialRegister(DurableEventRegister):
     def reduce_event(self, old, event):
         if event["aggregate_id"] != "operating-financial":
             raise OperatingFinancialRegisterError("all operating financial events must use the global financial stream")
-        state = old or {"claims": {}, "deposits": {}, "loans": {}}
+        state = old or {"claims": {}, "deposits": {}, "loans": {}, "reserves": {}, "interbank_payments": {}}
         state = {"claims": dict(state.get("claims", {})),
                  "deposits": {key: dict(value) for key, value in state.get("deposits", {}).items()},
-                 "loans": {key: dict(value) for key, value in state.get("loans", {}).items()}}
+                 "loans": {key: dict(value) for key, value in state.get("loans", {}).items()},
+                 "reserves": {key: dict(value) for key, value in state.get("reserves", {}).items()},
+                 "interbank_payments": dict(state.get("interbank_payments", {}))}
         event_type = event["event_type"]
         if event_type == "deposit.account_opened":
             return self._reduce_deposit_opening(state, event)
@@ -583,6 +585,18 @@ class OperatingFinancialRegister(DurableEventRegister):
             )
             if envelope.get("stock_flow_movements") != expected:
                 raise OperatingFinancialRegisterError("bank credit stock-flow movements differ from canonical mapper")
+        elif envelope["event_type"] == "bank.reserve_account_opened":
+            if envelope.get("stock_flow_movements") is not None:
+                raise OperatingFinancialRegisterError("reserve opening must initialize a stock, not invent a transaction movement")
+            _text(envelope.get("no_stock_flow_effect"), "reserve opening no_stock_flow_effect")
+        elif envelope["event_type"] == "bank.interbank_payment_settled":
+            payload = envelope["payload"]
+            expected = interbank_payment_stock_flow_movement_specs(
+                {"event_id": envelope["idempotency_key"], **payload,
+                 "event_type": envelope["event_type"]}
+            )
+            if envelope.get("stock_flow_movements") != expected:
+                raise OperatingFinancialRegisterError("interbank stock-flow movements differ from canonical mapper")
         elif envelope["event_type"] == "deposit.account_opened":
             if envelope.get("stock_flow_movements") is not None:
                 raise OperatingFinancialRegisterError("deposit opening must initialize a stock, not invent a transaction movement")
