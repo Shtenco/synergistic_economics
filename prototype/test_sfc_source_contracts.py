@@ -63,6 +63,21 @@ def identity(*, holder="household-1", holder_sector="H", issuer="bank-1",
     )
 
 
+def mirror_of(value):
+    return SFCIdentity(
+        instrument_id=value.instrument_id,
+        instrument_class=value.instrument_class,
+        holder_entity_id=value.issuer_entity_id,
+        holder_sector=value.issuer_sector,
+        issuer_entity_id=value.holder_entity_id,
+        issuer_sector=value.holder_sector,
+        currency=value.currency,
+        maturity=value.maturity,
+        denomination=value.denomination,
+        valuation_basis=value.valuation_basis,
+    )
+
+
 class SFCSourceContractTests(unittest.TestCase):
     def test_instrument_terms_are_complete_and_explicit(self):
         with self.assertRaises(TypeError):
@@ -115,7 +130,7 @@ class SFCSourceContractTests(unittest.TestCase):
         snapshot = OpeningStockSnapshot(
             "open-v1", 2, registry.version, registry.digest,
             sector_registry.version, sector_registry.digest,
-            (ident,), (OpeningPosition(ident, "0.00", "ZERO-CERT-1", "BANK-STATEMENT-1"),),
+            (ident, mirror_of(ident)),\n            (OpeningPosition(ident, "0.00", "ZERO-CERT-1", "BANK-STATEMENT-1"),\n             OpeningPosition(mirror_of(ident), "0.00", "ZERO-CERT-2", "BANK-STATEMENT-2")),
         )
         snapshot.validate_against(registry, sector_registry)
         self.assertEqual(snapshot.as_projection_openings()[(ident, 2)], "0")
@@ -141,7 +156,7 @@ class SFCSourceContractTests(unittest.TestCase):
         snapshot = OpeningStockSnapshot(
             "open-v1", 2, registry.version, registry.digest,
             sector_registry.version, sector_registry.digest,
-            (ident,), (OpeningPosition(ident, "25.00", "BANK-CERT-1", "BANK-STATEMENT-1"),),
+            (ident, mirror_of(ident)),\n            (OpeningPosition(ident, "25.00", "BANK-CERT-1", "BANK-STATEMENT-1"),\n             OpeningPosition(mirror_of(ident), "25.00", "BANK-CERT-2", "BANK-STATEMENT-2")),
         )
         altered = InstrumentTermsRegistry("terms-v2", (terms(maturity="2030-12-31"),))
         with self.assertRaises(SFCSourceContractError):
@@ -154,8 +169,7 @@ class SFCSourceContractTests(unittest.TestCase):
         snapshot = OpeningStockSnapshot(
             "open-v1", 2, registry.version, registry.digest,
             sector_registry.version, sector_registry.digest,
-            (bad_identity,),
-            (OpeningPosition(bad_identity, "10", "CERT", "SOURCE"),),
+            (bad_identity, mirror_of(bad_identity)),\n            (OpeningPosition(bad_identity, "10", "CERT", "SOURCE"),\n             OpeningPosition(mirror_of(bad_identity), "10", "CERT-MIRROR", "SOURCE-MIRROR")),
         )
         with self.assertRaises(SFCSourceContractError):
             snapshot.validate_against(registry, sector_registry)
@@ -167,7 +181,7 @@ class SFCSourceContractTests(unittest.TestCase):
         snapshot = OpeningStockSnapshot(
             "open-v1", 2, registry.version, registry.digest,
             sector_registry.version, sector_registry.digest,
-            (ident,), (OpeningPosition(ident, "-1", "CERT", "SOURCE"),),
+            (ident, mirror_of(ident)),\n            (OpeningPosition(ident, "-1", "CERT", "SOURCE"),\n             OpeningPosition(mirror_of(ident), "-1", "CERT-MIRROR", "SOURCE-MIRROR")),
         )
         with self.assertRaises(SFCSourceContractError):
             snapshot.validate_against(registry, sector_registry)
