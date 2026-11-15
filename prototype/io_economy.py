@@ -10,6 +10,8 @@ import argparse
 import json
 from pathlib import Path
 
+from firm_fixed_assets import FixedAssetError, FixedAssetLedger, InvestmentOrder
+
 ZERO = D("0")
 QTY = D("0.00000001")
 CENT = D("0.01")
@@ -127,6 +129,9 @@ class PeriodResult:
     household_income_by_source: dict
     household_total_income: dict
     household_income_payment_arrears: dict
+    capital_formation: dict
+    firm_production_by_firm: dict
+    firm_commissioned_capacity_by_firm: dict
     household_expenditure: D
     import_expenditure: D
     gross_value_added_proxy: D
@@ -162,6 +167,10 @@ class InputOutputEconomy:
         self.income_payments = list(income_payments or [])
         self.income_payment_arrears = {}
         self._validate_income_payments()
+        self.fixed_asset_ledger = FixedAssetLedger()
+        self.capex_supplier_reservations = {}
+        self.capex_orders = {}
+        self.current_period = 0
         self.prices = {p.product_id: p.base_price for p in self.products}
         self.price_adjustment = dec(price_adjustment)
         self.max_price_change = dec(max_price_change)
@@ -351,14 +360,103 @@ class InputOutputEconomy:
         row = {"key": key, "kind": kind, "payload": payload}
         self.events.append(row)
 
-    def _plan_production(self):
+    def place_capex_order(self, *, order_id, credit_event_id, payment_event_id,
+                          buyer_id, supplier_id, asset_type, quantity, unit_cost,
+                          order_period, delivery_period, commissioning_period,
+                          useful_life_periods, residual_value_per_unit,
+                          service_capacity_per_unit, currency="LCU",
+                          payment_evidence_ref):
+        """Pay a machinery supplier, reserve physical stock, and register an asset order."""
+        if buyer_id not in self.firms or supplier_id not in self.firms:
+            raise EconomyError("capex buyer and supplier must be existing firms")
+        buyer, supplier = self.firms[buyer_id], self.firms[supplier_id]
+        if buyer_id == supplier_id or supplier.config.output_product != asset_type:
+            raise EconomyError("capex supplier must be a distinct producer of the ordered asset product")
+        try:
+            order = InvestmentOrder(
+                order_id, credit_event_id, payment_event_id, buyer_id, supplier_id,
+                asset_type, dec(quantity), dec(unit_cost), order_period, delivery_period,
+                commissioning_period, useful_life_periods, dec(residual_value_per_unit),
+                dec(service_capacity_per_unit),
+            )
+        except (FixedAssetError, ArithmeticError, ValueError) as exc:
+            raise EconomyError(str(exc)) from exc
+        acquisition_cost = order.acquisition_cost
+        payment = cash(acquisition_cost)
+        if payment != acquisition_cost:
+            raise EconomyError("capex acquisition cost must be exactly representable in currency cents")
+        reserved_key = (supplier_id, asset_type)
+        already_reserved = self.capex_supplier_reservations.get(reserved_key, ZERO)
+        available = supplier.inventory.get(asset_type, ZERO) - already_reserved
+        if order.quantity > available:
+            raise EconomyError("supplier lacks unreserved physical asset inventory")
+        if buyer.cash < payment:
+            raise EconomyError("capex buyer cannot fully settle the investment order")
+        try:
+            self.fixed_asset_ledger.place_paid_order(
+                order, payment_amount=payment, payment_currency=currency,
+                order_currency=currency, payment_evidence_ref=payment_evidence_ref,
+            )
+        except FixedAssetError as exc:
+            raise EconomyError(str(exc)) from exc
+        buyer.cash -= payment
+        supplier.cash += payment
+        self.capex_supplier_reservations[reserved_key] = already_reserved + order.quantity
+        self.capex_orders[order.order_id] = order
+        self._event(f"p{order_period}:capex-payment:{order.order_id}", "capex_payment", {
+            "order_id": order.order_id, "credit_event_id": order.credit_event_id,
+            "payment_event_id": order.payment_event_id, "buyer_id": buyer_id,
+            "supplier_id": supplier_id, "asset_type": asset_type,
+            "quantity": str(order.quantity), "unit_cost": str(order.unit_cost),
+            "amount": str(payment), "evidence_ref": payment_evidence_ref,
+        })
+        return order
+
+    def _commission_capex_deliveries(self, period, capital_formation):
+        for order in sorted(self.capex_orders.values(), key=lambda item: item.order_id):
+            if order.delivery_period != period:
+                continue
+            supplier = self.firms[order.supplier_id]
+            if supplier.inventory.get(order.asset_type, ZERO) < order.quantity:
+                raise EconomyError("reserved capex goods disappeared before physical delivery")
+            supplier.inventory[order.asset_type] -= order.quantity
+            key = (order.supplier_id, order.asset_type)
+            self.capex_supplier_reservations[key] -= order.quantity
+            if self.capex_supplier_reservations[key] == 0:
+                del self.capex_supplier_reservations[key]
+            event_id = f"delivery:{order.order_id}"
+            try:
+                self.fixed_asset_ledger.deliver(
+                    event_id=event_id, order_id=order.order_id,
+                    quantity=order.quantity, period=period,
+                    evidence_ref=f"goods-receipt:{order.order_id}",
+                )
+            except FixedAssetError as exc:
+                raise EconomyError(str(exc)) from exc
+            capital_formation[order.asset_type] += order.quantity
+            self._event(f"p{period}:capex-delivery:{order.order_id}", "capex_physical_delivery", {
+                "order_id": order.order_id, "delivery_event_id": event_id,
+                "supplier_id": order.supplier_id, "buyer_id": order.borrower_id,
+                "asset_type": order.asset_type, "quantity": str(order.quantity),
+                "capital_formation": str(order.quantity),
+                "evidence_ref": f"goods-receipt:{order.order_id}",
+            })
+
+    def _commissioned_capacity(self, firm_id, period):
+        return self.fixed_asset_ledger.commissioned_capacity(firm_id, period)
+
+    def _plan_production(self, period=None):
+        period = period if period is not None else max(1, self.current_period + 1)
         plans = {}
         for firm_id, state in sorted(self.firms.items()):
             c = state.config
-            labour_limited = c.labour_capacity / c.labour_per_unit
+            asset_capacity = self._commissioned_capacity(firm_id, period)
+            effective_output_capacity = c.output_capacity + asset_capacity
+            effective_labour_capacity = c.labour_capacity + asset_capacity * c.labour_per_unit
+            labour_limited = effective_labour_capacity / c.labour_per_unit
             output_stock = state.inventory.get(c.output_product, ZERO)
-            inventory_gap = max(ZERO, c.output_capacity - output_stock)
-            plans[firm_id] = min(c.output_capacity, labour_limited, inventory_gap)
+            inventory_gap = max(ZERO, effective_output_capacity - output_stock)
+            plans[firm_id] = min(effective_output_capacity, labour_limited, inventory_gap)
         return plans
 
     def _allocate_labour(self, plans):
@@ -370,8 +468,11 @@ class InputOutputEconomy:
         requested = {household_id: ZERO for household_id in self.households}
         firm_requests = {}
         for firm_id, state in sorted(self.firms.items()):
+            asset_capacity = self._commissioned_capacity(firm_id, self.current_period)
+            effective_labour_capacity = (state.config.labour_capacity
+                                          + asset_capacity * state.config.labour_per_unit)
             demand = min(plans[firm_id] * state.config.labour_per_unit,
-                         state.config.labour_capacity)
+                         effective_labour_capacity)
             shares = self._labour_shares(state.config)
             firm_requests[firm_id] = {h: demand * share for h, share in shares.items()}
             for household_id, hours in firm_requests[firm_id].items():
@@ -444,6 +545,7 @@ class InputOutputEconomy:
         for firm_id, state in sorted(self.firms.items()):
             if state.config.output_product == product_id:
                 stock = state.inventory.get(product_id, ZERO)
+                stock -= self.capex_supplier_reservations.get((firm_id, product_id), ZERO)
                 if stock > 0:
                     offers.append((firm_id, "firm", stock, self.prices[product_id] * state.config.domestic_ask_markup))
         offers.append(("external-supplier", "external", product.import_capacity, product.import_price))
@@ -589,7 +691,10 @@ class InputOutputEconomy:
             p.product_id: sum((f.inventory.get(p.product_id, ZERO) for f in self.firms.values()), ZERO)
             for p in self.products
         }
-        plans = self._plan_production()
+        self.current_period = period
+        capital_formation = {p.product_id: ZERO for p in self.products}
+        self._commission_capex_deliveries(period, capital_formation)
+        plans = self._plan_production(period)
         orders, budgets = self._build_orders(plans)
         market = {}
         for product_id in sorted(self.product_by_id):
@@ -684,7 +789,8 @@ class InputOutputEconomy:
         for p in self.products:
             pid = p.product_id
             lhs = opening_stock[pid] + imports[pid] + production[pid]
-            rhs = input_consumption[pid] + household_consumption[pid] + closing_stock[pid]
+            rhs = (input_consumption[pid] + household_consumption[pid]
+                   + capital_formation[pid] + closing_stock[pid])
             physical_error[pid] = lhs - rhs
             if abs(physical_error[pid]) > D("0.000001"):
                 raise EconomyError(f"physical stock balance failed for {pid}: {physical_error[pid]}")
@@ -717,6 +823,9 @@ class InputOutputEconomy:
             household_income_by_source={k: {source: str(amount) for source, amount in v.period_income_by_source.items()} for k, v in self.households.items()},
             household_total_income={k: str(sum(v.period_income_by_source.values(), ZERO)) for k, v in self.households.items()},
             household_income_payment_arrears={p.payment_id: str(self.income_payment_arrears.get(p.payment_id, ZERO)) for p in self.income_payments},
+            capital_formation={k: str(v) for k, v in capital_formation.items()},
+            firm_production_by_firm={k: str(v.production) for k, v in self.firms.items()},
+            firm_commissioned_capacity_by_firm={k: str(self._commissioned_capacity(k, period)) for k in self.firms},
             household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
@@ -759,6 +868,7 @@ class InputOutputEconomy:
             "outstanding_household_income_payment_arrears": {k: v for k, v in final.household_income_payment_arrears.items() if D(v) > 0},
             "cumulative_household_expenditure": str(sum((r.household_expenditure for r in self.period_results), ZERO)),
             "cumulative_import_expenditure": str(sum((r.import_expenditure for r in self.period_results), ZERO)),
+            "cumulative_capital_formation_by_product": {p.product_id: str(sum((dec(r.capital_formation[p.product_id]) for r in self.period_results), ZERO)) for p in self.products},
             "cumulative_gross_value_added_proxy": str(sum((r.gross_value_added_proxy for r in self.period_results), ZERO)),
             "ending_inventory_by_product": final.closing_inventory,
             "event_count": len(self.events),
