@@ -13,6 +13,7 @@ from economic_stock_flow_reconciliation import (
 )
 from operating_financial_register import (
     OperatingFinancialRegister, OperatingFinancialRegisterError,
+    wage_stock_flow_movement_specs,
 )
 
 
@@ -223,6 +224,9 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
 
         operation = self.operation()
         operation["payload"]["payload"]["events"][0]["worker_id"] = "employer-1"
+        operation["payload"]["stock_flow_movements"] = wage_stock_flow_movement_specs(
+            operation["payload"]["payload"]["events"]
+        )
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "must be distinct entities"):
             self.register.prepare("TX-SAME-WORKER-EMPLOYER", operation)
 
