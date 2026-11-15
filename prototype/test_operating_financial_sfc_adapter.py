@@ -17,6 +17,8 @@ from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapter,
     OperatingFinancialSFCAdapterError,
 )
+from banking_sfc_projection_pipeline import project_and_persist, rebuild_and_verify
+from banking_sfc_projection_store import BankingSFCProjectionStore
 from sfc_source_contracts import (
     EffectiveDatedSectorRegistry,
     InstrumentTerms,
@@ -320,6 +322,36 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             self.assertEqual(result.mapped_source_event_count, 1)
             self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 100)
             self.assertEqual(result.roll_forward[(identities[1], 3)].closing, 100)
+
+            store = BankingSFCProjectionStore(
+                Path(directory) / "banking-sfc-projection.sqlite3"
+            )
+            persisted_projection, receipt = project_and_persist(
+                register,
+                principal_id="financial-root",
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+                store=store,
+                source_register_id="financial-register:integration-test",
+            )
+            rebuilt_projection, checkpoint = rebuild_and_verify(
+                register,
+                principal_id="financial-root",
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+                store=store,
+                source_register_id="financial-register:integration-test",
+            )
+            self.assertEqual(persisted_projection.source_digest, rebuilt_projection.source_digest)
+            self.assertEqual(receipt["projection_digest"], checkpoint["projection_digest"])
+            self.assertEqual(
+                checkpoint["applied_through_sequence"],
+                max(row["commit_sequence"] for row in register.history(
+                    "operating-financial", principal_id="financial-root"
+                )),
+            )
 
     def test_nonzero_position_cannot_disappear_from_next_period_snapshot(self):
         terms, sectors, identities, first = fixture(3)
