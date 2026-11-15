@@ -186,7 +186,11 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
 def make_participants(root):
     physical = PhysicalFlowStore(root / "physical.sqlite3")
     capital = CapitalCohortStore(root / "capital.sqlite3")
-    if capital.current_state().last_processed_period is None:
+    with capital._connect() as con:
+        initialized = con.execute(
+            "SELECT 1 FROM capital_cohort_meta WHERE singleton_id=1"
+        ).fetchone() is not None
+    if not initialized:
         capital.initialize((CapitalCohort("C1", "cell-1", "machine", 2026, 0, 1, 1,
                                           "operating", 1, 1, 1),))
     product = ProductRegister(root / "product.sqlite3")
