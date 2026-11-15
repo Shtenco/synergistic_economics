@@ -16,7 +16,7 @@ from native_store_participants import (
     make_physical_participant, make_capital_participant, make_product_participant,
 )
 from operating_financial_register import OperatingFinancialRegister
-from operating_wage_coordinator import OperatingWageCoordinator, _physical_movement_specs
+from operating_wage_coordinator import OperatingWageCoordinator
 from operating_wage_journal import (
     OperatingWageJournal, WageContract, verified_delivery_from_register,
 )
@@ -116,7 +116,6 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
     indict = asdict(inflow)
     indict["quantity"] = str(indict["quantity"])
     indict["uncertainty"] = str(indict["uncertainty"])
-    physical_movements = _physical_movement_specs(outdict, indict)
     financial_movements = [
         dict(movement) for event in events for movement in event.stock_flow_movements
     ]
@@ -132,7 +131,9 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
         "physical": {
             "stream_id": "physical", "native_event_id": "LABOUR-FLOW-1", "expected_revision": 0,
             "payload": envelope("physical.flow_recorded", {"outflow": outdict, "inflow": indict},
-                                "LABOUR-FLOW-1") | {"stock_flow_movements": physical_movements},
+                                "LABOUR-FLOW-1") | {
+                "no_stock_flow_effect": "verified labour service is a non-stockable period flow, not an opening/closing inventory",
+            },
         },
         "capital": {
             "stream_id": "capital", "native_event_id": "CAPITAL-PERIOD:2026", "expected_revision": 0,
@@ -265,9 +266,7 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             identities = sorted({movement.identity for movement in movements})
             openings, closings = [], []
             for identity in identities:
-                if identity.register_id == "physical":
-                    initial = D("10") if identity.holder_id == "worker-1" else D("0")
-                elif identity.instrument_id.startswith("WAGE:"):
+                if identity.instrument_id.startswith("WAGE:"):
                     initial = D("0")
                 elif identity.instrument_id == "DEPOSIT:employer-1:LCU":
                     initial = D("1000")
@@ -288,7 +287,9 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
                     ))
             result = reconcile_periods(tuple(openings), movements, tuple(closings))
             self.assertEqual(coordinator.reconcile_event_stream(tuple(openings), tuple(closings)), result)
-            self.assertEqual(result.mirror_group_count, 5)
+            self.assertEqual(result.mirror_group_count, 4)
+            self.assertEqual(result.event_count, 8)
+            self.assertTrue(all(m.identity.register_id == "financial" for m in movements))
             self.assertEqual(journal.outstanding[events[0].claim_id], D("0.00"))
 
             reopened = make_participants(root)
