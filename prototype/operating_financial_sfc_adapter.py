@@ -95,6 +95,7 @@ def _resolve_identity(raw, period, instruments, sectors):
         raise OperatingFinancialSFCAdapterError("movement identity must be a mapping")
     if raw.get("register_id") != "financial" or raw.get("measure") != "monetary":
         raise OperatingFinancialSFCAdapterError("only native financial monetary positions are supported")
+    _text(raw.get("position_id"), "identity.position_id")
     currency = _text(raw.get("currency"), "identity.currency")
     if raw.get("unit") != currency:
         raise OperatingFinancialSFCAdapterError("financial position unit must equal its currency")
@@ -178,6 +179,27 @@ class OperatingFinancialSFCAdapter:
     """Build and validate deterministic SFC projections from committed history."""
 
     @staticmethod
+    def from_register(
+        register,
+        *,
+        principal_id: str,
+        instrument_registry: InstrumentTermsRegistry,
+        sector_registry: EffectiveDatedSectorRegistry,
+        opening_snapshots: Sequence[OpeningStockSnapshot],
+    ) -> BankingSFCProjection:
+        if getattr(register, "REGISTER_NAME", None) != "financial":
+            raise OperatingFinancialSFCAdapterError("source must be the native financial register")
+        if not register.verify():
+            raise OperatingFinancialSFCAdapterError("financial source register hash-chain verification failed")
+        history = register.history("operating-financial", principal_id=principal_id)
+        return OperatingFinancialSFCAdapter.build(
+            history,
+            instrument_registry=instrument_registry,
+            sector_registry=sector_registry,
+            opening_snapshots=opening_snapshots,
+        )
+
+    @staticmethod
     def build(
         history_rows: Sequence[Mapping],
         *,
@@ -238,6 +260,10 @@ class OperatingFinancialSFCAdapter:
                 raise OperatingFinancialSFCAdapterError("history payload_json is invalid") from exc
             if not isinstance(envelope, Mapping) or envelope.get("event_type") != row.get("event_type"):
                 raise OperatingFinancialSFCAdapterError("history event type differs from immutable payload")
+            if envelope.get("idempotency_key") != native_id:
+                raise OperatingFinancialSFCAdapterError("history event ID differs from immutable idempotency key")
+            if row.get("aggregate_id") not in (None, "operating-financial"):
+                raise OperatingFinancialSFCAdapterError("history row belongs to a different aggregate")
             event_type = envelope.get("event_type")
             movements = envelope.get("stock_flow_movements")
             if event_type in _OPENING_EVENT_TYPES:
@@ -270,6 +296,7 @@ class OperatingFinancialSFCAdapter:
                             "banking adapter v1 accepts transaction movements T only"
                         )
                     amount = canonical_decimal(movement.get("amount"))
+                    _text(movement.get("evidence_ref"), "movement.evidence_ref")
                     identity = _resolve_identity(
                         movement.get("identity"), period, instrument_registry, sector_registry
                     )
