@@ -552,7 +552,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "original_principal": str(original), "outstanding_principal": str(amount),
                 "origination_period_index": origination_period,
                 "opening_period_index": period, "last_event_id": event_id,
-                "last_period_index": period - 1,
+                "last_period_index": period,
                 "origination_evidence_ref": contract_evidence,
                 "opening_evidence_ref": evidence, "contract_ref": contract_ref,
                 "contract_evidence_ref": contract_evidence,
@@ -650,7 +650,15 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_bank = _text(p.get("payee_bank_id"), "payee_bank_id")
         central_bank = _text(p.get("central_bank_id"), "central_bank_id")
         currency = _text(p.get("currency"), "currency")
-        amount = _decimal(p.get("amount"), "amount", positive=True)
+        amount_field = (
+            "outstanding_principal"
+            if event_type == "central_bank.refinancing_opening_recorded"
+            else "amount"
+        )
+        amount = _decimal(
+            p.get(amount_field), amount_field,
+            positive=(event_type != "central_bank.refinancing_opening_recorded"),
+        )
         minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
         period = p.get("period_index")
         evidence = _text(p.get("evidence_ref"), "evidence_ref")
@@ -795,7 +803,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "outstanding_principal": str(amount),
                 "origination_period_index": origination_period,
                 "opening_period_index": period, "last_event_id": event_id,
-                "last_period_index": period - 1,
+                "last_period_index": period,
                 "origination_evidence_ref": contract_evidence,
                 "opening_evidence_ref": evidence, "contract_ref": contract_ref,
                 "contract_evidence_ref": contract_evidence,
