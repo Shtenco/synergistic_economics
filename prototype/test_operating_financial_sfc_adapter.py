@@ -267,6 +267,73 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         self.assertEqual(result.roll_forward[(identities[0], 4)].transactions, -35)
         self.assertEqual(result.roll_forward[(identities[0], 4)].closing, 65)
 
+    def test_opening_snapshot_builder_rejects_source_mutation_during_export(self):
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={"household-1": "H", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="DEPOSIT-OPEN-1", entity_id="household-1",
+                bank_id="bank-1", currency="LCU", account_ref="ACCOUNT-1",
+                opening_balance="0", evidence_ref="DEPOSIT-OPEN-EVIDENCE",
+                actor_id="financial-root", authority_ref="ACCOUNT-OPENING",
+                effective_at="2026-11-15T00:00:01Z",
+                recorded_at="2026-11-15T00:00:01Z", expected_revision=0,
+            )
+            register.commit_bank_credit(
+                event_id="LOAN-ORIG-1", event_type="bank.loan_originated",
+                loan_id="LOAN-1", borrower_id="household-1", bank_id="bank-1",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-LOAN-1", actor_id="financial-root",
+                authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:02Z",
+                recorded_at="2026-11-15T00:00:02Z", expected_revision=1,
+            )
+            loan_id = "LOAN:LOAN-1"
+            loan_2_id = "LOAN:LOAN-2"
+            deposit_id = "DEPOSIT:household-1:bank-1:LCU"
+            terms = InstrumentTermsRegistry("terms-v1", (
+                instrument(loan_id, "LOAN"),
+                instrument(loan_2_id, "LOAN"),
+                instrument(deposit_id, "DEPOSIT"),
+            ))
+            sectors = EffectiveDatedSectorRegistry(
+                "sectors-v1", frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+                (
+                    SectorMembership("household-1", "H", 1, None),
+                    SectorMembership("bank-1", "CB", 1, None),
+                ),
+            )
+            original_exporter = register.deposit_opening_positions
+
+            def mutate_after_first_export(*, period_index, principal_id):
+                positions = original_exporter(
+                    period_index=period_index, principal_id=principal_id,
+                )
+                register.commit_bank_credit(
+                    event_id="LOAN-ORIG-2", event_type="bank.loan_originated",
+                    loan_id="LOAN-2", borrower_id="household-1", bank_id="bank-1",
+                    currency="LCU", amount="25", period_index=3,
+                    evidence_ref="SIGNED-LOAN-2", actor_id="financial-root",
+                    authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:03Z",
+                    recorded_at="2026-11-15T00:00:03Z", expected_revision=2,
+                )
+                return positions
+
+            register.deposit_opening_positions = mutate_after_first_export
+            with self.assertRaisesRegex(
+                OperatingFinancialSFCAdapterError,
+                "financial source changed while opening snapshots were being assembled",
+            ):
+                build_opening_snapshots_from_register(
+                    register, principal_id="financial-root", periods=[3],
+                    instrument_registry=terms, sector_registry=sectors,
+                )
+
     def test_from_register_replays_real_durable_financial_history(self):
         with tempfile.TemporaryDirectory() as directory:
             register = OperatingFinancialRegister(
