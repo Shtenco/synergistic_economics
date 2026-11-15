@@ -70,7 +70,7 @@ def bank_credit_stock_flow_movement_specs(event):
     evidence = _text(event.get("evidence_ref"), "evidence_ref")
     signed = amount if event_type == "bank.loan_originated" else -amount
     loan = f"LOAN:{loan_id}"
-    deposit = f"DEPOSIT:{borrower}:{currency}"
+    deposit = f"DEPOSIT:{borrower}:{bank}:{currency}"
     return [
         {
             "movement_id": f"{event_id}:BANK-LOAN-ASSET",
@@ -142,7 +142,7 @@ def wage_stock_flow_movement_specs(events):
         ])
         if event_type == "wage_payment":
             for entity, delta, side in ((employer, -amount, "employer"), (worker, amount, "worker")):
-                deposit = f"DEPOSIT:{entity}:{currency}"
+                deposit = f"DEPOSIT:{entity}:{bank}:{currency}"
                 specs.extend([
                     {
                         "movement_id": f"{event_id}:DEPOSIT:{side}:ASSET",
@@ -339,8 +339,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         }
 
     @staticmethod
-    def _deposit_key(entity_id, currency):
-        return f"{_text(entity_id, 'deposit entity')}:{_text(currency, 'deposit currency')}"
+    def _deposit_key(entity_id, bank_id, currency):
+        return f"{_text(entity_id, 'deposit entity')}:{_text(bank_id, 'deposit bank')}:{_text(currency, 'deposit currency')}"
 
     def _reduce_bank_credit(self, state, event):
         payload = event["payload"]
@@ -364,7 +364,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         for entity in (borrower, bank):
             if entity not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
-        key = self._deposit_key(borrower, currency)
+        key = self._deposit_key(borrower, bank, currency)
         account = state["deposits"].get(key)
         if account is None:
             raise OperatingFinancialRegisterError("borrower requires a durable deposit account before bank credit")
@@ -433,7 +433,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         for participant in (entity, bank):
             if participant not in self.sectors:
                 raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {participant}")
-        key = self._deposit_key(entity, currency)
+        key = self._deposit_key(entity, bank, currency)
         if key in state["deposits"]:
             raise OperatingFinancialRegisterError("deposit account already has an opening record")
         if any(item["account_ref"] == account_ref for item in state["deposits"].values()):
@@ -481,8 +481,8 @@ class OperatingFinancialRegister(DurableEventRegister):
                 bank = _text(subevent.get("bank_id"), "bank_id")
                 currency = _text(subevent.get("currency"), "currency")
                 amount = _decimal(subevent.get("amount"), "payment amount", positive=True)
-                employer_key = self._deposit_key(employer, currency)
-                worker_key = self._deposit_key(worker, currency)
+                employer_key = self._deposit_key(employer, bank, currency)
+                worker_key = self._deposit_key(worker, bank, currency)
                 employer_account = state["deposits"].get(employer_key)
                 worker_account = state["deposits"].get(worker_key)
                 if employer_account is None or worker_account is None:
@@ -575,7 +575,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         positions = []
         for account in state["deposits"].values():
             entity, bank, currency = account["entity_id"], account["bank_id"], account["currency"]
-            instrument = f"DEPOSIT:{entity}:{currency}"
+            instrument = f"DEPOSIT:{entity}:{bank}:{currency}"
             amount = D(account["opening_balance"])
             evidence = account["opening_evidence_ref"]
             asset = PositionIdentity(
@@ -662,14 +662,24 @@ class OperatingFinancialRegister(DurableEventRegister):
             return None, version
         return state["claims"].get(claim_id), version
 
-    def deposit_balance(self, entity_id, currency, *, principal_id):
+    def deposit_balance(self, entity_id, currency, *, principal_id, bank_id=None):
         state, version = self.state("operating-financial", principal_id=principal_id)
         if state is None:
             raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
-        account = state["deposits"].get(self._deposit_key(entity_id, currency))
-        if account is None:
+        entity_id = _text(entity_id, "deposit entity")
+        currency = _text(currency, "deposit currency")
+        if bank_id is not None:
+            account = state["deposits"].get(self._deposit_key(entity_id, bank_id, currency))
+            if account is None:
+                raise OperatingFinancialRegisterError("durable deposit account does not exist")
+            return D(account["balance"]), version
+        matches = [item for item in state["deposits"].values()
+                   if item["entity_id"] == entity_id and item["currency"] == currency]
+        if not matches:
             raise OperatingFinancialRegisterError("durable deposit account does not exist")
-        return D(account["balance"]), version
+        if len(matches) != 1:
+            raise OperatingFinancialRegisterError("deposit balance is ambiguous across banks; specify bank_id")
+        return D(matches[0]["balance"]), version
 
     def append_event(self, **kwargs):
         if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened",
