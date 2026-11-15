@@ -934,9 +934,19 @@ class OperatingFinancialRegister(DurableEventRegister):
             D(item["outstanding_principal"]) for item in state.get("loans", {}).values()
             if item["bank_id"] == bank_id and item["currency"] == currency
         ), D("0"))
-        return {"bank_id": bank_id, "currency": currency,
-                "deposit_liabilities": deposits, "loan_assets": loans,
-                "revision": version}
+        reserves = sum((
+            D(item["balance"]) for item in state.get("reserves", {}).values()
+            if item["bank_id"] == bank_id and item["currency"] == currency
+        ), D("0"))
+        return {
+            "bank_id": bank_id, "currency": currency,
+            "deposit_liabilities": deposits, "loan_assets": loans,
+            "reserve_assets": reserves,
+            "reserve_to_deposit_liability_ratio": (
+                reserves / deposits if deposits > 0 else None
+            ),
+            "revision": version,
+        }
 
     def claim_state(self, claim_id, *, principal_id):
         state, version = self.state("operating-financial", principal_id=principal_id)
