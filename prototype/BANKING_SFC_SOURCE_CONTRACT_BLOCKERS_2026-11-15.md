@@ -69,12 +69,12 @@ Still required:
 
 **Partially implemented — financial-only snapshot/checkpoint path exists; six-register close does not.** The native financial adapter can replay verified financial-register history, and `banking_sfc_projection_pipeline.py` persists a deterministic SQLite snapshot/checkpoint atomically and rebuilds it for recovery. Store tests cover idempotent replay, changed-content rejection, stale cursors, registry/opening digest drift, injected rollback at both snapshot/checkpoint write boundaries, immutable rows and deterministic recovery comparison. A real durable-register integration test now exercises the financial history → adapter → store → rebuild path.
 
-The cross-register coordinator separately implements a six-participant prepare/commit visibility barrier and an append-only committed event-group stream. It remains a protocol/conformance harness: its source documentation explicitly requires authoritative native-domain adapters before production use. It does not yet provide signed period-close completeness declarations or a capital-account reconciler.
+The cross-register coordinator separately implements a six-participant prepare/commit visibility barrier and an append-only committed event-group stream. It remains a protocol/conformance harness until authoritative native-domain adapters are connected. Separately, `period_governance.py` implements an append-only close/reopen gate that verifies one externally signed close checkpoint plus six independently authorized register attestations, including explicit zero-activity declarations, source cursors, event roots and opening/closing state hashes. Its tests use deterministic in-memory checkpoint/signature-verifier fixtures; this proves the governance contract, not live production signing or source completeness. The period gate is not yet fed by all six native production adapters, and there is still no capital-account reconciler.
 
 Next:
-- require signed period-close declarations for each authoritative source register, including explicit zero-activity declarations;
-- include period bounds, source sequence/checkpoint, registry versions/digests, completeness scope and evidence references;
-- retain the native financial snapshot/checkpoint as a separate projection until a governed six-register close contract is defined;
+- connect each authoritative source adapter to independently signed period attestations and the external trust/rollback-resistant sequence services;
+- bind period bounds, source sequence/checkpoint, registry versions/digests, completeness scope and evidence references;
+- retain the native financial snapshot/checkpoint as a separate projection until the six native source adapters and capital-account close are integrated;
 - add source-event/movement coverage manifests and versioned reprojection rules;
 - never fabricate physical, capital, labour, product or legal-rights participant events for a financial-only transaction.
 
