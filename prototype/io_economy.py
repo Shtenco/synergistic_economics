@@ -759,6 +759,10 @@ class InputOutputEconomy:
             ]
             active_asset_order_ids = [cohort.order_id for cohort in active_cohorts]
             production_event_key = f"p{period}:production:{firm_id}"
+            wage_payment_event_ids = {
+                household_id: f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
+                for household_id, share in wage_by_household.items() if share > 0
+            }
             for household_id, share in wage_by_household.items():
                 household = self.households[household_id]
                 household.cash += share
@@ -767,17 +771,6 @@ class InputOutputEconomy:
                 household.period_labour_hours += hours_by_household[household_id]
                 household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
                 household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
-                if share > 0:
-                    wage_event_id = f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
-                    wage_payment_event_ids[household_id] = wage_event_id
-                    self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "wage_payment", {
-                        "event_id": wage_event_id, "firm_id": firm_id,
-                        "household_id": household_id, "amount": str(share),
-                        "labour_hours": str(hours_by_household[household_id]),
-                        "production_event_key": production_event_key,
-                        "capital_asset_order_ids": active_asset_order_ids,
-                        "credit_event_ids": active_credit_event_ids,
-                    })
             self._event(production_event_key, "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
                 "intermediate_input_value": str(input_value), "wages": str(wage),
@@ -794,6 +787,18 @@ class InputOutputEconomy:
                     self.capex_orders[cohort.order_id].payment_event_id for cohort in active_cohorts
                 ],
             })
+            for household_id, share in wage_by_household.items():
+                if share <= 0:
+                    continue
+                wage_event_id = wage_payment_event_ids[household_id]
+                self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "wage_payment", {
+                    "event_id": wage_event_id, "firm_id": firm_id,
+                    "household_id": household_id, "amount": str(share),
+                    "labour_hours": str(hours_by_household[household_id]),
+                    "production_event_key": production_event_key,
+                    "capital_asset_order_ids": active_asset_order_ids,
+                    "credit_event_ids": active_credit_event_ids,
+                })
         self._settle_household_income(period)
         for household_id, household in self.households.items():
             used_hours = household.period_labour_hours
