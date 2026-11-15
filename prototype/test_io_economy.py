@@ -165,6 +165,47 @@ class InputOutputEconomyTests(unittest.TestCase):
         self.assertIn("cumulative_imports_by_product", summary)
         self.assertIn("cumulative_shortages_by_product", summary)
 
+    def test_default_wages_follow_firm_household_employment_shares(self):
+        model = InputOutputEconomy()
+        result = model.step(1)
+        wage_income = {key: D(value) for key, value in result.household_wage_income.items()}
+        labour_hours = {key: D(value) for key, value in result.household_labour_hours.items()}
+        self.assertEqual(sum(wage_income.values(), D("0")), result.wages)
+        self.assertEqual(
+            sum(labour_hours.values(), D("0")),
+            sum((state.production * state.config.labour_per_unit for state in model.firms.values()), D("0")),
+        )
+        self.assertTrue(all(value >= 0 for value in wage_income.values()))
+        self.assertGreater(len({value for value in wage_income.values()}), 1)
+        self.assertGreater(len({value for value in labour_hours.values()}), 1)
+        production_events = [row for row in model.events if row["kind"] == "production"]
+        self.assertTrue(production_events)
+        for row in production_events:
+            payload = row["payload"]
+            self.assertEqual(
+                sum((D(value) for value in payload["wage_by_household"].values()), D("0")),
+                D(payload["wages"]),
+            )
+            self.assertEqual(
+                sum((D(value) for value in payload["labour_hours_by_household"].values()), D("0")),
+                D(payload["labour_hours"]),
+            )
+
+    def test_invalid_explicit_household_labour_shares_are_rejected(self):
+        firms = InputOutputEconomy.default_firms()
+        base = firms[0]
+        firms[0] = type(base)(
+            base.firm_id, base.output_product, base.recipe, base.labour_per_unit,
+            base.labour_capacity, base.output_capacity, base.wage_per_labour,
+            base.initial_cash, base.initial_inventory, base.domestic_ask_markup,
+            {"household-1": D("0.8")},
+        )
+        with self.assertRaises(EconomyError):
+            InputOutputEconomy(
+                InputOutputEconomy.default_products(), firms,
+                InputOutputEconomy.default_households(),
+            )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
