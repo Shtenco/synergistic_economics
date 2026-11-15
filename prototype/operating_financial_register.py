@@ -1145,7 +1145,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                         raise OperatingFinancialRegisterError(
                             "pre-existing facility origination period is invalid"
                         )
-                    if historical_origination <= period_index:
+                    if historical_origination < period_index:
                         raise OperatingFinancialRegisterError(
                             "pre-existing facility has no evidenced opening balance for the requested earlier period"
                         )
