@@ -546,6 +546,10 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError(
                     "opening loan principal is not an exact multiple of its minor unit"
                 )
+            if event.get("no_stock_flow_effect") != NO_STOCK_FLOW_EFFECT:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing loan opening requires explicit no-stock-flow attestation"
+                )
             state["loans"][loan_id] = {
                 "loan_id": loan_id, "borrower_id": borrower, "bank_id": bank,
                 "currency": currency, "minor_unit": str(minor_unit),
@@ -783,6 +787,10 @@ class OperatingFinancialRegister(DurableEventRegister):
             if amount / minor_unit != (amount / minor_unit).to_integral_value():
                 raise OperatingFinancialRegisterError(
                     "opening refinancing principal is not an exact multiple of its minor unit"
+                )
+            if event.get("no_stock_flow_effect") != NO_STOCK_FLOW_EFFECT:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing refinancing opening requires explicit no-stock-flow attestation"
                 )
             state["refinancing"][facility_id] = {
                 "facility_id": facility_id, "bank_id": bank,
