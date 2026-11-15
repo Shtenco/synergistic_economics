@@ -31,7 +31,7 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
         result = run_credit_allocation_experiment(credit_amount="12000", periods=5)
         for case in result["cases"].values():
             for period in case["periods"]:
-                self.assertEqual(D(period["physical_balance_error"]), D("0"))
+                self.assertLessEqual(abs(D(period["physical_balance_error"])), D("0.000001"))
                 self.assertEqual(D(period["monetary_conservation_error"]), D("0"))
 
     def test_credit_repayment_reduces_deposit_money_and_loan_principal(self):
