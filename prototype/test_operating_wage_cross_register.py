@@ -298,20 +298,22 @@ class OperatingWageCrossRegisterTests(unittest.TestCase):
             self.assertEqual({event["register_id"] for event in group["events"]}, set(PARTICIPANTS))
             movements = movements_from_event_groups((group,))
             identities = sorted({movement.identity for movement in movements})
+            durable_openings = {
+                row.identity: (row.amount, row.evidence_ref)
+                for row in participants["financial"].deposit_opening_positions(
+                    period_index=1, principal_id="coordinator",
+                )
+            }
             openings, closings = [], []
             for identity in identities:
-                if identity.instrument_id.startswith("WAGE:"):
-                    initial = D("0")
-                elif identity.instrument_id == "DEPOSIT:employer-1:LCU":
-                    initial = D("1000")
-                elif identity.instrument_id == "DEPOSIT:worker-1:LCU":
-                    initial = D("10")
-                else:
-                    self.fail(f"unexpected stock-flow identity: {identity}")
+                initial, opening_evidence = durable_openings.get(
+                    identity, (D("0"), f"OPEN-WAGE:{identity.position_id}"),
+                )
                 balance = initial
                 for period in (1, 2):
                     openings.append(OpeningPosition(
-                        identity, period, balance, f"OPEN:{identity.position_id}:{period}",
+                        identity, period, balance,
+                        opening_evidence if period == 1 else f"OPEN:{identity.position_id}:{period}",
                     ))
                     delta = sum((m.amount for m in movements
                                  if m.identity == identity and m.period_index == period), D("0"))
