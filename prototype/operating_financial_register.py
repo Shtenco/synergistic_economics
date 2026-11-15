@@ -483,7 +483,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         borrower = _text(payload.get("borrower_id"), "borrower_id")
         bank = _text(payload.get("bank_id"), "bank_id")
         currency = _text(payload.get("currency"), "currency")
-        amount = _decimal(payload.get("amount"), "amount", positive=True)
+        amount_field = "outstanding_principal" if event_type == "bank.loan_opening_recorded" else "amount"
+        amount = _decimal(payload.get(amount_field), amount_field, positive=(event_type != "bank.loan_opening_recorded"))
         minor_unit = _decimal(payload.get("minor_unit"), "minor_unit", positive=True)
         period = payload.get("period_index")
         evidence = _text(payload.get("evidence_ref"), "evidence_ref")
@@ -513,6 +514,47 @@ class OperatingFinancialRegister(DurableEventRegister):
         if account["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("bank credit minor unit differs from deposit account")
         loan = state["loans"].get(loan_id)
+        if event_type == "bank.loan_opening_recorded":
+            if loan is not None:
+                raise OperatingFinancialRegisterError("loan ID already exists")
+            original = _decimal(payload.get("original_principal"), "original_principal", positive=True)
+            origination_period = payload.get("origination_period_index")
+            contract_ref = _text(payload.get("contract_ref"), "contract_ref")
+            contract_evidence = _text(payload.get("contract_evidence_ref"), "contract_evidence_ref")
+            event_id = _text(event.get("event_id"), "event_id")
+            if (not isinstance(origination_period, int) or isinstance(origination_period, bool)
+                    or origination_period < 0 or origination_period >= period):
+                raise OperatingFinancialRegisterError(
+                    "pre-existing loan origination period must precede its opening period"
+                )
+            if amount < 0 or amount > original:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing loan outstanding principal must be between zero and original principal"
+                )
+            if original / minor_unit != (original / minor_unit).to_integral_value():
+                raise OperatingFinancialRegisterError(
+                    "original loan principal is not an exact multiple of its minor unit"
+                )
+            if amount / minor_unit != (amount / minor_unit).to_integral_value():
+                raise OperatingFinancialRegisterError(
+                    "opening loan principal is not an exact multiple of its minor unit"
+                )
+            if not _text(event.get("no_stock_flow_effect"), "opening no_stock_flow_effect"):
+                raise OperatingFinancialRegisterError("pre-existing loan opening requires explicit no-stock-flow attestation")
+            state["loans"][loan_id] = {
+                "loan_id": loan_id, "borrower_id": borrower, "bank_id": bank,
+                "currency": currency, "minor_unit": str(minor_unit),
+                "original_principal": str(original), "outstanding_principal": str(amount),
+                "origination_period_index": origination_period,
+                "opening_period_index": period, "last_event_id": event_id,
+                "last_period_index": period - 1,
+                "origination_evidence_ref": contract_evidence,
+                "opening_evidence_ref": evidence, "contract_ref": contract_ref,
+                "contract_evidence_ref": contract_evidence,
+                "status": "REPAID" if amount == 0 else "OUTSTANDING",
+                "event_ids": [event_id],
+            }
+            return state
         if event_type == "bank.loan_originated":
             if loan is not None:
                 raise OperatingFinancialRegisterError("loan ID already exists")
@@ -603,7 +645,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         payee_bank = _text(p.get("payee_bank_id"), "payee_bank_id")
         central_bank = _text(p.get("central_bank_id"), "central_bank_id")
         currency = _text(p.get("currency"), "currency")
-        amount = _decimal(p.get("amount"), "amount", positive=True)
+        amount_field = "outstanding_principal" if event_type == "central_bank.refinancing_opening_recorded" else "amount"
+        amount = _decimal(p.get(amount_field), amount_field, positive=(event_type != "central_bank.refinancing_opening_recorded"))
         minor_unit = _decimal(p.get("minor_unit"), "minor_unit", positive=True)
         period = p.get("period_index")
         evidence = _text(p.get("evidence_ref"), "evidence_ref")
@@ -700,6 +743,49 @@ class OperatingFinancialRegister(DurableEventRegister):
         if reserve["minor_unit"] != str(minor_unit):
             raise OperatingFinancialRegisterError("refinancing minor unit differs from reserve account")
         facility = state["refinancing"].get(facility_id)
+        if event_type == "central_bank.refinancing_opening_recorded":
+            if facility is not None:
+                raise OperatingFinancialRegisterError("refinancing facility ID already exists")
+            original = _decimal(p.get("original_principal"), "original_principal", positive=True)
+            origination_period = p.get("origination_period_index")
+            contract_ref = _text(p.get("contract_ref"), "contract_ref")
+            contract_evidence = _text(p.get("contract_evidence_ref"), "contract_evidence_ref")
+            if (not isinstance(origination_period, int) or isinstance(origination_period, bool)
+                    or origination_period < 0 or origination_period >= period):
+                raise OperatingFinancialRegisterError(
+                    "pre-existing refinancing origination period must precede its opening period"
+                )
+            if amount < 0 or amount > original:
+                raise OperatingFinancialRegisterError(
+                    "pre-existing refinancing outstanding principal must be between zero and original principal"
+                )
+            if original / minor_unit != (original / minor_unit).to_integral_value():
+                raise OperatingFinancialRegisterError(
+                    "original refinancing principal is not an exact multiple of its minor unit"
+                )
+            if amount / minor_unit != (amount / minor_unit).to_integral_value():
+                raise OperatingFinancialRegisterError(
+                    "opening refinancing principal is not an exact multiple of its minor unit"
+                )
+            if not _text(event.get("no_stock_flow_effect"), "opening no_stock_flow_effect"):
+                raise OperatingFinancialRegisterError(
+                    "pre-existing refinancing opening requires explicit no-stock-flow attestation"
+                )
+            state["refinancing"][facility_id] = {
+                "facility_id": facility_id, "bank_id": bank,
+                "central_bank_id": central_bank, "currency": currency,
+                "minor_unit": str(minor_unit), "original_principal": str(original),
+                "outstanding_principal": str(amount),
+                "origination_period_index": origination_period,
+                "opening_period_index": period, "last_event_id": event_id,
+                "last_period_index": period - 1,
+                "origination_evidence_ref": contract_evidence,
+                "opening_evidence_ref": evidence, "contract_ref": contract_ref,
+                "contract_evidence_ref": contract_evidence,
+                "status": "REPAID" if amount == 0 else "OUTSTANDING",
+                "event_ids": [event_id],
+            }
+            return state
         if event_type == "central_bank.refinancing_advanced":
             if facility is not None:
                 raise OperatingFinancialRegisterError("refinancing facility ID already exists")
