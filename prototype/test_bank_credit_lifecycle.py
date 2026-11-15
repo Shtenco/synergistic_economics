@@ -50,10 +50,12 @@ class BankCreditLifecycleTests(unittest.TestCase):
         )
 
     def test_bank_credit_rejects_non_commercial_issuer_atomically(self):
-        self.register.sectors["bank"] = "CBank"
         before = self.register.deposit_balance("borrower", "LCU", principal_id="root")[0]
+        self.register.sectors["bank"] = "CBank"
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "commercial bank"):
             self.post("NONBANK-LOAN", "bank.loan_originated", "5.00", 2, 1)
+        # Restore the configured role before replaying prior valid events.
+        self.register.sectors["bank"] = "CB"
         self.assertIsNone(self.register.status("NONBANK-LOAN"))
         self.assertEqual(
             self.register.deposit_balance("borrower", "LCU", principal_id="root")[0],
