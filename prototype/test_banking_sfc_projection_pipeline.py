@@ -115,23 +115,36 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:00Z",
                 recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
             )
-            snapshot = build_opening_snapshots_from_register(
-                register, principal_id="financial-root", periods=[3],
+            snapshots = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[3, 4],
                 instrument_registry=terms, sector_registry=sectors,
-            )[0]
+            )
+            snapshot, next_snapshot = snapshots
             self.assertEqual(snapshot.source_register_id,
                              f"financial:{register.register_instance_id}:financial-root")
             self.assertEqual(snapshot.source_sequence, 3)
             self.assertEqual(snapshot.source_chain_hash, register.source_checkpoint()["tail_hash"])
             self.assertEqual(len(snapshot.positions), 4)
+            for item in snapshot.positions:
+                self.assertEqual(item.balance, "0")
+                self.assertIn(snapshot.source_chain_hash, item.source_ref)
+            next_balances = {
+                (item.identity.instrument_id, item.identity.holder_entity_id): item.balance
+                for item in next_snapshot.positions
+            }
+            self.assertEqual(next_balances[("LOAN:LOAN-1", "bank-1")], "100")
+            self.assertEqual(next_balances[("LOAN:LOAN-1", "household-1")], "100")
+            self.assertEqual(next_balances[("DEPOSIT:household-1:bank-1:LCU", "household-1")], "100")
+            self.assertEqual(next_balances[("DEPOSIT:household-1:bank-1:LCU", "bank-1")], "100")
+            self.assertNotEqual(snapshot.digest, replace(snapshot, source_chain_hash="c" * 64).digest)
             store = BankingSFCProjectionStore(root / "projection.sqlite")
             projection, receipt = project_and_persist(
                 register, principal_id="financial-root", instrument_registry=terms,
-                sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                sector_registry=sectors, opening_snapshots=snapshots, store=store,
             )
             recovered, checkpoint = rebuild_and_verify(
                 register, principal_id="financial-root", instrument_registry=terms,
-                sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                sector_registry=sectors, opening_snapshots=snapshots, store=store,
             )
             self.assertEqual(projection.source_digest, recovered.source_digest)
             self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
@@ -141,6 +154,52 @@ class BankingSFCPipelineTests(unittest.TestCase):
                              store.latest_checkpoint(
                                  "financial:" + register.register_instance_id + ":financial-root"
                              )["source_chain_hash"])
+
+    def test_opening_builder_fails_if_source_changes_during_export(self):
+        terms, sectors, _identities, _fixture_snapshot = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={"household-1": "H", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="OPEN-HOUSEHOLD", entity_id="household-1", bank_id="bank-1",
+                currency="LCU", account_ref="HOUSEHOLD-ACCOUNT", opening_balance="0",
+                evidence_ref="BANK-OPEN-HOUSEHOLD", actor_id="financial-root",
+                authority_ref="BANK-OPENING", effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:00Z", expected_revision=0,
+            )
+            register.commit_bank_credit(
+                event_id="REAL-LOAN-ORIGINATION", event_type="bank.loan_originated",
+                loan_id="LOAN-1", borrower_id="household-1", bank_id="bank-1",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-REAL-LOAN", actor_id="financial-root",
+                authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
+            )
+            original_export = register.refinancing_opening_positions
+            def append_during_export(*, period_index, principal_id):
+                rows = original_export(period_index=period_index, principal_id=principal_id)
+                register.commit_bank_credit(
+                    event_id="CONCURRENT-LOAN-ORIGINATION",
+                    event_type="bank.loan_originated", loan_id="LOAN-2",
+                    borrower_id="household-1", bank_id="bank-1", currency="LCU",
+                    amount="5", period_index=4, evidence_ref="SIGNED-LOAN-2",
+                    actor_id="financial-root", authority_ref="CREDIT-POLICY",
+                    effective_at="2026-11-15T00:00:02Z",
+                    recorded_at="2026-11-15T00:00:02Z", expected_revision=2,
+                )
+                return rows
+            register.refinancing_opening_positions = append_during_export
+            with self.assertRaisesRegex(ValueError, "source changed while opening snapshots were being assembled"):
+                build_opening_snapshots_from_register(
+                    register, principal_id="financial-root", periods=[3],
+                    instrument_registry=terms, sector_registry=sectors,
+                )
 
     def test_pipeline_rejects_openings_without_source_checkpoint_provenance(self):
         terms, sectors, _identities, snapshot = fixture()
