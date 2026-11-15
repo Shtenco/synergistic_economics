@@ -18,13 +18,7 @@ def _opening_digest(snapshots):
                           .encode("utf-8")).hexdigest()
 
 
-def _verified_source_cursor(register, principal_id, history):
-    checkpoint_method = getattr(register, "source_checkpoint", None)
-    if not callable(checkpoint_method):
-        raise OperatingFinancialSFCAdapterError(
-            "financial register must expose a verified durable instance/checkpoint identity"
-        )
-    checkpoint = checkpoint_method()
+def _verified_source_cursor(principal_id, history, checkpoint):
     if not isinstance(checkpoint, dict):
         raise OperatingFinancialSFCAdapterError("financial source checkpoint metadata is invalid")
     instance_id = checkpoint.get("register_instance_id")
@@ -50,10 +44,23 @@ def _build_projection(register, *, principal_id, instrument_registry,
                       sector_registry, opening_snapshots, source_register_id):
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("verified native financial register is required")
+    checkpoint_method = getattr(register, "source_checkpoint", None)
+    if not callable(checkpoint_method):
+        raise OperatingFinancialSFCAdapterError(
+            "financial register must expose a verified durable instance/checkpoint identity"
+        )
+    checkpoint_before = checkpoint_method()
     history = register.history("operating-financial", principal_id=principal_id)
     if not history:
         raise OperatingFinancialSFCAdapterError("financial register has no authorized source history")
-    derived_id, sequence, chain_hash = _verified_source_cursor(register, principal_id, history)
+    checkpoint_after = checkpoint_method()
+    if checkpoint_before != checkpoint_after:
+        raise OperatingFinancialSFCAdapterError(
+            "financial source changed while its history snapshot was being read; retry projection"
+        )
+    derived_id, sequence, chain_hash = _verified_source_cursor(
+        principal_id, history, checkpoint_after,
+    )
     if source_register_id is not None and source_register_id != derived_id:
         raise OperatingFinancialSFCAdapterError("caller-supplied source_register_id differs from durable register identity")
     projection = OperatingFinancialSFCAdapter.build(
@@ -61,6 +68,32 @@ def _build_projection(register, *, principal_id, instrument_registry,
         sector_registry=sector_registry, opening_snapshots=opening_snapshots,
     )
     return projection, derived_id, sequence, chain_hash
+
+
+def _verify_checkpoint_ancestry(register, source_register_id, source_sequence,
+                                store):
+    """Prove the prior sealed source cursor is an ancestor of the current chain."""
+    latest = store.latest_checkpoint(source_register_id)
+    if latest is None:
+        return
+    previous_sequence = latest["applied_through_sequence"]
+    if previous_sequence > source_sequence:
+        return  # append/recover will reject the stale cursor itself
+    ancestor_reader = getattr(register, "chain_hash_at", None)
+    if not callable(ancestor_reader):
+        raise OperatingFinancialSFCAdapterError(
+            "financial register cannot prove ancestry of the persisted source checkpoint"
+        )
+    try:
+        observed_hash = ancestor_reader(previous_sequence)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise OperatingFinancialSFCAdapterError(
+            "financial register cannot resolve the persisted source checkpoint ancestor"
+        ) from exc
+    if observed_hash != latest["source_chain_hash"]:
+        raise OperatingFinancialSFCAdapterError(
+            "financial source history diverges from the previously sealed checkpoint"
+        )
 
 
 def project_and_persist(register, *, principal_id, instrument_registry,
@@ -72,6 +105,7 @@ def project_and_persist(register, *, principal_id, instrument_registry,
         sector_registry=sector_registry, opening_snapshots=opening_snapshots,
         source_register_id=source_register_id,
     )
+    _verify_checkpoint_ancestry(register, derived_id, sequence, store)
     result = store.append(
         projection, source_register_id=derived_id,
         source_sequence=sequence, source_chain_hash=chain_hash,
@@ -91,6 +125,7 @@ def rebuild_and_verify(register, *, principal_id, instrument_registry,
         sector_registry=sector_registry, opening_snapshots=opening_snapshots,
         source_register_id=source_register_id,
     )
+    _verify_checkpoint_ancestry(register, derived_id, sequence, store)
     checkpoint = store.recover(
         projection, source_register_id=derived_id,
         source_sequence=sequence, source_chain_hash=chain_hash,
