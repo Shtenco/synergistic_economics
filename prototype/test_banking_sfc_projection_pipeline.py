@@ -490,9 +490,6 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertIsNone(store.latest_checkpoint("financial:" + "a" * 32 + ":auditor"))
 
 
-if __name__ == "__main__":
-    unittest.main()
-
     def test_opening_builder_includes_bilateral_wage_claim_positions(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -579,3 +576,7 @@ if __name__ == "__main__":
                 for row in snapshots[1].positions
             ))
 
+
+
+if __name__ == "__main__":
+    unittest.main()
