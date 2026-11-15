@@ -1161,6 +1161,21 @@ class OperatingFinancialRegister(DurableEventRegister):
         if set(opening_rows) != set(positions_by_account):
             raise OperatingFinancialRegisterError("durable financial account is missing its opening source event")
         for key, row in opening_rows.items():
+            payload = row.get("payload")
+            account = positions_by_account[key]["account"]
+            expected_opening = (
+                payload.get("opening_balance") if isinstance(payload, Mapping) else None
+            )
+            expected_evidence = payload.get("evidence_ref") if isinstance(payload, Mapping) else None
+            expected_account_ref = payload.get("account_ref") if isinstance(payload, Mapping) else None
+            if (
+                _decimal(expected_opening, "account opening source balance") != D(account["opening_balance"])
+                or expected_evidence != account["opening_evidence_ref"]
+                or expected_account_ref != account["account_ref"]
+                or str(_decimal(payload.get("minor_unit", "0.01"), "account opening minor_unit", positive=True))
+                   != account["minor_unit"]
+            ):
+                raise OperatingFinancialRegisterError("financial account opening state differs from its immutable source event")
             proof_by_account[key].append(row)
 
         # Every transaction type is replayed through its canonical movement rows.
@@ -1228,7 +1243,9 @@ class OperatingFinancialRegister(DurableEventRegister):
                     raise OperatingFinancialRegisterError("financial account movement period must be positive")
                 amount = _decimal(movement.get("amount"), "financial account movement amount")
                 if movement_period < period_index:
-                    positions_by_account[account_key]["balance"] += amount
+                    with localcontext() as context:
+                        context.prec = 4096
+                        positions_by_account[account_key]["balance"] += amount
                     touched.add(account_key)
             for key in touched:
                 proof_by_account[key].append(row)
