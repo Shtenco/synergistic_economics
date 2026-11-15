@@ -124,3 +124,11 @@ The earlier “Not implemented” wording for durable financial projection persi
 A real-register integration test has now been added to ensure the durable `OperatingFinancialRegister` (not only a fake source) flows through `project_and_persist()` and `rebuild_and_verify()`. It asserts deterministic source replay and equality of the persisted/recovered projection digest. This test is committed but not yet confirmed by CI.
 
 Still open: authoritative evidence-backed opening exports for all loan/refinancing positions; signed completeness declarations for all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
+
+## Addendum — source-history cursor validation hardening (2026-11-15)
+
+The pure `OperatingFinancialSFCAdapter.build()` boundary previously sorted supplied history rows before validating row type and commit cursor. A malformed row could therefore raise an incidental Python exception, and duplicate commit cursors were not rejected explicitly. The adapter now validates each row as a mapping, requires a positive non-boolean integer `commit_sequence`, rejects duplicate sequence values, and only then sorts deterministically. Global sequence gaps remain allowed; this check does not impose false contiguity on a shared register sequence.
+
+Adversarial coverage now includes non-mapping rows, missing/null/zero/string/boolean cursors, duplicate cursors, and out-of-order input with unique cursors. Changes are committed in `90d235e7ad847f9a9a2946eb691a36e57a785f10` and `7e01bfe93d46e444342c6122d5de3134d15a5a88`.
+
+These are source-contract hardening changes, not evidence of full SFC closure. Evidence-backed loan/refinancing opening exports, signed per-register period completeness, native non-financial adapters, capital-account reconciliation, lifecycle cashflows and exact-HEAD green CI remain open. The new commits have not yet received a confirmed CI result.
