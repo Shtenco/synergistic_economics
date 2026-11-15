@@ -1463,15 +1463,15 @@ class OperatingFinancialRegister(DurableEventRegister):
         from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
 
         claims = {}
-        seen_sequences = set()
+        last_sequence = 0
         seen_event_ids = set()
-        for row in sorted(history, key=lambda item: item.get("commit_sequence", 0)):
+        for row in history:
             sequence = row.get("commit_sequence")
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
                 raise OperatingFinancialRegisterError("financial history commit_sequence must be positive")
-            if sequence in seen_sequences:
-                raise OperatingFinancialRegisterError("duplicate financial history commit_sequence")
-            seen_sequences.add(sequence)
+            if sequence <= last_sequence:
+                raise OperatingFinancialRegisterError("financial history commit_sequence is not strictly increasing")
+            last_sequence = sequence
             event_id = _text(row.get("event_id"), "history.event_id")
             if event_id in seen_event_ids:
                 raise OperatingFinancialRegisterError("duplicate event ID in financial source history")
@@ -1577,7 +1577,9 @@ class OperatingFinancialRegister(DurableEventRegister):
                     if event_period < period_index:
                         if amount > claim["balance"]:
                             raise OperatingFinancialRegisterError("historical wage payment exceeds opening outstanding claim")
-                        claim["balance"] -= amount
+                        with localcontext() as context:
+                            context.prec = 4096
+                            claim["balance"] -= amount
                         claim["proof"].append({
                             "event_id": event_id,
                             "subevent_id": subevent_id,
