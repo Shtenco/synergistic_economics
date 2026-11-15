@@ -160,3 +160,14 @@ Deposit and reserve account-opening events now carry `period_index` (default 1 f
 The financial reducer now executes accepted monetary arithmetic under a bounded high-precision Decimal context, rejects source decimals beyond the exact-decimal bounds, and uses exact summation for bank balance snapshots and historical opening reconstruction. A regression test uses a principal larger than 28 significant digits, repays a unit amount, and checks the exact remaining loan, deposit and aggregate bank balances.
 
 These changes improve the financial register's period semantics and arithmetic; they do not yet compose all exported rows into a source-checkpoint-pinned SFC snapshot or establish six-register closure. Exact-HEAD CI must confirm the current implementation.
+
+
+## Addendum — durable source-instance and chain-tail checkpoint binding (2026-11-15)
+
+The durable register metadata now persists a per-database `register_instance_id` (32 lowercase hexadecimal characters). Existing V2 register databases receive this identifier through an additive metadata-column migration; it is retained across process restarts. `source_checkpoint()` first verifies the complete event/hash chain, then returns the instance identifier, global event count and tail hash.
+
+The banking SFC pipeline no longer trusts a caller-selected source identifier. It derives the checkpoint namespace from the verified financial register instance ID and principal scope, rejects a conflicting caller-supplied ID, and uses the global register event count rather than the last event in the filtered financial stream. The SQLite projection schema is versioned forward and persists the source-chain tail hash in both immutable snapshot and checkpoint rows; recovery compares both copies and the freshly verified tail hash. A changed tail at an unchanged cursor is rejected, while legitimate cursor advancement is allowed.
+
+Regression tests now cover stable instance identity across restart, tail-hash advancement, caller-ID substitution, same-cursor source-tail changes, and checkpoint-copy verification. The metadata identifier is a durable local identity, not a cryptographic hardware identity or proof of independent custody; copying a database also copies its instance ID. The source hash chain and exact tail checkpoint detect changed history, but do not by themselves prove external issuer authority or signed period completeness.
+
+The projection-store schema change intentionally rejects an older persisted store schema with an explicit-migration error rather than silently treating legacy checkpoints as source-tail-pinned. Remaining opening-snapshot composition and signed six-register completeness blockers are unchanged. Exact-HEAD CI is still required.
