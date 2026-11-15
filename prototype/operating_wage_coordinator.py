@@ -40,43 +40,6 @@ def _envelope(operations, register):
         raise CoordinatorError(f"{register} wage transaction envelope is invalid") from exc
 
 
-def _physical_movement_specs(outflow, inflow, *, period_index=1):
-    flow_id = _text(outflow.get("flow_id"), "flow_id")
-    origin = _text(outflow.get("origin_node"), "origin_node")
-    destination = _text(outflow.get("destination_node"), "destination_node")
-    product = _text(outflow.get("product_id"), "product_id")
-    grade = _text(outflow.get("grade_id"), "grade_id")
-    unit = _text(outflow.get("unit"), "unit")
-    quantity = _decimal(outflow.get("quantity"), "quantity")
-    common = {
-        "register_id": "physical", "measure": "time", "unit": unit,
-        "currency": "NA", "valuation_basis": "PHYSICAL",
-        "instrument_id": f"{product}:{grade}",
-    }
-    return [
-        {
-            "movement_id": f"{flow_id}:OUT",
-            "identity": common | {
-                "position_id": f"{origin}:{product}:{grade}",
-                "holder_id": origin, "issuer_id": destination,
-            },
-            "period_index": period_index, "movement_class": "T", "amount": str(-quantity),
-            "evidence_ref": _text(outflow.get("measurement_method"), "physical measurement_method"),
-            "mirror_group_id": flow_id, "mirror_side": "sender", "mirror_policy": "opposite",
-        },
-        {
-            "movement_id": f"{flow_id}:IN",
-            "identity": common | {
-                "position_id": f"{destination}:{product}:{grade}",
-                "holder_id": destination, "issuer_id": origin,
-            },
-            "period_index": period_index, "movement_class": "T", "amount": str(quantity),
-            "evidence_ref": _text(outflow.get("measurement_method"), "physical measurement_method"),
-            "mirror_group_id": flow_id, "mirror_side": "receiver", "mirror_policy": "opposite",
-        },
-    ]
-
-
 class OperatingWageCoordinator(CrossRegisterCoordinator):
     """Coordinator that rejects semantically mismatched six-register wage groups."""
 
@@ -151,10 +114,11 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             outflow.get("period"), _decimal(outflow.get("quantity"), "physical quantity")) != (
             worker, employer, "labour_service", "verified", "h", accrual.get("period_label"), delivered_hours):
             raise CoordinatorError("physical service flow differs from verified labour delivery")
-        if physical.get("stock_flow_movements") != _physical_movement_specs(
-            outflow, inflow, period_index=accrual.get("period_index")
-        ):
-            raise CoordinatorError("physical stock-flow movements differ from delivered labour service")
+        if "stock_flow_movements" in physical:
+            raise CoordinatorError("non-stockable labour service must not be represented as a physical stock position")
+        physical_no_stock = _text(physical.get("no_stock_flow_effect"), "physical no_stock_flow_effect")
+        if "non-stockable" not in physical_no_stock.lower() or "period flow" not in physical_no_stock.lower():
+            raise CoordinatorError("physical labour service must be explicitly classified as a non-stockable period flow")
 
         product = _envelope(operations, "product")
         product_payload = product["payload"]
@@ -178,7 +142,7 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
         if not required_evidence.issubset(set(rights_payload.get("evidence_refs", []))):
             raise CoordinatorError("legal wage claim omits one or more source evidence references")
 
-        for register in ("capital", "labour", "product", "legal_rights"):
+        for register in ("physical", "capital", "labour", "product", "legal_rights"):
             participant_envelope = _envelope(operations, register)
             if ("stock_flow_movements" not in participant_envelope
                     and not isinstance(participant_envelope.get("no_stock_flow_effect"), str)):
