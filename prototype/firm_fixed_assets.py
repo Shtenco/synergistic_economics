@@ -1,9 +1,10 @@
-"""Evidence-linked firm fixed-asset accounting for productive-credit experiments.
+"""Evidence-linked fixed-asset ledger used by the IO productive-capex vertical slice.
 
-This module is deliberately a ledger boundary, not yet an IO production adapter.
-A paid investment order is not productive capacity: delivery and commissioning
-are separate, identity-preserving events. All amounts and physical quantities
-use Decimal; missing payment, delivery or commissioning evidence fails closed.
+A paid investment order is not productive capacity: payment, physical delivery
+and commissioning are separate, identity-preserving events. The IO adapter
+reserves supplier inventory, settles buyer/supplier cash and posts delivered
+units to capital formation. This ledger owns cohort valuation and lifecycle.
+All amounts and physical quantities use Decimal; missing evidence fails closed.
 """
 from __future__ import annotations
 
@@ -222,6 +223,8 @@ class FixedAssetLedger:
         cohort = self.cohorts[cohort_id]
         if period < cohort.commissioning_period:
             raise FixedAssetError("asset cannot retire before commissioning")
+        if cohort.retirement_history and period < cohort.retirement_history[-1][0]:
+            raise FixedAssetError("retirement effective periods cannot move backwards")
         if quantity > cohort.active_quantity:
             raise FixedAssetError("retirement exceeds active physical quantity")
         self.cohorts[cohort_id] = AssetCohort(
