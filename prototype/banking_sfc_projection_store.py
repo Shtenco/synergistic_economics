@@ -128,6 +128,8 @@ class BankingSFCProjectionStore:
 
         fault_at is a test-only failpoint: after_snapshot or after_checkpoint.
         """
+        if fault_at not in (None, "after_snapshot", "after_checkpoint"):
+            raise BankingSFCStoreError("unsupported persistence failpoint")
         source_register_id = self._required(source_register_id, "source_register_id")
         for value, name in ((instrument_registry_digest, "instrument_registry_digest"),
                             (sector_registry_digest, "sector_registry_digest"),
@@ -223,6 +225,13 @@ class BankingSFCProjectionStore:
                 instrument_registry_digest, sector_registry_digest,
                 opening_snapshot_digest):
         """Compare a freshly re-derived projection to the immutable stored checkpoint."""
+        source_register_id = self._required(source_register_id, "source_register_id")
+        if not isinstance(source_sequence, int) or isinstance(source_sequence, bool) or source_sequence < 0:
+            raise BankingSFCStoreError("source_sequence must be a non-negative integer")
+        for value, name in ((instrument_registry_digest, "instrument_registry_digest"),
+                            (sector_registry_digest, "sector_registry_digest"),
+                            (opening_snapshot_digest, "opening_snapshot_digest")):
+            self._required(value, name)
         mapping_version = self._required(getattr(expected_projection, "mapping_version", None), "mapping_version")
         source_digest = self._required(getattr(expected_projection, "source_digest", None), "source_digest")
         body = _normal({
