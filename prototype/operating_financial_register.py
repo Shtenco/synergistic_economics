@@ -296,6 +296,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         if not isinstance(operation, dict) or not isinstance(operation.get("payload"), dict):
             raise OperatingFinancialRegisterError("financial participant operation is malformed")
         envelope = normalize_event_envelope("financial", operation["payload"])
+        if envelope.get("idempotency_key") != operation.get("native_event_id"):
+            raise OperatingFinancialRegisterError("financial native event and idempotency IDs must match")
         events = envelope["payload"].get("events")
         if not isinstance(events, list) or not events:
             raise OperatingFinancialRegisterError("wage event group must contain subevents")
