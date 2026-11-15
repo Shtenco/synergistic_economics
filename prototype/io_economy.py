@@ -338,9 +338,17 @@ class InputOutputEconomy:
             spendable = min(available_cash, remaining_budget)
             affordable = qty(spendable / clearing_price) if clearing_price > 0 else ZERO
             actual_buyer_allocations[key] = min(amount, affordable)
-        actual_traded = sum(actual_buyer_allocations.values(), ZERO)
+        # A positive physical allocation is not executable if its cash settlement
+        # rounds to zero cents. Exclude it before computing traded quantity; otherwise
+        # sellers lose inventory while buyers receive nothing, breaking the stock-flow
+        # identity by the sum of these unpayable micro-allocations.
+        settled_buyer_allocations = {}
+        for key, amount in actual_buyer_allocations.items():
+            if amount > 0 and cash(amount * clearing_price) > 0:
+                settled_buyer_allocations[key] = amount
+        actual_traded = sum(settled_buyer_allocations.values(), ZERO)
         if actual_traded < traded and seller_allocations:
-            # Scale seller deliveries to actual buyer settlement.
+            # Scale seller deliveries to the quantity that can actually settle.
             for key in list(seller_allocations):
                 seller_allocations[key] = qty(seller_allocations[key] * actual_traded / traded)
             drift = actual_traded - sum(seller_allocations.values(), ZERO)
@@ -348,11 +356,9 @@ class InputOutputEconomy:
             seller_allocations[key] += drift
         else:
             actual_traded = traded
-        # Allocate the actual quantity to buyers' firm input stocks or household consumption.
-        for (kind, buyer_id), amount in actual_buyer_allocations.items():
+        # Allocate only settled quantities to buyers' firm input stocks or household consumption.
+        for (kind, buyer_id), amount in settled_buyer_allocations.items():
             payment = cash(amount * clearing_price)
-            if payment <= 0 or amount <= 0:
-                continue
             buyer_budget[(kind, buyer_id)] = max(ZERO, buyer_budget.get((kind, buyer_id), ZERO) - payment)
             if kind == "firm":
                 state = self.firms[buyer_id]
