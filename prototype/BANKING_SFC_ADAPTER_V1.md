@@ -66,7 +66,7 @@ For each period and currency/valuation basis, the sum of sector financial net le
 
 ## 5. Opening stocks and period replay
 
-Historical loan/refinancing and deposit/reserve opening exporters now reconstruct period-boundary positions from verified native register history. Loan/refinancing exporters replay originations and prior principal repayments; deposit/reserve exporters replay all prior native transaction movements touching those shared accounts. A complete SFC snapshot must still compose these exports with wage claims/payables and every other supported financial instrument into registry-resolved identities:
+Historical loan/refinancing, deposit/reserve and wage-claim opening exporters now reconstruct period-boundary positions from verified native register history. Loan/refinancing exporters replay originations and prior principal repayments; deposit/reserve exporters replay all prior native transaction movements touching those shared accounts; wage claims replay accruals and prior settlements. The projection pipeline composes these five supported native financial opening exporters into registry-resolved identities. The result is complete only for these supported financial instrument families; unsupported financial instruments remain explicit blockers:
 
 - customer deposit asset and issuing-bank deposit liability;
 - bank reserve asset and central-bank reserve liability;
