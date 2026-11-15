@@ -2,7 +2,7 @@
 
 Research harness, not a calibrated forecast or production banking system.
 It compares equal principal issuance directed to productive working capital,
-household consumption, or an external financial-asset purchase. Principal
+paid machinery capex, household consumption, or an external financial-asset purchase. Principal
 repayment destroys deposit money; interest, defaults, collateral, reserves and
 bank capital are deliberately outside v1.
 """
@@ -90,7 +90,7 @@ class CreditPeriodMetrics:
 
 
 class BankCreditAllocationExperiment:
-    """Run a matched baseline and three equal-volume credit-allocation cases."""
+    """Run a matched baseline and four equal-volume credit-allocation cases."""
 
     ASSET_MARKET_DEPTH = D("100000")
     ASSET_PRICE_IMPACT = D("0.25")
@@ -436,7 +436,7 @@ class BankCreditAllocationExperiment:
 
     def run(self):
         return {
-            "experiment": "equal-volume-bank-credit-allocation-v1",
+            "experiment": "equal-volume-bank-credit-allocation-v2",
             "credit_amount": str(self.credit_amount),
             "periods": self.periods,
             "assumptions": {
@@ -447,7 +447,7 @@ class BankCreditAllocationExperiment:
                 "principal_repayment": "equal principal schedule from period 2; cash-constrained, unpaid amounts become arrears",
                 "excluded": ["interest", "defaults", "collateral", "bank reserves", "capital adequacy", "credit risk pricing"],
                 "liquidity_metric": "borrower cash divided by scheduled principal due; not a regulatory liquidity ratio",
-                "solvency_metric": "cash plus recorded inventory or modelled asset value less principal debt; narrow prototype proxy",
+                "solvency_metric": "cash plus inventory, paid capex work-in-progress and commissioned fixed-asset carrying value less principal debt; narrow prototype proxy",
                 "productivity_metric": "fixed-price gross-value-added proxy divided by labour hours",
                 "asset_price_rule": "transparent illustrative inverse-depth rule; not an empirical asset valuation model",
             },
