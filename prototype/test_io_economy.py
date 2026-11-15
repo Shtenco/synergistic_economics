@@ -322,6 +322,7 @@ class InputOutputEconomyTests(unittest.TestCase):
             row for row in model.events
             if row["kind"] == "household_wage_payment"
             and row["payload"]["firm_id"] == "farm"
+            and row["payload"]["credit_event_ids"] == ["CREDIT-ORIGINATION-1"]
         )
         self.assertEqual(
             wage_event["payload"]["production_event_key"],
