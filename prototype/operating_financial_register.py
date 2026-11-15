@@ -1281,8 +1281,18 @@ class OperatingFinancialRegister(DurableEventRegister):
                 opening_period = positions_by_account[account_key]["account"].get("opening_period_index", 1)
                 if movement_period < opening_period:
                     raise OperatingFinancialRegisterError("financial account movement predates its opening period")
+                if movement.get("movement_class") != "T":
+                    raise OperatingFinancialRegisterError("financial account opening replay accepts transaction movements only")
+                if movement.get("mirror_policy") != "equal":
+                    raise OperatingFinancialRegisterError("financial account opening replay requires equal mirror movements")
+                side = movement.get("mirror_side")
+                if side not in {"asset_holder", "liability_issuer"}:
+                    raise OperatingFinancialRegisterError("financial account movement has an invalid mirror side")
                 amount = _decimal(movement.get("amount"), "financial account movement amount")
-                if movement_period < period_index:
+                # The account is one stock represented by an asset and its
+                # mirrored liability. Apply only the account-owner asset side;
+                # summing both mirror rows would double every transaction.
+                if movement_period < period_index and side == "asset_holder":
                     with localcontext() as context:
                         context.prec = 4096
                         positions_by_account[account_key]["balance"] += amount
