@@ -314,6 +314,10 @@ class PeriodGovernance:
             event_count = attestation.get("period_event_count")
             if not isinstance(event_count, int) or isinstance(event_count, bool) or event_count < 0:
                 raise PeriodGovernanceError("period_event_count must be a non-negative integer")
+            if event_count > sequence:
+                raise PeriodGovernanceError(
+                    f"{name} period event count exceeds its durable source sequence"
+                )
             event_root = _sha256(attestation.get("period_event_root"), "period_event_root")
             activity = attestation.get("activity_status")
             expected_activity = "ZERO_ACTIVITY" if event_count == 0 else "ACTIVITY"
