@@ -579,6 +579,46 @@ class InputOutputEconomyTests(unittest.TestCase):
             )
 
 
+    def test_cash_capped_multi_seller_trade_conserves_physical_stock_after_rescaling(self):
+        from io_economy import FirmConfig, HouseholdConfig, MarketOrder, Product
+
+        sellers = [
+            FirmConfig(
+                f"seller-{index:02d}", "widgets", {}, D("1"), D("0"), D("0"),
+                D("0"), D("0"), {"widgets": D("0.00000001")},
+            )
+            for index in range(10)
+        ]
+        model = InputOutputEconomy(
+            products=[Product("widgets", "unit", D("300000"), D("300000"), D("0"))],
+            firms=sellers,
+            households=[HouseholdConfig("buyer", D("0.01"), {}, D("0"), D("0"))],
+        )
+        before_stock = sum(
+            (state.inventory["widgets"] for state in model.firms.values()), D("0")
+        )
+        result = model._clear_product(
+            "widgets",
+            [MarketOrder("buyer", "widgets", D("0.00000005"), "household")],
+            1,
+            {("household", "buyer"): D("0.01")},
+        )
+        sold = sum(
+            (D("0.00000001") - state.inventory["widgets"]
+             for state in model.firms.values()),
+            D("0"),
+        )
+        consumed = model.households["buyer"].consumption["widgets"]
+
+        self.assertEqual(result["traded"], D("0.00000003"))
+        self.assertEqual(sold, result["traded"])
+        self.assertEqual(consumed, result["traded"])
+        self.assertEqual(before_stock, sold + sum(
+            (state.inventory["widgets"] for state in model.firms.values()), D("0")
+        ))
+        self.assertEqual(model._system_cash(), model.initial_cash)
+
+
     def test_pro_rata_rounding_residual_never_makes_small_allocations_negative(self):
         from io_economy import _scale_allocations
 
