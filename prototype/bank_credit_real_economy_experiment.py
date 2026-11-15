@@ -132,7 +132,7 @@ class BankCreditAllocationExperiment:
         elif scenario in ("consumption", "asset_purchase"):
             borrowers = [("household", key) for key in sorted(model.households)]
         else:
-            return {}, {}, ZERO
+            return {}, {}, D("1")
 
         allocations = _split(self.credit_amount, len(borrowers))
         debt = {}
@@ -206,19 +206,6 @@ class BankCreditAllocationExperiment:
         gva = result.gross_value_added_proxy
         productivity = gva / labour_hours if labour_hours > 0 else ZERO
         price_index = self._price_index(model)
-
-        next_due = ZERO
-        for key, outstanding in debt.items():
-            if period == 1 or outstanding <= 0:
-                continue
-            initial_principal = self._initial_debt[key]
-            instalments = max(1, self.periods - 1)
-            scheduled = (
-                outstanding + arrears[key]
-                if period == self.periods
-                else min(outstanding, (initial_principal / D(instalments)).quantize(CENT, rounding=ROUND_HALF_UP) + arrears[key])
-            )
-            next_due += scheduled
 
         due_for_period = total_due
         liquidity = borrower_cash / due_for_period if due_for_period > 0 else None
