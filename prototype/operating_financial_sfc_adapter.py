@@ -416,6 +416,21 @@ class OperatingFinancialSFCAdapter:
             liabilities = transaction_liabilities.get(key, [])
             nl[key] = financial_net_lending(assets, liabilities)
 
+        # Every native financial transaction is represented by reciprocal
+        # asset/liability positions. Financial net lending must therefore
+        # conserve to zero independently for each period and currency; a
+        # cross-period or cross-currency cancellation is not an acceptable
+        # substitute for a closed transaction set.
+        conservation = {}
+        for (period, sector, currency), amount in nl.items():
+            key = (period, currency)
+            conservation.setdefault(key, []).append(amount)
+        for (period, currency), amounts in conservation.items():
+            if _sum_exact(amounts) != 0:
+                raise OperatingFinancialSFCAdapterError(
+                    f"financial net lending does not conserve for period {period}, currency {currency}"
+                )
+
         source_digest = hashlib.sha256(json.dumps(
             [{
                 "commit_sequence": row.get("commit_sequence"),
