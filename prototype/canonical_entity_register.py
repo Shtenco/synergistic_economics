@@ -99,6 +99,9 @@ class EntityAuthorityVerifier(Protocol):
         """Verify issuer signature, tenant, authority scope and key validity."""
 
 
+TenantAuthorize = Callable[[str, str, str, str | None], bool]
+
+
 class Ed25519EntityAuthorityVerifier:
     """Ed25519 verifier backed by an externally managed trusted-key snapshot.
 
@@ -174,10 +177,13 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
     read_permission = "entity:read"
 
     def __init__(self, database_path, *, authority_verifier: EntityAuthorityVerifier,
-                 clock=None):
+                 tenant_authorizer: TenantAuthorize, clock=None):
         if not callable(getattr(authority_verifier, "verify", None)):
             raise EconomicEntityRegisterError("an Ed25519 authority verifier is mandatory")
+        if not callable(tenant_authorizer):
+            raise EconomicEntityRegisterError("a tenant-scoped authorization service is mandatory")
         self.authority_verifier = authority_verifier
+        self.tenant_authorizer = tenant_authorizer
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         super().__init__(database_path)
 
@@ -186,6 +192,74 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         if event_type in {"entity.suspended", "entity.reactivated", "entity.retired"}:
             return "entity:admin"
         return "entity:write"
+
+    def _authorize_tenant(self, principal_id, tenant_id, permission, authority_ref=None):
+        principal_id = required_text(principal_id, "principal_id")
+        tenant_id = required_text(tenant_id, "tenant_id")
+        permission = required_text(permission, "tenant_permission")
+        if authority_ref is not None:
+            authority_ref = required_text(authority_ref, "authority_ref")
+        try:
+            allowed = self.tenant_authorizer(principal_id, tenant_id, permission, authority_ref)
+        except Exception as exc:
+            raise EconomicEntityRegisterError("tenant authorization service unavailable; access denied") from exc
+        if allowed is not True:
+            raise EconomicEntityRegisterError(
+                f"tenant authorization denied for {principal_id} on {tenant_id} ({permission})"
+            )
+
+    def append_event(self, **kwargs):
+        payload = kwargs.get("payload")
+        if not isinstance(payload, Mapping):
+            raise EconomicEntityRegisterError("canonical entity event payload must be an object")
+        event_type = required_text(kwargs.get("event_type"), "event_type")
+        self._authorize_tenant(
+            kwargs.get("actor_id"),
+            payload.get("tenant_id"),
+            self.write_permission(event_type),
+            kwargs.get("authority_ref"),
+        )
+        return super().append_event(**kwargs)
+
+    @staticmethod
+    def _tenant_from_aggregate(aggregate_id):
+        aggregate_id = required_text(aggregate_id, "aggregate_id")
+        if "::" not in aggregate_id:
+            raise EconomicEntityRegisterError("entity aggregate ID must contain tenant scope")
+        tenant_id, entity_id = aggregate_id.split("::", 1)
+        required_text(tenant_id, "tenant_id")
+        required_text(entity_id, "entity_id")
+        return tenant_id
+
+    def state(self, aggregate_id, *, principal_id):
+        tenant_id = self._tenant_from_aggregate(aggregate_id)
+        self._authorize_tenant(principal_id, tenant_id, "entity:read")
+        return super().state(aggregate_id, principal_id=principal_id)
+
+    def history(self, aggregate_id, *, principal_id):
+        tenant_id = self._tenant_from_aggregate(aggregate_id)
+        self._authorize_tenant(principal_id, tenant_id, "entity:read")
+        return super().history(aggregate_id, principal_id=principal_id)
+
+    def prepare(self, txid, operation):
+        raise EconomicEntityRegisterError(
+            "canonical entity authority is not a six-register native transaction participant"
+        )
+
+    def commit(self, txid, prepare_token):
+        raise EconomicEntityRegisterError(
+            "canonical entity authority does not accept native participant commits"
+        )
+
+    def events_for_common_event(self, common_event_id, *, principal_id):
+        raise EconomicEntityRegisterError(
+            "cross-register event lookup is not exposed by the canonical entity register"
+        )
+
+    def committed_event(self, txid):
+        raise EconomicEntityRegisterError(
+            "native participant receipts are not exposed by the canonical entity register"
+        )
 
     def _verify_event(self, event):
         if event.get("event_type") not in DOMAIN_EVENTS:
