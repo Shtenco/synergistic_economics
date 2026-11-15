@@ -196,6 +196,42 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertTrue(all(item.closing == D("960.00") for item in employer_positions if item.period_index == 2))
         self.assertTrue(all(item.closing == D("50.00") for item in worker_positions if item.period_index == 2))
 
+
+    def test_register_rejects_unknown_sector_codes(self):
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "unsupported institutional sector"):
+            OperatingFinancialRegister(
+                Path(self.tmp.name) / "bad-sector.sqlite3",
+                sectors={"worker-1":"HOUSEHOLD", "employer-1":"NFC", "bank-1":"CBank"},
+            )
+
+    def test_prepare_requires_explicit_bank_sector_and_distinct_entities(self):
+        missing_bank = OperatingFinancialRegister(
+            Path(self.tmp.name) / "missing-bank-sector.sqlite3",
+            sectors={"worker-1":"H", "employer-1":"NFC"},
+        )
+        missing_bank.bootstrap_admin(
+            principal_id="financial-root", authority_ref="BOOTSTRAP", occurred_at=T,
+        )
+        missing_bank.grant_access(
+            event_id="ACL-MISSING-BANK", idempotency_key="ACL-MISSING-BANK",
+            principal_id="coordinator", permissions=["financial:read", "financial:write"],
+            actor_id="financial-root", authority_ref="POLICY", occurred_at=T,
+        )
+        operation = self.operation()
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "missing explicit institutional sector for bank-1"):
+            missing_bank.prepare("TX-MISSING-BANK", operation)
+
+        operation = self.operation()
+        operation["payload"]["payload"]["events"][0]["worker_id"] = "employer-1"
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "must be distinct entities"):
+            self.register.prepare("TX-SAME-WORKER-EMPLOYER", operation)
+
+    def test_claim_identity_must_bind_engagement_and_verified_delivery(self):
+        operation = self.operation()
+        operation["payload"]["payload"]["events"][0]["engagement_id"] = "OTHER-ENGAGEMENT"
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "claim ID must bind"):
+            self.register.prepare("TX-WRONG-CLAIM-IDENTITY", operation)
+
     def test_stock_flow_mapper_tampering_is_rejected_before_prepare(self):
         operation = self.operation()
         operation["payload"]["stock_flow_movements"][0]["amount"] = "999"
