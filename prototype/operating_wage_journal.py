@@ -6,7 +6,7 @@ with balanced postings and explicit stock-flow movement metadata.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Mapping
 
@@ -16,6 +16,7 @@ class OperatingWageError(ValueError):
 
 
 D = Decimal
+_VERIFIED_TOKEN = object()
 
 
 def _text(value, field):
@@ -76,12 +77,15 @@ class VerifiedLabourDelivery:
     period_label: str
     delivered_hours: Decimal
     aggregate_version: int
+    _authority_token: object = field(default=None, repr=False, compare=False)
 
     def validate(self):
         for field in ("engagement_id", "delivery_event_id", "verification_ref",
                       "worker_id", "period_label"):
             _text(getattr(self, field), field)
         _positive(self.delivered_hours, "delivered_hours")
+        if self._authority_token is not _VERIFIED_TOKEN:
+            raise OperatingWageError("labour delivery must originate from the authorized labour-register reader")
         if not isinstance(self.aggregate_version, int) or isinstance(self.aggregate_version, bool) or self.aggregate_version < 1:
             raise OperatingWageError("aggregate_version must be positive")
 
@@ -112,6 +116,7 @@ def verified_delivery_from_register(labour_register, engagement_id, principal_id
         period_label=_text(state.get("period"), "period"),
         delivered_hours=_positive(state.get("delivered_hours"), "delivered_hours"),
         aggregate_version=version,
+        _authority_token=_VERIFIED_TOKEN,
     )
 
 
