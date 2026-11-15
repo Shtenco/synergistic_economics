@@ -107,7 +107,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
         self.assertEqual(self.store.latest_checkpoint(self.pins["source_register_id"])
                          ["applied_through_sequence"], 6)
         with self.assertRaisesRegex(BankingSFCStoreError, "did not advance"):
-            self.append(source_sequence=7)
+            self.append(source_sequence=7, source_chain_hash="c" * 64)
 
     def test_source_chain_tail_change_at_same_cursor_is_rejected(self):
         self.append()
