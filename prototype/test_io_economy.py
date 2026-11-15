@@ -337,6 +337,47 @@ class InputOutputEconomyTests(unittest.TestCase):
             wage_event["payload"]["event_id"],
         )
 
+    def test_periods_are_strictly_sequential_and_run_continues_from_current_period(self):
+        model = InputOutputEconomy()
+        with self.assertRaises(EconomyError):
+            model.step(2)
+        model.step(1)
+        with self.assertRaises(EconomyError):
+            model.step(1)
+        summary = model.run(2)
+        self.assertEqual(summary["periods"], 3)
+        self.assertEqual([result.period for result in model.period_results], [1, 2, 3])
+        self.assertEqual(D(summary["cash_conservation_error"]), 0)
+        self.assertEqual(D(summary["max_abs_physical_balance_error"]), 0)
+
+    def test_capex_order_cannot_be_backdated_or_paid_for_a_future_period(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[Product("machinery", "unit", D("10"), D("10"), D("0"))],
+            firms=[
+                FirmConfig("buyer", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("100"), {}),
+                FirmConfig("supplier", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("0"), {"machinery": D("2")}),
+            ],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+        )
+        args = dict(
+            order_id="ORDER-1", credit_event_id="CREDIT-1",
+            payment_event_id="PAYMENT-1", buyer_id="buyer",
+            supplier_id="supplier", asset_type="machinery",
+            quantity=D("1"), unit_cost=D("10"), delivery_period=2,
+            commissioning_period=3, useful_life_periods=5,
+            residual_value_per_unit=D("1"), service_capacity_per_unit=D("1"),
+            currency="LCU", payment_evidence_ref="PAYMENT-EVIDENCE",
+        )
+        with self.assertRaises(EconomyError):
+            model.place_capex_order(**args, order_period=2)
+        model.step(1)
+        with self.assertRaises(EconomyError):
+            model.place_capex_order(**(args | {"order_id": "ORDER-2", "payment_event_id": "PAYMENT-2"}),
+                                    order_period=1)
+
     def test_capex_cannot_be_paid_without_supplier_stock_or_buyer_cash(self):
         from io_economy import FirmConfig, HouseholdConfig, Product
         model = InputOutputEconomy(
