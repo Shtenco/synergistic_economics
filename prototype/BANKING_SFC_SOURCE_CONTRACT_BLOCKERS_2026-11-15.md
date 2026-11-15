@@ -170,7 +170,7 @@ The banking SFC pipeline no longer trusts a caller-selected source identifier. I
 
 Regression tests now cover stable instance identity across restart, tail-hash advancement, caller-ID substitution, same-cursor source-tail changes, and checkpoint-copy verification. The metadata identifier is a durable local identity, not a cryptographic hardware identity or proof of independent custody; copying a database also copies its instance ID. The source hash chain and exact tail checkpoint detect changed history, but do not by themselves prove external issuer authority or signed period completeness.
 
-The projection-store schema change intentionally rejects an older persisted store schema with an explicit-migration error rather than silently treating legacy checkpoints as source-tail-pinned. Remaining opening-snapshot composition and signed six-register completeness blockers are unchanged. Exact-HEAD CI is still required.
+The projection-store schema change intentionally rejects an older persisted store schema with an explicit-migration error rather than silently treating legacy checkpoints as source-tail-pinned. The opening-snapshot composition gap is now closed for the five supported native financial exporters and their checkpoint-pinned composition; signed six-register completeness remains a governance-side validation contract until all six native adapters produce their own independently signed declarations. Exact-HEAD CI is still required.
 
 
 ## Addendum — stable source snapshots and checkpoint ancestry (2026-11-15)
