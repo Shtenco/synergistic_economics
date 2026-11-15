@@ -10,6 +10,7 @@ from pathlib import Path
 import hashlib
 import json
 import sqlite3
+import uuid
 from typing import Mapping
 from datetime import datetime, timezone
 
@@ -62,7 +63,7 @@ def finite_decimal(value, field, *, minimum=None):
 class DurableEventRegister:
     """Hash-chained event log with append-only ACL and replay-derived state."""
     authoritative_domain_adapter = True
-    SCHEMA_VERSION = 2
+    SCHEMA_VERSION = 3
     REGISTER_NAME = "abstract"
 
     def __init__(self, database_path):
@@ -76,7 +77,8 @@ class DurableEventRegister:
                     register_name TEXT NOT NULL,
                     schema_version INTEGER NOT NULL,
                     event_count INTEGER NOT NULL CHECK(event_count>=0),
-                    tail_hash TEXT NOT NULL
+                    tail_hash TEXT NOT NULL,
+                    register_instance_id TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS register_events(
                     commit_sequence INTEGER PRIMARY KEY CHECK(commit_sequence>0),
@@ -119,12 +121,62 @@ class DurableEventRegister:
                     ON native_participant_inbox
                     BEGIN SELECT RAISE(ABORT,'prepared native participant payload is immutable'); END;
             """)
-            row = con.execute("SELECT register_name,schema_version FROM register_meta WHERE singleton_id=1").fetchone()
+            row = con.execute("SELECT * FROM register_meta WHERE singleton_id=1").fetchone()
             if row is None:
-                con.execute("INSERT INTO register_meta VALUES(1,?,?,0,?)",
-                            (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS))
-            elif (row["register_name"], row["schema_version"]) != (self.REGISTER_NAME, self.SCHEMA_VERSION):
-                raise RegisterError("register identity/schema mismatch; explicit migration required")
+                instance_id = uuid.uuid4().hex
+                con.execute(
+                    "INSERT INTO register_meta "
+                    "(singleton_id,register_name,schema_version,event_count,tail_hash,register_instance_id) "
+                    "VALUES(1,?,?,0,?,?)",
+                    (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS, instance_id),
+                )
+            else:
+                if row["register_name"] != self.REGISTER_NAME:
+                    raise RegisterError("register identity/schema mismatch; explicit migration required")
+                columns = {item["name"] for item in con.execute("PRAGMA table_info(register_meta)")}
+                if row["schema_version"] == 2:
+                    # V2 registers did not persist an instance identity. Add one
+                    # once, preserving the existing event count and hash-chain tail.
+                    con.execute("BEGIN IMMEDIATE")
+                    try:
+                        if "register_instance_id" not in columns:
+                            con.execute("ALTER TABLE register_meta ADD COLUMN register_instance_id TEXT")
+                        current = con.execute(
+                            "SELECT register_instance_id FROM register_meta WHERE singleton_id=1"
+                        ).fetchone()
+                        instance_id = current["register_instance_id"]
+                        if not isinstance(instance_id, str) or not instance_id or instance_id != instance_id.strip():
+                            instance_id = uuid.uuid4().hex
+                            con.execute(
+                                "UPDATE register_meta SET register_instance_id=? WHERE singleton_id=1",
+                                (instance_id,),
+                            )
+                        con.execute(
+                            "UPDATE register_meta SET schema_version=? WHERE singleton_id=1",
+                            (self.SCHEMA_VERSION,),
+                        )
+                        con.execute("COMMIT")
+                    except Exception:
+                        con.execute("ROLLBACK")
+                        raise
+                elif row["schema_version"] != self.SCHEMA_VERSION:
+                    raise RegisterError("register identity/schema mismatch; explicit migration required")
+                elif "register_instance_id" not in columns:
+                    raise RegisterError("register instance identity is missing from current schema")
+            row = con.execute("SELECT * FROM register_meta WHERE singleton_id=1").fetchone()
+            self.register_instance_id = required_text(
+                row["register_instance_id"], "register_instance_id"
+            )
+            con.executescript("""
+                CREATE TRIGGER IF NOT EXISTS register_meta_instance_id_immutable
+                    BEFORE UPDATE OF register_instance_id ON register_meta
+                    WHEN OLD.register_instance_id IS NOT NULL
+                         AND NEW.register_instance_id != OLD.register_instance_id
+                    BEGIN SELECT RAISE(ABORT,'register instance identity is immutable'); END;
+                CREATE TRIGGER IF NOT EXISTS register_meta_no_delete
+                    BEFORE DELETE ON register_meta
+                    BEGIN SELECT RAISE(ABORT,'register metadata is immutable'); END;
+            """)
 
     def _connect(self):
         con = sqlite3.connect(self.path, timeout=30, isolation_level=None)
@@ -147,8 +199,12 @@ class DurableEventRegister:
 
     def _load(self, con):
         meta = con.execute("SELECT * FROM register_meta WHERE singleton_id=1").fetchone()
-        if meta is None or meta["register_name"] != self.REGISTER_NAME or meta["schema_version"] != self.SCHEMA_VERSION:
-            raise RegisterError("register metadata is missing or incompatible")
+        if (meta is None or meta["register_name"] != self.REGISTER_NAME
+                or meta["schema_version"] != self.SCHEMA_VERSION
+                or not isinstance(meta["register_instance_id"], str)
+                or not meta["register_instance_id"]
+                or meta["register_instance_id"] != self.register_instance_id):
+            raise RegisterError("register metadata or instance identity is missing, changed or incompatible")
         rows = con.execute("SELECT * FROM register_events ORDER BY commit_sequence").fetchall()
         previous, states, versions, acl = GENESIS, {}, {}, {}
         for sequence, row in enumerate(rows, 1):
