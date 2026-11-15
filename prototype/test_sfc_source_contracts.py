@@ -120,6 +120,20 @@ class SFCSourceContractTests(unittest.TestCase):
         snapshot.validate_against(registry, sector_registry)
         self.assertEqual(snapshot.as_projection_openings()[(ident, 2)], "0")
 
+    def test_opening_snapshot_rejects_unbalanced_mirror_positions(self):
+        ident = identity()
+        mirror = identity(holder="bank-1", holder_sector="CB", issuer="household-1", issuer_sector="H")
+        registry = InstrumentTermsRegistry("terms-v1", (terms(),))
+        sector_registry = sectors()
+        with self.assertRaises(SFCSourceContractError):
+            OpeningStockSnapshot(
+                "open-v1", 2, registry.version, registry.digest,
+                sector_registry.version, sector_registry.digest,
+                (ident, mirror),
+                (OpeningPosition(ident, "10", "CERT-A", "SOURCE-A"),
+                 OpeningPosition(mirror, "9", "CERT-B", "SOURCE-B")),
+            )
+
     def test_opening_snapshot_pins_registry_versions_and_digests(self):
         ident = identity()
         registry = InstrumentTermsRegistry("terms-v1", (terms(),))
