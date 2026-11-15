@@ -21,3 +21,12 @@ The coordinator exposes committed_event_group(txid) only after the six-participa
 ## Integration status
 
 The kernel and adversarial tests are implemented. The coordinator event-group read model is implemented and tested with two native domain stores plus four protocol-conformance participants. The physical, capital, product and financial stores still need native adapters and actual schema mappers into this movement contract. Therefore this is not yet live six-register SFC/GOLD reconciliation. No synthetic or manually supplied movement may be presented as a production ledger posting.
+
+##  Current banking-register integration boundary
+
+The durable `OperatingFinancialRegister` now records and validates bank-created deposit credit, principal repayment, reserve-account openings, interbank reserve settlement and principal-only central-bank refinancing. Its event mappers produce mirrored holder/issuer movements, and the principal-only refinancing lifecycle is covered by dedicated tests.
+
+These capabilities are **not yet wired into** the six-register `CrossRegisterCoordinator` or the persistent `SFCProjectionStore`. In particular, the financial register's durable history is not yet consumed by a production projection adapter that advances bank loan assets, borrower loan liabilities, customer deposits, bank reserve assets, central-bank reserve liabilities and central-bank refinancing claims inside one authoritative multi-period sector projection.
+
+The six-register wage coordinator is a domain-specific workflow; it must not be reused for banking events by fabricating labour, physical, product, capital or legal events. The next integration must define explicit participant semantics for financial-only events, preserve the coordinator's visibility barrier, and make projection append/recovery idempotent against the source event IDs. Until that adapter exists, bank-register stock-flow tests are local accounting controls, not proof of a live six-sector SFC close.
+
