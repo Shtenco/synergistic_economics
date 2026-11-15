@@ -53,8 +53,28 @@ def _hash(value, field):
 
 
 def validate_manifest(manifest):
-    if not isinstance(manifest, dict) or set(manifest) != set(MANIFEST_FIELDS):
-        raise CheckpointError("checkpoint manifest fields do not match the canonical schema")
+    if not isinstance(manifest, dict):
+        raise CheckpointError("checkpoint manifest must be an object")
+    fields = set(manifest)
+    base_fields = set(MANIFEST_FIELDS)
+    declaration_fields = base_fields | {"register_declaration"}
+    completeness_fields = base_fields | {
+        "register_completeness", "register_completeness_digest",
+    }
+    if fields not in (base_fields, declaration_fields, completeness_fields):
+        raise CheckpointError("checkpoint manifest fields do not match a supported canonical schema")
+    if fields == declaration_fields and not isinstance(manifest["register_declaration"], dict):
+        raise CheckpointError("register_declaration extension must be an object")
+    if fields == completeness_fields:
+        entries = manifest["register_completeness"]
+        if not isinstance(entries, list) or len(entries) != 6:
+            raise CheckpointError("register_completeness extension must contain six declarations")
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {
+                "register_name", "attestation_ref", "attestation_digest",
+            }:
+                raise CheckpointError("register_completeness entry is malformed")
+        _hash(manifest["register_completeness_digest"], "register_completeness_digest")
     for field in ("service_id", "mapper_version", "signer_key_id"):
         if not isinstance(manifest[field], str) or not manifest[field] or manifest[field] != manifest[field].strip():
             raise CheckpointError(f"{field} must be trimmed non-empty text")
