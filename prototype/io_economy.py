@@ -421,11 +421,6 @@ class InputOutputEconomy:
             supplier = self.firms[order.supplier_id]
             if supplier.inventory.get(order.asset_type, ZERO) < order.quantity:
                 raise EconomyError("reserved capex goods disappeared before physical delivery")
-            supplier.inventory[order.asset_type] -= order.quantity
-            key = (order.supplier_id, order.asset_type)
-            self.capex_supplier_reservations[key] -= order.quantity
-            if self.capex_supplier_reservations[key] == 0:
-                del self.capex_supplier_reservations[key]
             event_id = f"delivery:{order.order_id}"
             try:
                 self.fixed_asset_ledger.deliver(
@@ -435,6 +430,11 @@ class InputOutputEconomy:
                 )
             except FixedAssetError as exc:
                 raise EconomyError(str(exc)) from exc
+            supplier.inventory[order.asset_type] -= order.quantity
+            key = (order.supplier_id, order.asset_type)
+            self.capex_supplier_reservations[key] -= order.quantity
+            if self.capex_supplier_reservations[key] == 0:
+                del self.capex_supplier_reservations[key]
             capital_formation[order.asset_type] += order.quantity
             self._event(f"p{period}:capex-delivery:{order.order_id}", "capex_physical_delivery", {
                 "order_id": order.order_id, "delivery_event_id": event_id,
