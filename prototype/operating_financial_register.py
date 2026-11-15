@@ -316,9 +316,10 @@ class OperatingFinancialRegister(DurableEventRegister):
         return "financial:write" if event_type in {
             "wage.event_group_committed", "deposit.account_opened",
             "bank.loan_originated", "bank.loan_principal_repaid",
-            "bank.reserve_account_opened", "bank.interbank_payment_settled",
-            "central_bank.refinancing_advanced",
+            "bank.loan_opening_recorded", "bank.reserve_account_opened",
+            "bank.interbank_payment_settled", "central_bank.refinancing_advanced",
             "central_bank.refinancing_principal_repaid",
+            "central_bank.refinancing_opening_recorded",
         } else "financial:admin"
 
     def _validate_postings(self, event):
