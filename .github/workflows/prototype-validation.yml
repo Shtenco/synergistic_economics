@@ -39,6 +39,10 @@ jobs:
         run: python prototype/io_economy.py --scenario compound_shock --periods 12
       - name: Run equal-volume bank-credit allocation experiment
         run: python prototype/bank_credit_real_economy_experiment.py --credit-amount 50000 --periods 12 --output /tmp/bank-credit-real-economy.json
+      - name: Run B8.1 capital cohort lifecycle and SCCE bridge audit
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_scce_capital_cohort_bridge.py
+      - name: Run durable B8.1 capital cohort store audit
+        run: python research/audits/sfc_scce_a2_4_2026-11-11/audit_capital_cohort_store.py
       - name: Run paired SCCE cellular comparison (100 seeds)
         run: python prototype/cellular_coordination.py --monte-carlo 100 --shock none --hops 1 --summary-only
       - name: Run paired SCCE cellular comparison with two-hop local reach (100 seeds)
