@@ -537,6 +537,9 @@ class DurableEventRegister:
                     "aggregate_version":revision+1,"effective_at":envelope["effective_at"],
                     "recorded_at":envelope["recorded_at"],"actor_id":envelope["actor_id"],
                     "authority_ref":envelope["authority_ref"],"payload":dict(envelope["payload"])}
+                for field in ("stock_flow_movements", "no_stock_flow_effect"):
+                    if field in envelope:
+                        candidate[field] = envelope[field]
                 self.reduce_event(states.get(stream),candidate)
                 con.execute("INSERT INTO native_participant_inbox VALUES(?,?,?,?,?,?,?,'PREPARED',NULL)",
                     (txid,stream,native_id,digest,payload_json,revision,token))
