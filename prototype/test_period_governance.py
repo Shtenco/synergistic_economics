@@ -138,6 +138,63 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
             with self.assertRaisesRegex(PeriodGovernanceError, "must preserve its opening state"):
                 governance.close_period(3, 0, ref, manifests[ref][0], "period-controller")
 
+    def test_reopened_generation_publication_requires_and_persists_new_attestations(self):
+        manifests, initial_ref, initial_digest = make_checkpoint_bundle(period=3, generation=0)
+        with tempfile.TemporaryDirectory() as root:
+            governance = self.make_governance(root, manifests)
+            governance.close_period(3, 0, initial_ref, initial_digest, "period-controller")
+            governance.request_reopen(
+                "REOPEN-3", 3, "audited correction", "CORRECTION-EVIDENCE",
+                scope=list(REGISTERS),
+                pre_reopen_checkpoint_ref=initial_ref,
+                pre_reopen_checkpoint_digest=initial_digest,
+            )
+            governance.approve_reopen(
+                "REOPEN-3", "owner-1", "period_owner", "OWNER-APPROVAL",
+            )
+            governance.approve_reopen(
+                "REOPEN-3", "controller-1", "independent_controller",
+                "CONTROLLER-APPROVAL",
+            )
+            source_root = digest({"event_log": "immutable-root"})
+            receipts = []
+            for index, name in enumerate(sorted(REGISTERS)):
+                receipt = {
+                    "register_name": name,
+                    "old_generation": 0,
+                    "new_generation": 1,
+                    "source_event_root": source_root,
+                    "event_count": 1,
+                    "opening_state_hash": digest({"register": name, "opening": 0}),
+                    "closing_state_hash": digest({"register": name, "closing": 1}),
+                    "reconciliation_hash": digest({"register": name, "reconciled": True}),
+                }
+                receipts.append(receipt)
+                governance.record_rebuild(
+                    "REOPEN-3", name, source_root, 1,
+                    receipt["opening_state_hash"], receipt["closing_state_hash"],
+                    receipt["reconciliation_hash"],
+                )
+            global_reconciliation = digest(receipts)
+            new_manifests, new_ref, _ = make_checkpoint_bundle(period=3, generation=1)
+            new_manifest = dict(new_manifests[new_ref][1])
+            new_manifest["event_log_root"] = source_root
+            new_manifest["projection_state_hash"] = global_reconciliation
+            new_digest = digest(new_manifest)
+            new_manifests[new_ref] = (new_digest, new_manifest)
+            manifests.update(new_manifests)
+            self.assertTrue(governance.publish_generation(
+                "REOPEN-3", global_reconciliation, new_ref, new_digest,
+            ))
+            self.assertEqual(governance.active_generation(3), 1)
+            self.assertEqual(
+                {row["register_name"] for row in governance.register_period_attestations(3, 1)},
+                set(REGISTERS),
+            )
+            self.assertFalse(governance.publish_generation(
+                "REOPEN-3", global_reconciliation, new_ref, new_digest,
+            ))
+
     def test_close_retry_rejects_mutated_persisted_attestation_inventory(self):
         manifests, ref, close_digest = make_checkpoint_bundle()
         with tempfile.TemporaryDirectory() as root:
