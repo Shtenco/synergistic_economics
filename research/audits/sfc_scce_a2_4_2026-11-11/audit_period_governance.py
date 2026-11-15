@@ -23,15 +23,18 @@ def _sha(value):
 
 
 def _checkpoint(signer, anchor, sequence, generation, event_root=None, projection_hash=None,
-                period=7, attestation_anchor=None, attestation_refs=None):
-    if attestation_anchor is None or attestation_refs is None:
-        raise ValueError("separate register attestation anchor and reference set are required")
+                period=7, attestation_anchor=None, attestation_refs=None,
+                register_signers=None, attestation_sequence=None):
+    if (attestation_anchor is None or attestation_refs is None
+            or register_signers is None or attestation_sequence is None):
+        raise ValueError("separate per-register signers and attestation anchor are required")
     backup = f"period-{period}-generation-{generation}-backup".encode()
     resolved_event_root = event_root or _sha(f"period-{period}-event-root")
     register_completeness = []
     for name in REGISTERS:
-        attestation = {
-            "service_id": "synergy-period-governance",
+        opening_hash = _sha(f"{name}:opening:{generation}")
+        closing_hash = _sha(f"{name}:closing:{generation}")
+        declaration = {
             "declaration_type": "register_period_completeness",
             "register_name": name,
             "period": period,
@@ -43,13 +46,37 @@ def _checkpoint(signer, anchor, sequence, generation, event_root=None, projectio
             "period_event_count": 100,
             "period_event_root": _sha(f"{name}:{resolved_event_root}:period-events"),
             "activity_status": "ACTIVITY",
-            "opening_state_hash": _sha(f"{name}:opening:{generation}"),
-            "closing_state_hash": _sha(f"{name}:closing:{generation}"),
+            "opening_state_hash": opening_hash,
+            "closing_state_hash": closing_hash,
             "reconciliation_hash": _sha(f"{name}:reconciliation:{generation}"),
         }
+        register_signer = register_signers[name]
+        attestation_manifest = {
+            "manifest_schema_version": 1,
+            "service_id": "synergy-period-governance",
+            "database_schema_version": 4,
+            "mapper_version": "gold2a-register-period-attestation@1",
+            "projection_generation": generation,
+            "commit_sequence": sequence,
+            "event_count": 100,
+            "event_log_root": declaration["period_event_root"],
+            "instrument_opening_hash": opening_hash,
+            "control_opening_hash": _sha(f"{name}:control-opening:{generation}"),
+            "projection_state_hash": closing_hash,
+            "coverage_count": 100,
+            "applied_through_cursor": sequence,
+            "period": period,
+            "period_closed": False,
+            "register_declaration": declaration,
+            "backup_sha256": _sha(f"{name}:{period}:{generation}:attestation"),
+            "checkpoint_sequence": attestation_sequence[0],
+            "created_at_utc": "2026-11-12T10:00:00Z",
+            "signer_key_id": register_signer.key_id,
+        }
         attestation_ref, attestation_digest = publish_checkpoint(
-            attestation, signer, attestation_anchor,
+            attestation_manifest, register_signer, attestation_anchor,
         )
+        attestation_sequence[0] += 1
         attestation_refs.add(attestation_ref)
         register_completeness.append({
             "register_name": name,
@@ -136,7 +163,15 @@ def main():
         attestation_anchor = LocalImmutableAnchor(root / "register-attestations-anchor.sqlite3")
         attestation_refs = set()
         signer = Ed25519Signer.generate("synergy-period-close-key-2026")
-        trust = TrustedKeyRegistry({signer.key_id: signer.public_bytes()})
+        register_signers = {
+            name: Ed25519Signer.generate(f"synergy-period-{name}-attestation-key")
+            for name in REGISTERS
+        }
+        trust = TrustedKeyRegistry({
+            signer.key_id: signer.public_bytes(),
+            **{item.key_id: item.public_bytes() for item in register_signers.values()},
+        })
+        attestation_sequence = [1]
         close_ref, close_digest = _checkpoint(
             signer, anchor, 1, 0, attestation_anchor=attestation_anchor,
             attestation_refs=attestation_refs,
@@ -226,6 +261,7 @@ def main():
             signer, anchor, 4, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
             attestation_anchor=attestation_anchor, attestation_refs=attestation_refs,
+            register_signers=register_signers, attestation_sequence=attestation_sequence,
         )
         _rejects(lambda: governance.publish_generation(
             "reopen-001", global_reconciliation,
@@ -244,6 +280,7 @@ def main():
             signer, anchor, 5, 1, event_root=_sha("wrong-event-root"),
             projection_hash=global_reconciliation,
             attestation_anchor=attestation_anchor, attestation_refs=attestation_refs,
+            register_signers=register_signers, attestation_sequence=attestation_sequence,
         )
         _rejects(lambda: governance.publish_generation(
             "reopen-001", global_reconciliation,
@@ -260,6 +297,7 @@ def main():
             signer, anchor, 6, 1, event_root=root_hash,
             projection_hash=global_reconciliation,
             attestation_anchor=attestation_anchor, attestation_refs=attestation_refs,
+            register_signers=register_signers, attestation_sequence=attestation_sequence,
         )
         assert governance.publish_generation(
             "reopen-001", global_reconciliation,
