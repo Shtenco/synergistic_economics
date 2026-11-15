@@ -387,6 +387,41 @@ class DurableEventRegister:
                 result.append(item)
             return tuple(result)
 
+    def history_with_checkpoint(self, aggregate_id, *, principal_id):
+        """Read verified aggregate history and its global chain tail in one SQLite snapshot."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            _, _, acl, rows = self._load(con)
+            if not self._authorized(acl, principal_id, self.read_permission):
+                raise RegisterError("actor is not authorized to read this register")
+            result = []
+            for source in rows:
+                if source["aggregate_id"] != aggregate_id:
+                    continue
+                item = dict(source)
+                item["payload"] = json.loads(source["payload_json"])
+                prepared = con.execute(
+                    "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                    (source["event_id"],),
+                ).fetchone()
+                if prepared is not None:
+                    if prepared["state"] != "COMMITTED":
+                        raise RegisterError("history event has a non-committed native envelope")
+                    item["native_envelope_json"] = prepared["payload_json"]
+                    item["native_envelope_sha256"] = prepared["payload_digest"]
+                result.append(item)
+            meta = con.execute(
+                "SELECT register_instance_id,event_count,tail_hash FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+            if meta is None:
+                raise RegisterError("register source checkpoint metadata is missing")
+            checkpoint = {
+                "register_instance_id": meta["register_instance_id"],
+                "event_count": meta["event_count"],
+                "tail_hash": meta["tail_hash"],
+            }
+            return tuple(result), checkpoint
+
     def _participant_token(self, txid, operation):
         digest = hashlib.sha256(canonical_json(operation["payload"]).encode("utf-8")).hexdigest()
         body = {"protocol":"synergy-native-register-prepare-v1", "participant":self.name,
