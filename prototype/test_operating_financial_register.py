@@ -112,6 +112,8 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
     def test_source_instance_identity_survives_restart_and_chain_cursor_advances(self):
         initial = self.register.source_checkpoint()
         self.assertEqual(len(initial["register_instance_id"]), 32)
+        self.assertEqual(self.register.chain_hash_at(0), "0" * 64)
+        self.assertEqual(self.register.chain_hash_at(initial["event_count"]), initial["tail_hash"])
         reopened = OperatingFinancialRegister(
             self.register_path,
             sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
@@ -127,6 +129,9 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(advanced["register_instance_id"], initial["register_instance_id"])
         self.assertGreater(advanced["event_count"], initial["event_count"])
         self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
+        self.assertEqual(reopened.chain_hash_at(initial["event_count"]), initial["tail_hash"])
+        with self.assertRaisesRegex(OperatingFinancialRegisterError, "non-negative integer"):
+            reopened.chain_hash_at(True)
 
     def test_legacy_v2_register_metadata_receives_persistent_instance_id(self):
         legacy_path = Path(self.tmp.name) / "legacy-financial.sqlite3"
