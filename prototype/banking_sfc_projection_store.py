@@ -234,8 +234,6 @@ class BankingSFCProjectionStore:
                         raise BankingSFCStoreError("source cursor must advance monotonically")
                     if mapping_version != latest["mapping_version"]:
                         raise BankingSFCStoreError("mapping version changed; explicit rebuild required")
-                    if (source_chain_hash != latest["source_chain_hash"]):
-                        raise BankingSFCStoreError("source chain checkpoint changed; explicit rebuild required")
                     if (instrument_registry_digest != latest["instrument_registry_digest"]
                             or sector_registry_digest != latest["sector_registry_digest"]
                             or opening_snapshot_digest != latest["opening_snapshot_digest"]):
@@ -294,7 +292,7 @@ class BankingSFCProjectionStore:
         digest = hashlib.sha256(encoded.encode("utf-8")).hexdigest()
         with closing(self._connect()) as con:
             row = con.execute(
-                "SELECT s.*,c.applied_through_sequence,c.checkpoint_digest "
+                "SELECT s.*,c.applied_through_sequence,c.source_chain_hash AS checkpoint_source_chain_hash,c.checkpoint_digest "
                 "FROM banking_sfc_snapshots s JOIN banking_sfc_checkpoints c USING(snapshot_id) "
                 "WHERE s.source_register_id=? AND s.source_sequence=?",
                 (source_register_id, source_sequence)
@@ -309,7 +307,8 @@ class BankingSFCProjectionStore:
                 row["source_digest"], row["mapping_version"], row["source_chain_hash"], row["instrument_registry_digest"],
                 row["sector_registry_digest"], row["opening_snapshot_digest"], row["projection_digest"]
             )
-            if stored_meta != expected_meta or row["applied_through_sequence"] != source_sequence:
+            if (stored_meta != expected_meta or row["applied_through_sequence"] != source_sequence
+                    or row["checkpoint_source_chain_hash"] != source_chain_hash):
                 raise BankingSFCStoreError("persisted projection/checkpoint differs from independently rebuilt source")
             if row["projection_json"] != encoded:
                 raise BankingSFCStoreError("persisted projection rows differ from deterministic replay")
