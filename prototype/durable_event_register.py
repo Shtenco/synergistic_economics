@@ -10,6 +10,7 @@ from pathlib import Path
 import hashlib
 import json
 import sqlite3
+import uuid
 from typing import Mapping
 from datetime import datetime, timezone
 
@@ -76,7 +77,8 @@ class DurableEventRegister:
                     register_name TEXT NOT NULL,
                     schema_version INTEGER NOT NULL,
                     event_count INTEGER NOT NULL CHECK(event_count>=0),
-                    tail_hash TEXT NOT NULL
+                    tail_hash TEXT NOT NULL,
+                    register_instance_id TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS register_events(
                     commit_sequence INTEGER PRIMARY KEY CHECK(commit_sequence>0),
@@ -119,12 +121,25 @@ class DurableEventRegister:
                     ON native_participant_inbox
                     BEGIN SELECT RAISE(ABORT,'prepared native participant payload is immutable'); END;
             """)
-            row = con.execute("SELECT register_name,schema_version FROM register_meta WHERE singleton_id=1").fetchone()
+            # Additive migration: old V2 stores receive one durable instance ID.
+            # The ID is persisted in the source database and survives process restarts.
+            columns = {item["name"] for item in con.execute("PRAGMA table_info(register_meta)")}
+            if "register_instance_id" not in columns:
+                con.execute("ALTER TABLE register_meta ADD COLUMN register_instance_id TEXT")
+            row = con.execute("SELECT register_name,schema_version,register_instance_id FROM register_meta WHERE singleton_id=1").fetchone()
             if row is None:
-                con.execute("INSERT INTO register_meta VALUES(1,?,?,0,?)",
-                            (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS))
+                instance_id = uuid.uuid4().hex
+                con.execute(
+                    "INSERT INTO register_meta(singleton_id,register_name,schema_version,event_count,tail_hash,register_instance_id) VALUES(1,?,?,0,?,?)",
+                    (self.REGISTER_NAME, self.SCHEMA_VERSION, GENESIS, instance_id),
+                )
             elif (row["register_name"], row["schema_version"]) != (self.REGISTER_NAME, self.SCHEMA_VERSION):
                 raise RegisterError("register identity/schema mismatch; explicit migration required")
+            elif not row["register_instance_id"]:
+                con.execute(
+                    "UPDATE register_meta SET register_instance_id=? WHERE singleton_id=1",
+                    (uuid.uuid4().hex,),
+                )
 
     def _connect(self):
         con = sqlite3.connect(self.path, timeout=30, isolation_level=None)
@@ -147,7 +162,11 @@ class DurableEventRegister:
 
     def _load(self, con):
         meta = con.execute("SELECT * FROM register_meta WHERE singleton_id=1").fetchone()
-        if meta is None or meta["register_name"] != self.REGISTER_NAME or meta["schema_version"] != self.SCHEMA_VERSION:
+        if (meta is None or meta["register_name"] != self.REGISTER_NAME
+                or meta["schema_version"] != self.SCHEMA_VERSION
+                or not isinstance(meta["register_instance_id"], str)
+                or len(meta["register_instance_id"]) != 32
+                or any(char not in "0123456789abcdef" for char in meta["register_instance_id"])):
             raise RegisterError("register metadata is missing or incompatible")
         rows = con.execute("SELECT * FROM register_events ORDER BY commit_sequence").fetchall()
         previous, states, versions, acl = GENESIS, {}, {}, {}
@@ -545,7 +564,26 @@ class DurableEventRegister:
         except (sqlite3.DatabaseError, ValueError, TypeError, KeyError, AttributeError):
             return False
 
+    def source_checkpoint(self):
+        """Return verified durable source identity and the global event-chain cursor."""
+        with closing(self._connect()) as con:
+            con.execute("BEGIN")
+            self._load(con)
+            row = con.execute(
+                "SELECT register_instance_id,event_count,tail_hash FROM register_meta WHERE singleton_id=1"
+            ).fetchone()
+            if row is None:
+                raise RegisterError("register source checkpoint metadata is missing")
+            return {
+                "register_instance_id": row["register_instance_id"],
+                "event_count": row["event_count"],
+                "tail_hash": row["tail_hash"],
+            }
+
+    @property
+    def register_instance_id(self):
+        return self.source_checkpoint()["register_instance_id"]
+
     @property
     def total_event_count(self):
-        with closing(self._connect()) as con:
-            return con.execute("SELECT event_count FROM register_meta WHERE singleton_id=1").fetchone()[0]
+        return self.source_checkpoint()["event_count"]
