@@ -271,6 +271,9 @@ class OpeningStockSnapshot:
     sector_registry_digest: str
     expected_identities: tuple[SFCIdentity, ...]
     positions: tuple[OpeningPosition, ...]
+    source_register_id: str | None = None
+    source_sequence: int | None = None
+    source_chain_hash: str | None = None
 
     def __post_init__(self) -> None:
         _text(self.version, "opening snapshot version")
@@ -280,6 +283,25 @@ class OpeningStockSnapshot:
             "sector_registry_version", "sector_registry_digest",
         ):
             _text(getattr(self, field), f"opening.{field}")
+        provenance = (
+            self.source_register_id, self.source_sequence, self.source_chain_hash,
+        )
+        if any(value is not None for value in provenance):
+            if any(value is None for value in provenance):
+                raise SFCSourceContractError(
+                    "opening snapshot source checkpoint must include register ID, sequence and chain hash"
+                )
+            _text(self.source_register_id, "opening snapshot source_register_id")
+            if (not isinstance(self.source_sequence, int) or isinstance(self.source_sequence, bool)
+                    or self.source_sequence < 1):
+                raise SFCSourceContractError(
+                    "opening snapshot source_sequence must be a positive integer"
+                )
+            if (not isinstance(self.source_chain_hash, str) or len(self.source_chain_hash) != 64
+                    or any(char not in "0123456789abcdef" for char in self.source_chain_hash)):
+                raise SFCSourceContractError(
+                    "opening snapshot source_chain_hash must be a lowercase SHA-256 digest"
+                )
         if not isinstance(self.expected_identities, tuple) or not self.expected_identities:
             raise SFCSourceContractError("opening snapshot must declare expected identities")
         if not isinstance(self.positions, tuple):
@@ -338,6 +360,13 @@ class OpeningStockSnapshot:
             "instrument_registry_digest": self.instrument_registry_digest,
             "sector_registry_version": self.sector_registry_version,
             "sector_registry_digest": self.sector_registry_digest,
+            "source_checkpoint": (
+                None if self.source_register_id is None else {
+                    "source_register_id": self.source_register_id,
+                    "source_sequence": self.source_sequence,
+                    "source_chain_hash": self.source_chain_hash,
+                }
+            ),
             "rows": rows,
         })
 
