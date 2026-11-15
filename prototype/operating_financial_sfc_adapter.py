@@ -34,6 +34,8 @@ class OperatingFinancialSFCAdapterError(ValueError):
 _OPENING_EVENT_TYPES = frozenset({
     "deposit.account_opened",
     "bank.reserve_account_opened",
+    "bank.loan_opening_recorded",
+    "central_bank.refinancing_opening_recorded",
 })
 _MOVEMENT_EVENT_TYPES = frozenset({
     "wage.event_group_committed",
