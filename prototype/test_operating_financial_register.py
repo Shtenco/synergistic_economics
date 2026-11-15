@@ -335,7 +335,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         register.open_deposit_account(
             event_id="OPEN-LEGACY-BORROWER", entity_id="worker-1", bank_id="bank-1",
-            currency="LCU", account_ref="LEGACY-BORROWER-ACCOUNT", opening_balance="0",
+            currency="LCU", account_ref="LEGACY-BORROWER-ACCOUNT", opening_balance="100",
             evidence_ref="BANK-OPEN-LEGACY-BORROWER", actor_id="financial-root",
             authority_ref="BANK-OPENING", effective_at=T, recorded_at=T,
             expected_revision=0,
@@ -372,7 +372,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         self.assertEqual(register.deposit_balance(
             "worker-1", "LCU", principal_id="financial-root", bank_id="bank-1",
-        )[0], D("0"))
+        )[0], D("100"))
         self.assertEqual(register.bank_reserve_snapshot(
             "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
         )["reserve_balance"], D("50"))
@@ -403,13 +403,19 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         )
         self.assertEqual({row.amount for row in register.loan_opening_positions(
             period_index=4, principal_id="financial-root",
-        )}, {D("50")})
+        )}, {D("60")})
         self.assertEqual({row.amount for row in register.refinancing_opening_positions(
             period_index=4, principal_id="financial-root",
+        )}, {D("60")})
+        self.assertEqual({row.amount for row in register.loan_opening_positions(
+            period_index=5, principal_id="financial-root",
+        )}, {D("50")})
+        self.assertEqual({row.amount for row in register.refinancing_opening_positions(
+            period_index=5, principal_id="financial-root",
         )}, {D("50")})
         self.assertEqual(register.deposit_balance(
             "worker-1", "LCU", principal_id="financial-root", bank_id="bank-1",
-        )[0], D("0"))
+        )[0], D("90"))
         self.assertEqual(register.bank_reserve_snapshot(
             "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
         )["reserve_balance"], D("40"))
