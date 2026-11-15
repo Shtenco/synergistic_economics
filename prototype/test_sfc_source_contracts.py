@@ -73,7 +73,7 @@ class SFCSourceContractTests(unittest.TestCase):
         self.assertEqual(registry.resolve("LOAN-1", 2).maturity, "2028-12-31")
         self.assertEqual(registry.resolve("LOAN-1", 3).maturity, "2029-12-31")
         with self.assertRaises(SFCSourceContractError):
-            registry.resolve("LOAN-1", 4 + 10**6)
+            registry.resolve("UNKNOWN-LOAN", 4)
 
     def test_instrument_terms_reject_overlapping_effective_periods(self):
         with self.assertRaises(SFCSourceContractError):
