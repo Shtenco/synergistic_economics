@@ -51,6 +51,8 @@ def _sum_decimal_exact(values):
 
 
 def _require_account_active(account, period, label):
+    if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+        raise OperatingFinancialRegisterError(f"{label} movement period must be a positive integer")
     opening_period = account.get("opening_period_index", 1)
     if not isinstance(opening_period, int) or isinstance(opening_period, bool) or opening_period < 1:
         raise OperatingFinancialRegisterError(f"{label} opening period is invalid")
