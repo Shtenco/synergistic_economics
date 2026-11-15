@@ -1,6 +1,6 @@
 # Native banking SFC adapter v1 — implementation contract
 
-Status: design contract for the next isolated implementation; not a claim that the adapter exists or that six-sector closure is complete.
+Status: partially implemented native financial projection contract. The financial adapter, historical financial opening exporters, SQLite snapshot/checkpoint persistence and recovery path exist on this branch. This document records the remaining production and cross-register requirements; it does not claim six-sector closure.
 
 ## 1. Purpose and boundary
 
@@ -66,7 +66,7 @@ For each period and currency/valuation basis, the sum of sector financial net le
 
 ## 5. Opening stocks and period replay
 
-The current deposit/reserve opening exporters are limited to the initial period. A complete adapter must provide explicit, evidence-backed opening rows for every instrument identity before its first movement:
+Historical loan/refinancing and deposit/reserve opening exporters now reconstruct period-boundary positions from verified native register history. Loan/refinancing exporters replay originations and prior principal repayments; deposit/reserve exporters replay all prior native transaction movements touching those shared accounts. A complete SFC snapshot must still compose these exports with wage claims/payables and every other supported financial instrument into registry-resolved identities:
 
 - customer deposit asset and issuing-bank deposit liability;
 - bank reserve asset and central-bank reserve liability;
@@ -99,7 +99,8 @@ A register's absence of events is not automatically proof of zero activity. Peri
 
 ## 7. Atomicity, idempotency and recovery
 
-The projection write path must be atomic across:
+The implemented financial-only SQLite projection store atomically persists a deterministic projection snapshot and source checkpoint, pins registry/opening digests, rejects stale or changed-content replay, and supports deterministic rebuild/verification. This is a single-host persistence boundary, not a distributed close protocol. Remaining requirements for the broader system are:
+- bind each composed opening snapshot to the exact durable source-register instance, sequence and chain digest (the current pipeline still accepts caller-supplied `source_register_id`; durable register metadata does not yet expose a verified instance identifier);
 - source-event checkpoint / source-chain cursor;
 - canonical movement coverage;
 - projected positions and T/V/O totals;
@@ -108,7 +109,7 @@ The projection write path must be atomic across:
 
 Use source event identity plus movement identity as unique keys. Replaying the same source history must be idempotent. A changed mapper version requires an explicit rebuild/reprojection path; never silently reinterpret already projected history.
 
-Recovery must re-read and verify the source event chain, re-derive every movement from the immutable envelope using the pinned mapper version, compare persisted rows, rebuild the position state from explicit openings, verify mirror groups and recompute sector flows. Any mismatch fails closed without partially advancing the projection cursor.
+The current financial-only recovery path re-reads and verifies source history, deterministically rebuilds the projection, and compares the persisted checkpoint, registry digests and opening-snapshot digest. The broader exit criteria below still require complete source-instance provenance, composed checkpoint-pinned openings, signed period completeness and native non-financial registers. Any mismatch must fail closed without partially advancing the projection cursor.
 
 SQLite atomicity is a single-host persistence guarantee only; do not describe it as distributed consensus or production-grade multi-node durability.
 
