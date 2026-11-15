@@ -271,9 +271,9 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
             )
         with self.assertRaises(EconomicEntityRegisterError):
             self._event(
-                event_id="RETIRE-UNREGISTERED", event_type="entity.retired",
-                payload={"reason": "no entity", "evidence_ref": "evidence:none"},
-                version=0, actor="admin",
+                event_id="REACTIVATE-ACTIVE", event_type="entity.reactivated",
+                payload={"reason": "not suspended", "evidence_ref": "evidence:invalid-reactivation"},
+                version=1, actor="admin",
             )
 
     def test_external_reference_is_append_only_and_duplicate_safe(self):
