@@ -492,6 +492,19 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             effective_at=T, recorded_at=T, expected_revision=2,
             period_index=4,
         )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "deposit movement precedes account opening period",
+        ):
+            self.register.commit_bank_credit(
+                event_id="LATE-LOAN-RETRO", event_type="bank.loan_originated",
+                loan_id="LATE-LOAN-RETRO", borrower_id="late-entity", bank_id="bank-1",
+                currency="LCU", amount="1.00", period_index=3,
+                evidence_ref="LATE-LOAN-RETRO-EVIDENCE", actor_id="financial-root",
+                authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+                expected_revision=3,
+            )
+        self.assertIsNone(self.register.status("LATE-LOAN-RETRO"))
         self.register.commit_bank_credit(
             event_id="LATE-LOAN-ORIG", event_type="bank.loan_originated",
             loan_id="LATE-LOAN", borrower_id="late-entity", bank_id="bank-1",
@@ -521,6 +534,20 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
             expected_revision=4, period_index=4,
         )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "reserve movement precedes account opening period",
+        ):
+            self.register.commit_central_bank_refinancing(
+                event_id="LATE-REFI-RETRO",
+                event_type="central_bank.refinancing_advanced",
+                facility_id="LATE-FACILITY-RETRO", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="1.00",
+                period_index=3, evidence_ref="LATE-REFI-RETRO-EVIDENCE",
+                actor_id="financial-root", authority_ref="REFI-POLICY",
+                effective_at=T, recorded_at=T, expected_revision=5,
+            )
+        self.assertIsNone(self.register.status("LATE-REFI-RETRO"))
         self.register.commit_central_bank_refinancing(
             event_id="LATE-REFI-ADVANCE",
             event_type="central_bank.refinancing_advanced",
