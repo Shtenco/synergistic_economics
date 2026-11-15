@@ -78,6 +78,8 @@ class CreditPeriodMetrics:
     debt_service_liquidity_coverage: str | None
     household_essential_cash_coverage: str
     household_wage_income_gini: str
+    household_wage_income: dict
+    household_labour_hours: dict
     physical_balance_error: str
     monetary_conservation_error: str
 
@@ -218,7 +220,7 @@ class BankCreditAllocationExperiment:
             ), ZERO)
         household_coverage = household_cash / essential_need if essential_need > 0 else ZERO
 
-        household_income = [h.wage_income for h in model.households.values()]
+        household_income = [h.period_wage_income for h in model.households.values()]
         income_gini = _gini(household_income)
         debt_income = debt_total / borrower_income if borrower_income > 0 else ZERO
         debt_assets = debt_total / assets_total if assets_total > 0 else ZERO
@@ -259,6 +261,8 @@ class BankCreditAllocationExperiment:
             debt_service_liquidity_coverage=None if liquidity is None else str(liquidity),
             household_essential_cash_coverage=str(household_coverage),
             household_wage_income_gini=str(income_gini),
+            household_wage_income={k: str(v.period_wage_income) for k, v in model.households.items()},
+            household_labour_hours={k: str(v.period_labour_hours) for k, v in model.households.items()},
             physical_balance_error=str(physical_error),
             monetary_conservation_error=str(money_error),
         )
