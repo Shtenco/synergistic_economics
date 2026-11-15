@@ -218,6 +218,8 @@ The following are deliberately not claimed as completed:
 - trade credit, maturity schedules, receivables/payables, default and bankruptcy;
 - worker-level employment contracts, household heterogeneity beyond three synthetic agents, and contribution attribution;
 - capital accumulation, depreciation, investment goods demand and capacity expansion;
+
+**Important integration boundary (verified 2026-11-15):** the repository separately contains the B8.1 physical capital-cohort lifecycle (`capital_cohort_bridge.py`) and durable append-only cohort register (`capital_cohort_store.py`), with synthetic SCCE integration/audit scripts under `research/audits/sfc_scce_a2_4_2026-11-11/`. These track physical units, operating/repair/storage states, utilization, service quality, additions, physical losses and retirement. They are **not yet connected** to this IO economy's firm inventories, machinery purchases, bank-credit experiment or `FirmConfig.output_capacity`. The current cohort service bridge also does not by itself provide a complete fixed-asset accounting schedule for acquisition cost, commissioning lag, depreciation, residual value, impairment and disposal proceeds. Therefore the IO model still has no implemented capital formation or capacity-expansion mechanism; the separate SCCE cohort subsystem must not be presented as if it closes that gap.
 - multiple outputs per firm, joint production, by-products and transformation technologies;
 - product quality, geographic transport networks, delivery delays and spoilage;
 - strategic bidding, market power, collusion, entry and exit;
