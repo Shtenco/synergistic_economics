@@ -73,7 +73,7 @@ def labour_fixture(path):
     return labour
 
 
-def build_wage_events(labour):
+def build_wage_events(labour, *, payment_amount="40") (
     delivery = verified_delivery_from_register(
         labour, "ENG-1", "coordinator", verification_ref="SUPERVISOR-VERIFY-1",
     )
@@ -92,7 +92,7 @@ def build_wage_events(labour):
         causation_id="L5", labour_register=labour, principal_id="coordinator",
     )
     payment = journal.pay_wage(
-        event_id="WAGE-PAYMENT-1", claim_id=accrual.claim_id, amount="40",
+        event_id="WAGE-PAYMENT-1", claim_id=accrual.claim_id, amount=payment_amount,
         causation_id=accrual.event_id, evidence_ref="BANK-TRANSFER-1", period_index=2,
     )
     return delivery, contract, journal, (accrual, payment)
@@ -123,9 +123,12 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
         "claim_id": claim_id,
         "events": [event.to_native_payload() for event in events],
     }
+    paid_amount = sum((event.amount for event in events[1:]), D("0"))
+    fully_paid = paid_amount == accrual.amount
     evidence = [
         contract.contract_ref, contract.evidence_ref,
         delivery.delivery_evidence_ref, delivery.verification_ref,
+        *(event.evidence_ref for event in events[1:]),
     ]
     return {
         "physical": {
@@ -166,15 +169,20 @@ def make_operations(delivery, contract, events, *, labour_settled_hours="2"):
         "legal_rights": {
             "stream_id": f"WAGE-RIGHT:{claim_id}", "native_event_id": f"WAGE-RIGHT:{claim_id}",
             "expected_revision": 0,
-            "payload": envelope("right.created_and_extinguished", {
-                "holder_id": delivery.worker_id, "obligor_id": delivery.employer_id,
-                "right_type": "wage_claim", "scope": claim_id, "jurisdiction": "KZ",
-                "legal_instrument_ref": contract.contract_ref, "effective_from": T,
-                "evidence_refs": evidence + [events[-1].evidence_ref],
-                "settlement_event_id": events[-1].event_id,
-                "settlement_evidence_ref": events[-1].evidence_ref,
-                "settled_amount": str(accrual.amount),
-            }, f"WAGE-RIGHT:{claim_id}") | {
+            "payload": envelope(
+                "right.created_and_extinguished" if fully_paid else "right.created",
+                {
+                    "holder_id": delivery.worker_id, "obligor_id": delivery.employer_id,
+                    "right_type": "wage_claim", "scope": claim_id, "jurisdiction": "KZ",
+                    "legal_instrument_ref": contract.contract_ref, "effective_from": T,
+                    "evidence_refs": evidence,
+                    **({
+                        "settlement_event_id": events[-1].event_id,
+                        "settlement_evidence_ref": events[-1].evidence_ref,
+                        "settled_amount": str(paid_amount),
+                    } if fully_paid else {}),
+                }, f"WAGE-RIGHT:{claim_id}",
+            ) | {
                 "no_stock_flow_effect": "legal claim is mirrored in the financial wage receivable/payable positions",
             },
         },
