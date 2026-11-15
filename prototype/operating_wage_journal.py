@@ -463,7 +463,8 @@ def native_financial_operation(events, *, actor_id, authority_ref, effective_at,
         "actor_id": actor_id,
         "authority_ref": authority_ref,
         "idempotency_key": native_id,
-        "payload": {"claim_id": claim_id, "events": payload_events},
+        "payload": {"claim_id": claim_id, "events": payload_events,
+                    "stock_flow_movements": movements},
         "stock_flow_movements": movements,
     }
     return {
