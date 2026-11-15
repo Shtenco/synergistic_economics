@@ -26,15 +26,6 @@ class InstitutionalSectorCodeTests(unittest.TestCase):
             frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
         )
 
-    def test_commercial_bank_and_central_bank_codes_are_not_interchangeable(self):
-        self.assertNotEqual(SECTOR_COMMERCIAL_BANKS, SECTOR_CENTRAL_BANK)
-        self.assertNotEqual(
-            {"commercial_bank": SECTOR_COMMERCIAL_BANKS,
-             "central_bank": SECTOR_CENTRAL_BANK}["commercial_bank"],
-            {"commercial_bank": SECTOR_COMMERCIAL_BANKS,
-             "central_bank": SECTOR_CENTRAL_BANK}["central_bank"],
-        )
-
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
