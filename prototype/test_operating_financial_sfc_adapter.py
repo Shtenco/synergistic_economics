@@ -17,6 +17,7 @@ from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapter,
     OperatingFinancialSFCAdapterError,
 )
+from banking_sfc_projection_store import BankingSFCProjectionStore
 from sfc_source_contracts import (
     EffectiveDatedSectorRegistry,
     InstrumentTerms,
@@ -320,6 +321,43 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             self.assertEqual(result.mapped_source_event_count, 1)
             self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 100)
             self.assertEqual(result.roll_forward[(identities[1], 3)].closing, 100)
+
+            projection_store = BankingSFCProjectionStore(
+                Path(directory) / "banking-sfc-projection.sqlite3"
+            )
+            persisted = OperatingFinancialSFCAdapter.persist_from_register(
+                register,
+                principal_id="financial-root",
+                source_register_id="financial-register-v1",
+                projection_store=projection_store,
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+            )
+            self.assertFalse(persisted["checkpoint"]["replayed"])
+            replayed = OperatingFinancialSFCAdapter.persist_from_register(
+                register,
+                principal_id="financial-root",
+                source_register_id="financial-register-v1",
+                projection_store=projection_store,
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+            )
+            self.assertTrue(replayed["checkpoint"]["replayed"])
+            recovered = OperatingFinancialSFCAdapter.recover_from_register(
+                register,
+                principal_id="financial-root",
+                source_register_id="financial-register-v1",
+                projection_store=projection_store,
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+            )
+            self.assertEqual(
+                recovered["checkpoint"]["projection_digest"],
+                persisted["checkpoint"]["projection_digest"],
+            )
 
     def test_from_register_replays_interbank_and_refinancing_history(self):
         with tempfile.TemporaryDirectory() as directory:
