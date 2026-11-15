@@ -51,6 +51,58 @@ def _identity(position_id, holder, issuer, instrument_id, currency):
     }
 
 
+def bank_credit_stock_flow_movement_specs(event):
+    """Canonical SFC movements for deposit-money loan origination/repayment."""
+    event_id = _text(event.get("event_id"), "event_id")
+    event_type = event.get("event_type")
+    loan_id = _text(event.get("loan_id"), "loan_id")
+    borrower = _text(event.get("borrower_id"), "borrower_id")
+    bank = _text(event.get("bank_id"), "bank_id")
+    currency = _text(event.get("currency"), "currency")
+    amount = _decimal(event.get("amount"), "amount", positive=True)
+    period = event.get("period_index")
+    if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+        raise OperatingFinancialRegisterError("period_index must be a positive integer")
+    if borrower == bank:
+        raise OperatingFinancialRegisterError("bank and borrower must be distinct")
+    if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+        raise OperatingFinancialRegisterError("unsupported bank credit event type")
+    evidence = _text(event.get("evidence_ref"), "evidence_ref")
+    signed = amount if event_type == "bank.loan_originated" else -amount
+    loan = f"LOAN:{loan_id}"
+    deposit = f"DEPOSIT:{borrower}:{currency}"
+    return [
+        {
+            "movement_id": f"{event_id}:BANK-LOAN-ASSET",
+            "identity": _identity(f"{loan}:BANK-ASSET", bank, borrower, loan, currency),
+            "period_index": period, "movement_class": "T", "amount": str(signed),
+            "evidence_ref": evidence, "mirror_group_id": f"{event_id}:LOAN",
+            "mirror_side": "asset_holder", "mirror_policy": "equal",
+        },
+        {
+            "movement_id": f"{event_id}:BORROWER-LOAN-LIABILITY",
+            "identity": _identity(f"{loan}:BORROWER-LIABILITY", borrower, bank, loan, currency),
+            "period_index": period, "movement_class": "T", "amount": str(signed),
+            "evidence_ref": evidence, "mirror_group_id": f"{event_id}:LOAN",
+            "mirror_side": "liability_issuer", "mirror_policy": "equal",
+        },
+        {
+            "movement_id": f"{event_id}:BORROWER-DEPOSIT-ASSET",
+            "identity": _identity(f"{deposit}:ASSET", borrower, bank, deposit, currency),
+            "period_index": period, "movement_class": "T", "amount": str(signed),
+            "evidence_ref": evidence, "mirror_group_id": f"{event_id}:DEPOSIT",
+            "mirror_side": "asset_holder", "mirror_policy": "equal",
+        },
+        {
+            "movement_id": f"{event_id}:BANK-DEPOSIT-LIABILITY",
+            "identity": _identity(f"{deposit}:LIABILITY", bank, borrower, deposit, currency),
+            "period_index": period, "movement_class": "T", "amount": str(signed),
+            "evidence_ref": evidence, "mirror_group_id": f"{event_id}:DEPOSIT",
+            "mirror_side": "liability_issuer", "mirror_policy": "equal",
+        },
+    ]
+
+
 def wage_stock_flow_movement_specs(events):
     """Canonical SFC movements for operating wage accrual and payment events."""
     specs = []
@@ -133,7 +185,8 @@ class OperatingFinancialRegister(DurableEventRegister):
     @staticmethod
     def write_permission(event_type):
         return "financial:write" if event_type in {
-            "wage.event_group_committed", "deposit.account_opened"
+            "wage.event_group_committed", "deposit.account_opened",
+            "bank.loan_originated", "bank.loan_principal_repaid"
         } else "financial:admin"
 
     def _validate_postings(self, event):
@@ -289,6 +342,76 @@ class OperatingFinancialRegister(DurableEventRegister):
     def _deposit_key(entity_id, currency):
         return f"{_text(entity_id, 'deposit entity')}:{_text(currency, 'deposit currency')}"
 
+    def _reduce_bank_credit(self, state, event):
+        payload = event["payload"]
+        event_type = event["event_type"]
+        loan_id = _text(payload.get("loan_id"), "loan_id")
+        borrower = _text(payload.get("borrower_id"), "borrower_id")
+        bank = _text(payload.get("bank_id"), "bank_id")
+        currency = _text(payload.get("currency"), "currency")
+        amount = _decimal(payload.get("amount"), "amount", positive=True)
+        minor_unit = _decimal(payload.get("minor_unit"), "minor_unit", positive=True)
+        period = payload.get("period_index")
+        evidence = _text(payload.get("evidence_ref"), "evidence_ref")
+        if borrower == bank:
+            raise OperatingFinancialRegisterError("bank and borrower must be distinct")
+        if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
+            raise OperatingFinancialRegisterError("minor_unit must be a positive fraction no greater than one")
+        if amount / minor_unit != (amount / minor_unit).to_integral_value():
+            raise OperatingFinancialRegisterError("bank credit amount is not an exact multiple of its minor unit")
+        if not isinstance(period, int) or isinstance(period, bool) or period < 1:
+            raise OperatingFinancialRegisterError("period_index must be a positive integer")
+        for entity in (borrower, bank):
+            if entity not in self.sectors:
+                raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {entity}")
+        key = self._deposit_key(borrower, currency)
+        account = state["deposits"].get(key)
+        if account is None:
+            raise OperatingFinancialRegisterError("borrower requires a durable deposit account before bank credit")
+        if account["bank_id"] != bank:
+            raise OperatingFinancialRegisterError("loan bank differs from borrower's authoritative deposit bank")
+        if account["minor_unit"] != str(minor_unit):
+            raise OperatingFinancialRegisterError("bank credit minor unit differs from deposit account")
+        loan = state["loans"].get(loan_id)
+        if event_type == "bank.loan_originated":
+            if loan is not None:
+                raise OperatingFinancialRegisterError("loan ID already exists")
+            state["deposits"][key]["balance"] = str(D(account["balance"]) + amount)
+            state["loans"][loan_id] = {
+                "loan_id": loan_id, "borrower_id": borrower, "bank_id": bank,
+                "currency": currency, "minor_unit": str(minor_unit),
+                "original_principal": str(amount), "outstanding_principal": str(amount),
+                "last_event_id": event["event_id"], "last_period_index": period,
+                "origination_evidence_ref": evidence, "event_ids": [event["event_id"]],
+            }
+            return state
+        if loan is None:
+            raise OperatingFinancialRegisterError("principal repayment requires an existing durable loan")
+        if (loan["borrower_id"], loan["bank_id"], loan["currency"], loan["minor_unit"]) != (
+            borrower, bank, currency, str(minor_unit)):
+            raise OperatingFinancialRegisterError("repayment identity differs from the original loan")
+        if event["event_id"] in loan["event_ids"]:
+            raise OperatingFinancialRegisterError("duplicate loan event ID")
+        if payload.get("causation_id") != loan["last_event_id"]:
+            raise OperatingFinancialRegisterError("repayment causation must reference the immediately preceding loan event")
+        if period < loan["last_period_index"]:
+            raise OperatingFinancialRegisterError("loan event period cannot move backwards")
+        outstanding = D(loan["outstanding_principal"])
+        if amount > outstanding:
+            raise OperatingFinancialRegisterError("principal repayment exceeds outstanding loan principal")
+        balance = D(account["balance"])
+        if amount > balance:
+            raise OperatingFinancialRegisterError("insufficient deposit balance for principal repayment")
+        remaining = outstanding - amount
+        state["deposits"][key]["balance"] = str(balance - amount)
+        state["loans"][loan_id] = loan | {
+            "outstanding_principal": str(remaining),
+            "last_event_id": event["event_id"], "last_period_index": period,
+            "status": "REPAID" if remaining == 0 else "OUTSTANDING",
+            "event_ids": list(loan["event_ids"]) + [event["event_id"]],
+        }
+        return state
+
     def _reduce_deposit_opening(self, state, event):
         payload = event["payload"]
         entity = _text(payload.get("entity_id"), "deposit entity_id")
@@ -325,12 +448,15 @@ class OperatingFinancialRegister(DurableEventRegister):
     def reduce_event(self, old, event):
         if event["aggregate_id"] != "operating-financial":
             raise OperatingFinancialRegisterError("all operating financial events must use the global financial stream")
-        state = old or {"claims": {}, "deposits": {}}
+        state = old or {"claims": {}, "deposits": {}, "loans": {}}
         state = {"claims": dict(state.get("claims", {})),
-                 "deposits": {key: dict(value) for key, value in state.get("deposits", {}).items()}}
+                 "deposits": {key: dict(value) for key, value in state.get("deposits", {}).items()},
+                 "loans": {key: dict(value) for key, value in state.get("loans", {}).items()}}
         event_type = event["event_type"]
         if event_type == "deposit.account_opened":
             return self._reduce_deposit_opening(state, event)
+        if event_type in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+            return self._reduce_bank_credit(state, event)
         if event_type != "wage.event_group_committed":
             raise OperatingFinancialRegisterError("unsupported operating financial event type")
 
@@ -390,6 +516,11 @@ class OperatingFinancialRegister(DurableEventRegister):
             expected = wage_stock_flow_movement_specs(events)
             if envelope.get("stock_flow_movements") != expected:
                 raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
+        elif envelope["event_type"] in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+            payload = envelope["payload"]
+            expected = bank_credit_stock_flow_movement_specs(payload)
+            if envelope.get("stock_flow_movements") != expected:
+                raise OperatingFinancialRegisterError("bank credit stock-flow movements differ from canonical mapper")
         elif envelope["event_type"] == "deposit.account_opened":
             if envelope.get("stock_flow_movements") is not None:
                 raise OperatingFinancialRegisterError("deposit opening must initialize a stock, not invent a transaction movement")
@@ -457,6 +588,47 @@ class OperatingFinancialRegister(DurableEventRegister):
             ))
         return tuple(positions)
 
+    def commit_bank_credit(self, *, event_id, event_type, loan_id, borrower_id,
+                           bank_id, currency, amount, period_index, evidence_ref,
+                           actor_id, authority_ref, effective_at, recorded_at,
+                           expected_revision, minor_unit="0.01", causation_id=None):
+        if event_type not in {"bank.loan_originated", "bank.loan_principal_repaid"}:
+            raise OperatingFinancialRegisterError("unsupported bank credit event type")
+        event_id = _text(event_id, "event_id")
+        payload = {
+            "loan_id": _text(loan_id, "loan_id"),
+            "borrower_id": _text(borrower_id, "borrower_id"),
+            "bank_id": _text(bank_id, "bank_id"),
+            "currency": _text(currency, "currency"),
+            "amount": str(_decimal(amount, "amount", positive=True)),
+            "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+            "period_index": period_index,
+            "evidence_ref": _text(evidence_ref, "evidence_ref"),
+        }
+        if causation_id is not None:
+            payload["causation_id"] = _text(causation_id, "causation_id")
+        envelope = {
+            "event_type": event_type, "effective_at": effective_at,
+            "recorded_at": recorded_at, "actor_id": actor_id,
+            "authority_ref": authority_ref, "idempotency_key": event_id,
+            "payload": payload,
+            "stock_flow_movements": bank_credit_stock_flow_movement_specs(
+                {"event_id": event_id, **payload, "event_type": event_type}
+            ),
+        }
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision, "payload": envelope,
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def loan_state(self, loan_id, *, principal_id):
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            return None, version
+        return state.get("loans", {}).get(loan_id), version
+
     def claim_state(self, claim_id, *, principal_id):
         state, version = self.state("operating-financial", principal_id=principal_id)
         if state is None:
@@ -473,6 +645,7 @@ class OperatingFinancialRegister(DurableEventRegister):
         return D(account["balance"]), version
 
     def append_event(self, **kwargs):
-        if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened"}:
+        if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened",
+                                        "bank.loan_originated", "bank.loan_principal_repaid"}:
             raise OperatingFinancialRegisterError("operating financial events must commit through the native prepare/commit protocol")
         return super().append_event(**kwargs)
