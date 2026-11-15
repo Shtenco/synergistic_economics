@@ -532,8 +532,12 @@ class BankingSFCPipelineTests(unittest.TestCase):
             register.commit(event_id, token)
 
             wage_instrument_id = f"WAGE:{accrual.claim_id}"
+            wage_terms = replace(
+                instrument(wage_instrument_id, "WAGE"),
+                effective_from_period=1,
+            )
             terms = InstrumentTermsRegistry(
-                "terms-wage-v1", (instrument(wage_instrument_id, "WAGE"),),
+                "terms-wage-v1", (wage_terms,),
             )
             sectors = EffectiveDatedSectorRegistry(
                 "sectors-wage-v1",
