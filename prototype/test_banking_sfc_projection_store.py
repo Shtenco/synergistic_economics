@@ -159,6 +159,23 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
                 opening_snapshot_digest=self.pins["opening_snapshot_digest"],
             )
 
+    def test_idempotent_append_rejects_offline_checkpoint_corruption(self):
+        self.append()
+        # Simulate an offline/file-level edit that bypasses the normal immutable-row trigger.
+        with sqlite3.connect(self.path) as con:
+            con.execute("DROP TRIGGER banking_sfc_checkpoints_no_update")
+            con.execute("UPDATE banking_sfc_checkpoints SET checkpoint_digest='tampered'")
+        with self.assertRaisesRegex(BankingSFCStoreError, "integrity verification failed"):
+            self.append()
+
+    def test_idempotent_append_rejects_missing_checkpoint(self):
+        self.append()
+        with sqlite3.connect(self.path) as con:
+            con.execute("DROP TRIGGER banking_sfc_checkpoints_no_delete")
+            con.execute("DELETE FROM banking_sfc_checkpoints")
+        with self.assertRaisesRegex(BankingSFCStoreError, "no valid matching checkpoint"):
+            self.append()
+
     def test_persisted_rows_are_immutable(self):
         self.append()
         with sqlite3.connect(self.path) as con:
