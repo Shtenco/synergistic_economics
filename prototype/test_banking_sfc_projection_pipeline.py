@@ -9,7 +9,8 @@ from banking_sfc_projection_pipeline import (
 )
 from banking_sfc_projection_store import BankingSFCProjectionStore
 from operating_financial_register import OperatingFinancialRegister
-from test_operating_financial_sfc_adapter import fixture, history_row
+from test_operating_financial_sfc_adapter import fixture, history_row, instrument
+from sfc_source_contracts import EffectiveDatedSectorRegistry, InstrumentTermsRegistry, SectorMembership
 
 
 class FakeFinancialRegister:
@@ -154,6 +155,91 @@ class BankingSFCPipelineTests(unittest.TestCase):
                              store.latest_checkpoint(
                                  "financial:" + register.register_instance_id + ":financial-root"
                              )["source_chain_hash"])
+
+    def test_opening_builder_composes_deposit_reserve_loan_and_refinancing_stocks(self):
+        base_terms, base_sectors, _identities, _fixture_snapshot = fixture()
+        reserve_id = "RESERVE:bank-1:central-bank-1:LCU"
+        refinancing_id = "CBREFI:FACILITY-1"
+        terms = InstrumentTermsRegistry(
+            "terms-banking-v1",
+            base_terms.terms + (
+                instrument(reserve_id, "RESERVE"),
+                instrument(refinancing_id, "CBREFI"),
+            ),
+        )
+        sectors = EffectiveDatedSectorRegistry(
+            base_sectors.version,
+            base_sectors.allowed_sector_codes,
+            base_sectors.memberships + (
+                SectorMembership("central-bank-1", "CBank", 1, None),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={
+                    "household-1": "H", "bank-1": "CB",
+                    "central-bank-1": "CBank",
+                },
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="OPEN-DEPOSIT", entity_id="household-1", bank_id="bank-1",
+                currency="LCU", account_ref="DEPOSIT-ACCOUNT", opening_balance="0",
+                evidence_ref="DEPOSIT-OPEN-EVIDENCE", actor_id="financial-root",
+                authority_ref="BANK-OPENING", effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:00Z", expected_revision=0,
+            )
+            register.open_bank_reserve_account(
+                event_id="OPEN-RESERVE", bank_id="bank-1", central_bank_id="central-bank-1",
+                currency="LCU", account_ref="RESERVE-ACCOUNT", opening_balance="50",
+                evidence_ref="RESERVE-OPEN-EVIDENCE", actor_id="financial-root",
+                authority_ref="CBANK-OPENING", effective_at="2026-11-15T00:00:01Z",
+                recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
+            )
+            register.commit_bank_credit(
+                event_id="LOAN-ORIGINATION", event_type="bank.loan_originated",
+                loan_id="LOAN-1", borrower_id="household-1", bank_id="bank-1",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-LOAN", actor_id="financial-root",
+                authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:02Z",
+                recorded_at="2026-11-15T00:00:02Z", expected_revision=2,
+            )
+            register.commit_central_bank_refinancing(
+                event_id="REFINANCING-ADVANCE",
+                event_type="central_bank.refinancing_advanced",
+                facility_id="FACILITY-1", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="100",
+                period_index=3, evidence_ref="SIGNED-REFINANCING",
+                actor_id="financial-root", authority_ref="CBANK-POLICY",
+                effective_at="2026-11-15T00:00:03Z",
+                recorded_at="2026-11-15T00:00:03Z", expected_revision=3,
+            )
+            snapshots = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[3, 4],
+                instrument_registry=terms, sector_registry=sectors,
+            )
+            self.assertEqual(len(snapshots[0].positions), 8)
+            opening3 = {
+                (row.identity.instrument_id, row.identity.holder_entity_id): row.balance
+                for row in snapshots[0].positions
+            }
+            opening4 = {
+                (row.identity.instrument_id, row.identity.holder_entity_id): row.balance
+                for row in snapshots[1].positions
+            }
+            self.assertEqual(opening3[(reserve_id, "bank-1")], "50")
+            self.assertEqual(opening3[(refinancing_id, "central-bank-1")], "0")
+            self.assertEqual(opening3[("LOAN:LOAN-1", "bank-1")], "0")
+            self.assertEqual(opening4[(reserve_id, "bank-1")], "150")
+            self.assertEqual(opening4[(refinancing_id, "central-bank-1")], "100")
+            self.assertEqual(opening4[("LOAN:LOAN-1", "bank-1")], "100")
+            self.assertEqual(opening4[("DEPOSIT:household-1:bank-1:LCU", "household-1")], "100")
+            self.assertEqual(snapshots[0].source_sequence, 5)
+            self.assertEqual(snapshots[1].source_chain_hash, snapshots[0].source_chain_hash)
 
     def test_opening_builder_fails_if_source_changes_during_export(self):
         terms, sectors, _identities, _fixture_snapshot = fixture()
