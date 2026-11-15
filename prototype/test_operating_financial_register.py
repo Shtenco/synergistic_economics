@@ -888,6 +888,70 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(len({row.evidence_ref for row in reserve_opening_after_repayment}), 1)
         self.assertTrue(register.verify())
 
+    def test_existing_loan_opening_binds_exact_borrower_account_and_principal_bounds(self):
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "source account reference differs from the borrower's durable deposit account",
+        ):
+            self.register.record_existing_bank_loan(
+                event_id="LEGACY-LOAN-WRONG-ACCOUNT", loan_id="LEGACY-LOAN-WRONG-ACCOUNT",
+                borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="80",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="SOME-OTHER-ACCOUNT",
+                contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+                evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("LEGACY-LOAN-WRONG-ACCOUNT"))
+        self.assertEqual(
+            self.register.state("operating-financial", principal_id="financial-root")[1], 2,
+        )
+
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "outstanding principal must be between zero and original principal",
+        ):
+            self.register.record_existing_bank_loan(
+                event_id="LEGACY-LOAN-OVER-ORIGINAL", loan_id="LEGACY-LOAN-OVER-ORIGINAL",
+                borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+                original_principal="100", outstanding_principal="100.01",
+                origination_period_index=0, opening_period_index=3,
+                source_account_ref="WORKER-ACCOUNT-1",
+                contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+                evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+                authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+                expected_revision=2,
+            )
+        self.assertIsNone(self.register.status("LEGACY-LOAN-OVER-ORIGINAL"))
+        self.assertEqual(
+            self.register.state("operating-financial", principal_id="financial-root")[1], 2,
+        )
+
+        self.register.record_existing_bank_loan(
+            event_id="LEGACY-LOAN-VALID", loan_id="LEGACY-LOAN-VALID",
+            borrower_id="worker-1", bank_id="bank-1", currency="LCU",
+            original_principal="100", outstanding_principal="80",
+            origination_period_index=0, opening_period_index=3,
+            source_account_ref="WORKER-ACCOUNT-1",
+            contract_ref="LEGACY-CONTRACT", contract_evidence_ref="CONTRACT-ARCHIVE",
+            evidence_ref="OPENING-CERTIFICATE", actor_id="financial-root",
+            authority_ref="LEGACY-PORTFOLIO-IMPORT", effective_at=T, recorded_at=T,
+            expected_revision=2,
+        )
+        loan, version = self.register.loan_state(
+            "LEGACY-LOAN-VALID", principal_id="financial-root",
+        )
+        self.assertEqual(version, 3)
+        self.assertEqual(loan["outstanding_principal"], "80")
+        self.assertEqual(
+            self.register.deposit_balance(
+                "worker-1", "LCU", principal_id="financial-root",
+            )[0],
+            D("10.00"),
+        )
+
     def test_preexisting_bank_loan_opening_is_a_stock_not_a_deposit_creation_flow(self):
         self.register.record_existing_bank_loan(
             event_id="LEGACY-LOAN-OPENING", loan_id="LEGACY-LOAN-1",
