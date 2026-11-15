@@ -344,6 +344,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
     def test_six_sector_interbank_reserves_and_refinancing_close_without_plugs(self):
         terms = InstrumentTermsRegistry("six-sector-terms-v1", (
             instrument("DEPOSIT:row-entity:bank-1:LCU", "DEPOSIT"),
+            instrument("DEPOSIT:household-1:bank-1:LCU", "DEPOSIT"),
             instrument("DEPOSIT:firm-1:bank-2:LCU", "DEPOSIT"),
             instrument("DEPOSIT:government-1:bank-2:LCU", "DEPOSIT"),
             instrument("LOAN:LOAN-GOV", "LOAN"),
@@ -392,6 +393,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         )
         gov_payload = json.loads(government_loan["payload_json"])
         gov_payload["payload"]["borrower_id"] = "government-1"
+        gov_payload["payload"]["bank_id"] = "bank-2"
         gov_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
             "event_id": "GOV-LOAN-1", "event_type": "bank.loan_originated",
             **gov_payload["payload"],
@@ -423,15 +425,19 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
                 "payload_sha256": f"sha-{event_id}",
             }
 
+        household_loan = self.loan_event(
+            "HOUSEHOLD-LOAN-1", "bank.loan_originated", "15", 3, 2
+        )
         rows = [
             government_loan,
             row_loan,
+            household_loan,
             native_row("INTERBANK-1", "bank.interbank_payment_settled",
                        interbank_payload,
-                       interbank_payment_stock_flow_movement_specs(interbank_event), 3),
+                       interbank_payment_stock_flow_movement_specs(interbank_event), 4),
             native_row("REFINANCING-1", "central_bank.refinancing_advanced",
                        refinancing_payload,
-                       central_bank_refinancing_movement_specs(refinancing_event), 4),
+                       central_bank_refinancing_movement_specs(refinancing_event), 5),
         ]
 
         from operating_financial_sfc_adapter import _resolve_identity
@@ -489,7 +495,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         )
         self.assertEqual(result.roll_forward[(reserve_1, 3)].closing, 130)
         self.assertEqual(result.roll_forward[(reserve_2, 3)].closing, 20)
-        self.assertEqual(result.mapped_source_event_count, 4)
+        self.assertEqual(result.mapped_source_event_count, 5)
 
     def test_snapshot_period_gap_is_rejected(self):
         terms, sectors, _, first = fixture(3)
