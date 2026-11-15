@@ -37,6 +37,18 @@ class CanonicalSchemaTests(unittest.TestCase):
             validator.validate(dict(sample, effective_at="2026-11-13T10:00:00+03:00"))
         with self.assertRaises(Exception):
             validator.validate(dict(sample, stock_flow_movements=[], no_stock_flow_effect="invalid dual declaration"))
+        opening = dict(
+            sample,
+            register_id="financial",
+            event_type="bank.loan_opening_recorded",
+            stock_flow_movements=None,
+            no_stock_flow_effect="NO_STOCK_FLOW_EFFECT",
+        )
+        validator.validate(opening)
+        missing_attestation = dict(opening)
+        missing_attestation.pop("no_stock_flow_effect")
+        with self.assertRaises(Exception):
+            validator.validate(missing_attestation)
     def test_schema_is_valid_draft_2020_12(self):
         self.assertEqual(self.schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
 
