@@ -61,7 +61,7 @@ def _physical_movement_specs(outflow, inflow):
                 "holder_id": origin, "issuer_id": destination,
             },
             "period_index": 1, "movement_class": "T", "amount": str(-quantity),
-            "evidence_ref": _text(outflow.get("evidence_ref", "TIMESHEET-VERIFIED"), "physical evidence_ref"),
+            "evidence_ref": _text(outflow.get("measurement_method"), "physical measurement_method"),
             "mirror_group_id": flow_id, "mirror_side": "sender", "mirror_policy": "opposite",
         },
         {
@@ -109,9 +109,6 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             raise CoordinatorError("wage accrual must reference its source labour delivery")
         if financial_payload.get("claim_id") != f"{engagement_id}:{delivery_event_id}":
             raise CoordinatorError("wage claim identity does not bind engagement and delivery event")
-        if financial["stock_flow_movements"] if False else False:
-            raise CoordinatorError("unreachable")
-
         labour = _envelope(operations, "labour")
         labour_payload = labour["payload"]
         if labour["event_type"] != "engagement.settled":
