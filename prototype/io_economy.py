@@ -4,7 +4,7 @@ This is a transparent, deterministic research model, not a calibrated forecast.
 Money is Decimal; physical quantities are Decimal; spot markets clear by product.
 """
 from dataclasses import dataclass, field
-from decimal import Decimal as D, ROUND_HALF_UP
+from decimal import Decimal as D, ROUND_DOWN, ROUND_HALF_UP
 from hashlib import sha256
 import argparse
 import json
@@ -21,6 +21,10 @@ def dec(value):
 
 def qty(value):
     return dec(value).quantize(QTY, rounding=ROUND_HALF_UP)
+
+def qty_floor(value):
+    """Round physical quantities down so execution cannot consume unavailable stock."""
+    return dec(value).quantize(QTY, rounding=ROUND_DOWN)
 
 def cash(value):
     return dec(value).quantize(CENT, rounding=ROUND_HALF_UP)
@@ -732,13 +736,16 @@ class InputOutputEconomy:
             wage_per_output = c.labour_per_unit * c.wage_per_labour
             if wage_per_output > 0:
                 possible = min(possible, state.cash / wage_per_output)
-            actual = qty(max(ZERO, possible))
+            # Production must never round above a binding stock, labour or capacity constraint.
+            actual = qty_floor(max(ZERO, possible))
             if actual <= 0:
                 state.production = ZERO
                 continue
             input_value = ZERO
             for product_id, coefficient in c.recipe.items():
-                used = qty(actual * coefficient)
+                # Conservative quantity rounding prevents the inventory clamp from silently
+                # deleting an unaccounted physical shortfall at the last sub-quantum.
+                used = qty_floor(actual * coefficient)
                 state.inventory[product_id] = max(ZERO, state.inventory.get(product_id, ZERO) - used)
                 input_consumption[product_id] += used
                 input_value += used * self.prices[product_id]
@@ -847,7 +854,19 @@ class InputOutputEconomy:
                    + capital_formation[pid] + closing_stock[pid])
             physical_error[pid] = lhs - rhs
             if abs(physical_error[pid]) > D("0.000001"):
-                raise EconomyError(f"physical stock balance failed for {pid}: {physical_error[pid]}")
+                firm_input_flows = {
+                    firm_id: str(qty_floor(state.production * state.config.recipe[pid]))
+                    for firm_id, state in sorted(self.firms.items())
+                    if pid in state.config.recipe and state.production > 0
+                }
+                raise EconomyError(
+                    f"physical stock balance failed for {pid}: {physical_error[pid]}; "
+                    f"opening={opening_stock[pid]}, imports={imports[pid]}, "
+                    f"production={production[pid]}, intermediate={input_consumption[pid]}, "
+                    f"household={household_consumption[pid]}, "
+                    f"capital_formation={capital_formation[pid]}, closing={closing_stock[pid]}, "
+                    f"firm_input_flows={firm_input_flows}"
+                )
         system_cash = self._system_cash()
         cash_error = system_cash - self.initial_cash
         if cash_error != 0:
