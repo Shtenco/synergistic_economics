@@ -378,6 +378,20 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(register.bank_reserve_snapshot(
             "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
         )["reserve_balance"], D("50"))
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "no evidenced opening balance for the requested earlier period",
+        ):
+            register.loan_opening_positions(
+                period_index=2, principal_id="financial-root",
+            )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError,
+            "no evidenced opening balance for the requested earlier period",
+        ):
+            register.refinancing_opening_positions(
+                period_index=2, principal_id="financial-root",
+            )
         self.assertEqual({row.amount for row in register.loan_opening_positions(
             period_index=3, principal_id="financial-root",
         )}, {D("60")})
