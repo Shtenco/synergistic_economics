@@ -38,10 +38,16 @@ Reviewed source: `operating_financial_sfc_adapter.py`, `sfc_source_contracts.py`
    checkpoint. Current reducers store origination principal and outstanding
    principal for post-opening advances, but do not distinguish an independently
    evidenced pre-existing opening principal.
-2. **No signed period-close assembler.** No complete six-register close protocol
-   requires each domain register to attest its period boundary, source sequence,
-   checkpoint, registry versions and either activity or an explicit
-   zero-activity declaration. Absence of events is not evidence of zero activity.
+2. **Signed period-close governance exists but is not production-connected.**
+   `period_governance.py` verifies a signed global close checkpoint containing
+   six independently authorized register attestations, each binding period,
+   generation, source identity/cursor/hash, event count/root, explicit
+   ACTIVITY/ZERO_ACTIVITY status, opening/closing hashes and reconciliation
+   hash. Its tests use in-memory verifier fixtures and permissive authorization
+   callbacks for deterministic contract testing. The six authoritative native
+   source adapters, real signing-key authority, external rollback-resistant
+   sequence store and production attestation publication path are not yet
+   connected end-to-end. Absence of events is not evidence of zero activity.
 3. **No complete capital account.** Financial net lending is transaction-mapped
    for supported financial instruments only. Capital transfers, non-financial
    investment acquisition/disposal, saving, capital-account counterpart flows
