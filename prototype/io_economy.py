@@ -436,6 +436,8 @@ class InputOutputEconomy:
             capital_formation[order.asset_type] += order.quantity
             self._event(f"p{period}:capex-delivery:{order.order_id}", "capex_physical_delivery", {
                 "order_id": order.order_id, "delivery_event_id": event_id,
+                "credit_event_id": order.credit_event_id,
+                "payment_event_id": order.payment_event_id,
                 "supplier_id": order.supplier_id, "buyer_id": order.borrower_id,
                 "asset_type": order.asset_type, "quantity": str(order.quantity),
                 "capital_formation": str(order.quantity),
@@ -761,7 +763,12 @@ class InputOutputEconomy:
                 "labour_hours": str(labour_hours),
                 "wage_by_household": {k: str(v) for k, v in wage_by_household.items()},
                 "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()},
-                "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()}
+                "hired_hours_by_household": {k: str(v) for k, v in labour_allocations[firm_id].items()},
+                "commissioned_capital_capacity": str(self._commissioned_capacity(firm_id, period)),
+                "capital_asset_cohort_ids": [
+                    cohort.cohort_id for cohort in self.fixed_asset_ledger.cohorts.values()
+                    if cohort.owner_id == firm_id and cohort.productive_capacity(period) > 0
+                ],
             })
         self._settle_household_income(period)
         for household_id, household in self.households.items():
