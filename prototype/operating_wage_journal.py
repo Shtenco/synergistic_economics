@@ -390,11 +390,11 @@ class OperatingWageJournal:
             raise OperatingWageError("employer deposit balance is insufficient")
         lines = (
             self._line("wage_payable", "D", amount, accrued.employer_id, accrued.worker_id, claim_id, accrued.currency),
-            self._line("deposit_asset", "C", amount, accrued.employer_id, self.bank_id, f"DEPOSIT:{accrued.employer_id}", accrued.currency),
-            self._line("deposit_liability", "D", amount, self.bank_id, accrued.employer_id, f"DEPOSIT:{accrued.employer_id}", accrued.currency),
+            self._line("deposit_asset", "C", amount, accrued.employer_id, self.bank_id, f"DEPOSIT:{accrued.employer_id}:{self.bank_id}", accrued.currency),
+            self._line("deposit_liability", "D", amount, self.bank_id, accrued.employer_id, f"DEPOSIT:{accrued.employer_id}:{self.bank_id}", accrued.currency),
             self._line("wage_receivable", "C", amount, accrued.worker_id, accrued.employer_id, claim_id, accrued.currency),
-            self._line("deposit_asset", "D", amount, accrued.worker_id, self.bank_id, f"DEPOSIT:{accrued.worker_id}", accrued.currency),
-            self._line("deposit_liability", "C", amount, self.bank_id, accrued.worker_id, f"DEPOSIT:{accrued.worker_id}", accrued.currency),
+            self._line("deposit_asset", "D", amount, accrued.worker_id, self.bank_id, f"DEPOSIT:{accrued.worker_id}:{self.bank_id}", accrued.currency),
+            self._line("deposit_liability", "C", amount, self.bank_id, accrued.worker_id, f"DEPOSIT:{accrued.worker_id}:{self.bank_id}", accrued.currency),
         )
         self._balanced(lines)
         movements = self._claim_movements(event_id, claim_id, accrued.worker_id,
@@ -403,7 +403,7 @@ class OperatingWageJournal:
             movement["period_index"] = period_index
         for entity, delta, side in ((accrued.employer_id, -amount, "employer"),
                                     (accrued.worker_id, amount, "worker")):
-            instrument = f"DEPOSIT:{entity}:{accrued.currency}"
+            instrument = f"DEPOSIT:{entity}:{self.bank_id}:{accrued.currency}"
             asset = self._identity(f"{instrument}:ASSET", entity, self.bank_id, instrument, accrued.currency)
             liability = self._identity(f"{instrument}:LIABILITY", self.bank_id, entity, instrument, accrued.currency)
             movements.extend([
