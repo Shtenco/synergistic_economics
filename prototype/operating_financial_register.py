@@ -382,7 +382,8 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "currency": currency, "minor_unit": str(minor_unit),
                 "original_principal": str(amount), "outstanding_principal": str(amount),
                 "last_event_id": event["event_id"], "last_period_index": period,
-                "origination_evidence_ref": evidence, "event_ids": [event["event_id"]],
+                "origination_evidence_ref": evidence, "status": "OUTSTANDING",
+                "event_ids": [event["event_id"]],
             }
             return state
         if loan is None:
