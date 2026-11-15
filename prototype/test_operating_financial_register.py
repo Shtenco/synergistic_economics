@@ -240,6 +240,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             actor_id="financial-root", authority_ref="POLICY", occurred_at=T,
         )
         operation = self.operation()
+        operation["expected_revision"] = 0
         with self.assertRaisesRegex(OperatingFinancialRegisterError, "missing explicit institutional sector for bank-1"):
             missing_bank.prepare("TX-MISSING-BANK", operation)
 
