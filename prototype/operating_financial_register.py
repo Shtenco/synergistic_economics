@@ -1444,6 +1444,165 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "currency": currency, "reserve_balance": D(account["balance"]),
                 "revision": version}
 
+
+    def wage_opening_positions(self, *, period_index, principal_id):
+        """Reconstruct bilateral wage-claim openings from immutable wage event groups.
+
+        Accruals and settlements in the requested period are excluded from its
+        opening balance. A claim first accrued in the requested period is still
+        emitted with an explicit zero opening on both mirror sides.
+        """
+        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index < 1:
+            raise OperatingFinancialRegisterError("opening period_index must be a positive integer")
+        if not self.verify():
+            raise OperatingFinancialRegisterError("financial source register hash-chain verification failed")
+        history = self.history("operating-financial", principal_id=principal_id)
+        if not history:
+            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+
+        from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
+
+        claims = {}
+        seen_sequences = set()
+        seen_event_ids = set()
+        for row in sorted(history, key=lambda item: item.get("commit_sequence", 0)):
+            sequence = row.get("commit_sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+                raise OperatingFinancialRegisterError("financial history commit_sequence must be positive")
+            if sequence in seen_sequences:
+                raise OperatingFinancialRegisterError("duplicate financial history commit_sequence")
+            seen_sequences.add(sequence)
+            event_id = _text(row.get("event_id"), "history.event_id")
+            if event_id in seen_event_ids:
+                raise OperatingFinancialRegisterError("duplicate event ID in financial source history")
+            seen_event_ids.add(event_id)
+
+            envelope_json = row.get("native_envelope_json")
+            if not isinstance(envelope_json, str):
+                raise OperatingFinancialRegisterError("financial history is missing its immutable native envelope")
+            try:
+                envelope = json.loads(envelope_json)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise OperatingFinancialRegisterError("financial native envelope JSON is invalid") from exc
+            envelope_digest = hashlib.sha256(envelope_json.encode("utf-8")).hexdigest()
+            if envelope_digest != row.get("native_envelope_sha256"):
+                raise OperatingFinancialRegisterError("financial native envelope digest mismatch")
+            if (
+                not isinstance(envelope, Mapping)
+                or envelope.get("event_type") != row.get("event_type")
+                or envelope.get("payload") != row.get("payload")
+                or envelope.get("idempotency_key") != row.get("idempotency_key")
+            ):
+                raise OperatingFinancialRegisterError("financial native envelope differs from committed history")
+            for field in ("effective_at", "recorded_at", "actor_id", "authority_ref"):
+                if envelope.get(field) != row.get(field):
+                    raise OperatingFinancialRegisterError(
+                        f"financial native envelope {field} differs from event-chain metadata"
+                    )
+            if row.get("event_type") != "wage.event_group_committed":
+                continue
+
+            payload = row.get("payload")
+            if not isinstance(payload, Mapping):
+                raise OperatingFinancialRegisterError("wage history payload must be a mapping")
+            events = payload.get("events")
+            if not isinstance(events, list) or not events:
+                raise OperatingFinancialRegisterError("wage history group must contain a non-empty event list")
+            expected_movements = wage_stock_flow_movement_specs(events)
+            if envelope.get("stock_flow_movements") != expected_movements:
+                raise OperatingFinancialRegisterError("wage history movements differ from canonical mapper")
+
+            group_claim_id = _text(payload.get("claim_id"), "wage history claim_id")
+            group_event_ids = set()
+            for subevent in events:
+                if not isinstance(subevent, Mapping) or subevent.get("claim_id") != group_claim_id:
+                    raise OperatingFinancialRegisterError("wage history contains malformed or cross-claim subevent")
+                subevent_id = _text(subevent.get("event_id"), "wage subevent event_id")
+                if subevent_id in group_event_ids:
+                    raise OperatingFinancialRegisterError("duplicate wage subevent ID within event group")
+                group_event_ids.add(subevent_id)
+                event_type = subevent.get("event_type")
+                if event_type not in {"wage_accrual", "wage_payment"}:
+                    raise OperatingFinancialRegisterError("unsupported wage history subevent type")
+                event_period = subevent.get("period_index")
+                if not isinstance(event_period, int) or isinstance(event_period, bool) or event_period < 1:
+                    raise OperatingFinancialRegisterError("wage history period must be a positive integer")
+                amount = _decimal(subevent.get("amount"), "wage history amount", positive=True)
+                if event_period > period_index:
+                    continue
+
+                wage_rows = [
+                    movement for movement in expected_movements
+                    if movement.get("movement_id") in {
+                        f"{subevent_id}:WAGE-RECEIVABLE",
+                        f"{subevent_id}:WAGE-PAYABLE",
+                    }
+                ]
+                if len(wage_rows) != 2:
+                    raise OperatingFinancialRegisterError("wage subevent must map to exactly two bilateral claim rows")
+                identities = []
+                for movement in wage_rows:
+                    identity = movement.get("identity")
+                    if not isinstance(identity, Mapping):
+                        raise OperatingFinancialRegisterError("wage movement identity is invalid")
+                    identities.append(PositionIdentity(
+                        identity["register_id"], identity["position_id"], identity["measure"],
+                        identity["unit"], identity["currency"], identity["valuation_basis"],
+                        identity["holder_id"], identity["issuer_id"], identity["instrument_id"],
+                    ))
+                if identities[0].instrument_id != identities[1].instrument_id:
+                    raise OperatingFinancialRegisterError("wage bilateral movement instruments differ")
+                claim = claims.get(group_claim_id)
+                if event_type == "wage_accrual":
+                    if claim is not None:
+                        raise OperatingFinancialRegisterError("duplicate wage accrual in committed source history")
+                    opening = amount if event_period < period_index else D("0")
+                    claims[group_claim_id] = {
+                        "identities": tuple(identities),
+                        "balance": opening,
+                        "proof": [{
+                            "event_id": event_id,
+                            "subevent_id": subevent_id,
+                            "commit_sequence": sequence,
+                            "payload_sha256": row.get("payload_sha256"),
+                            "chain_hash": row.get("chain_hash"),
+                            "native_envelope_sha256": row.get("native_envelope_sha256"),
+                        }],
+                    }
+                else:
+                    if claim is None:
+                        raise OperatingFinancialRegisterError("wage payment precedes its accrual in source history")
+                    if set(claim["identities"]) != set(identities):
+                        raise OperatingFinancialRegisterError("wage payment identity differs from original accrual")
+                    if event_period < period_index:
+                        if amount > claim["balance"]:
+                            raise OperatingFinancialRegisterError("historical wage payment exceeds opening outstanding claim")
+                        claim["balance"] -= amount
+                        claim["proof"].append({
+                            "event_id": event_id,
+                            "subevent_id": subevent_id,
+                            "commit_sequence": sequence,
+                            "payload_sha256": row.get("payload_sha256"),
+                            "chain_hash": row.get("chain_hash"),
+                            "native_envelope_sha256": row.get("native_envelope_sha256"),
+                        })
+
+        result = []
+        for claim_id, claim in sorted(claims.items()):
+            proof = claim["proof"]
+            for field in ("payload_sha256", "chain_hash", "native_envelope_sha256"):
+                for item in proof:
+                    _text(item.get(field), f"wage opening proof {field}")
+            digest = hashlib.sha256(
+                json.dumps(proof, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            evidence = f"financial-opening-v1:wage:{period_index}:{digest}"
+            for identity in claim["identities"]:
+                result.append(OpeningPosition(
+                    identity, period_index, claim["balance"], evidence,
+                ))
+        return tuple(result)
+
     def deposit_opening_positions(self, *, period_index, principal_id):
         """Export deposit openings after replaying all prior deposit-affecting flows."""
         return self._account_opening_positions(
