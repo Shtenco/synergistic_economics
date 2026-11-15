@@ -11,6 +11,7 @@ from canonical_entity_register import (
     CanonicalEconomicEntityRegister,
     Ed25519EntityAuthorityVerifier,
     EconomicEntityRegisterError,
+    CanonicalEconomicEntityResolverAdapter,
     TrustedEntityAuthorityKey,
     entity_event_signing_document,
 )
@@ -37,7 +38,7 @@ class SignedAuthority:
         self.verifier = Ed25519EntityAuthorityVerifier({self.key.key_id: self.key})
 
     def attestation(self, *, event_id, event_type, aggregate_id, effective_at,
-                    recorded_at, actor_id, authority_ref, payload):
+                    recorded_at, actor_id, authority_ref, payload, signed_at=RECORDED):
         document = entity_event_signing_document(
             event_id=event_id, event_type=event_type, aggregate_id=aggregate_id,
             effective_at=effective_at, recorded_at=recorded_at, actor_id=actor_id,
@@ -46,7 +47,7 @@ class SignedAuthority:
         signature = self.private.sign(canonical_json(document).encode("utf-8"))
         return {
             "algorithm": "Ed25519", "key_id": self.key.key_id,
-            "issuer": self.key.issuer, "signed_at": RECORDED,
+            "issuer": self.key.issuer, "signed_at": signed_at,
             "signature": base64.b64encode(signature).decode("ascii"),
             "scope": "synergy.economic.entity-event/v1",
         }
@@ -109,18 +110,19 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
         )
 
     def _event(self, *, event_id, event_type, payload, version, actor="registrar",
-               authority_ref="AUTHORITY:KZ", effective_at=RECORDED):
+               authority_ref="AUTHORITY:KZ", effective_at=RECORDED,
+               recorded_at=RECORDED, signed_at=RECORDED):
         aggregate = "tenant-kz::entity-001"
         unsigned = {"tenant_id": "tenant-kz", "entity_id": "entity-001", **payload}
         attestation = self.authority.attestation(
             event_id=event_id, event_type=event_type, aggregate_id=aggregate,
-            effective_at=effective_at, recorded_at=RECORDED, actor_id=actor,
-            authority_ref=authority_ref, payload=unsigned,
+            effective_at=effective_at, recorded_at=recorded_at, actor_id=actor,
+            authority_ref=authority_ref, payload=unsigned, signed_at=signed_at,
         )
         return self.store.append_entity_event(
             tenant_id="tenant-kz", entity_id="entity-001", event_type=event_type,
             event_id=event_id, idempotency_key=event_id, effective_at=effective_at,
-            recorded_at=RECORDED, actor_id=actor, authority_ref=authority_ref,
+            recorded_at=recorded_at, actor_id=actor, authority_ref=authority_ref,
             authority_attestation=attestation, payload=payload, expected_version=version,
         )
 
@@ -135,6 +137,17 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
         self.assertEqual(len(snapshot["source_digest"]), 64)
         self.assertTrue(snapshot["verified"])
         self.assertEqual(snapshot["status"], "ACTIVE")
+
+
+    def test_metaverse_resolver_adapter_exposes_two_argument_contract(self):
+        self._register()
+        adapter = CanonicalEconomicEntityResolverAdapter(
+            self.store, service_principal_id="auditor"
+        )
+        snapshot = adapter.resolve_entity("tenant-kz", "entity-001")
+        self.assertEqual(snapshot["authority_system"], "synergistic_economics")
+        self.assertEqual(snapshot["entity_id"], "entity-001")
+        self.assertTrue(snapshot["verified"])
 
     def test_sector_changes_are_effective_dated_and_resolvable(self):
         self._register()
@@ -225,14 +238,15 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
             key_id=self.authority.key.key_id, issuer=self.authority.key.issuer,
             tenant_id=self.authority.key.tenant_id, public_key_raw=self.authority.key.public_key_raw,
             valid_from=self.authority.key.valid_from, valid_until=self.authority.key.valid_until,
-            authority_refs=self.authority.key.authority_refs, revoked_at="2026-11-15T08:00:30Z",
+            authority_refs=self.authority.key.authority_refs, revoked_at="2026-11-15T08:02:00Z",
         )
         self.store.authority_verifier = Ed25519EntityAuthorityVerifier({revoked.key_id: revoked})
         with self.assertRaises(EconomicEntityRegisterError):
             self._event(
                 event_id="POST-REVOCATION", event_type="entity.updated",
                 payload={"changes": {"jurisdiction": "KZ-ALMATY"}},
-                version=1,
+                version=1, effective_at="2026-11-15T08:03:00Z",
+                recorded_at="2026-11-15T08:03:00Z", signed_at="2026-11-15T08:03:00Z",
             )
 
     def test_event_idempotency_and_immutable_history(self):
