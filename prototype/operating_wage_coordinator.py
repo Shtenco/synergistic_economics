@@ -63,6 +63,24 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
         accrual = accruals[0]
         if accrual.get("claim_id") != claim_id:
             raise CoordinatorError("financial accrual claim differs from financial stream claim")
+        payment_events = financial_events[1:]
+        if any(not isinstance(item, dict) or item.get("event_type") != "wage_payment"
+               for item in payment_events):
+            raise CoordinatorError("financial wage group may contain only one accrual followed by wage payments")
+        accrual_amount = _decimal(accrual.get("amount"), "wage accrual amount")
+        if accrual_amount <= 0:
+            raise CoordinatorError("wage accrual amount must be positive")
+        paid_amount = D("0")
+        for payment in payment_events:
+            payment_amount = _decimal(payment.get("amount"), "wage payment amount")
+            if payment_amount <= 0:
+                raise CoordinatorError("wage payment amount must be positive")
+            if payment.get("claim_id") != claim_id:
+                raise CoordinatorError("wage payment references a different claim")
+            paid_amount += payment_amount
+        if paid_amount > accrual_amount:
+            raise CoordinatorError("wage payments exceed the original accrual")
+        fully_paid = paid_amount == accrual_amount
         engagement_id = _text(accrual.get("engagement_id"), "engagement_id")
         worker = _text(accrual.get("worker_id"), "worker_id")
         employer = _text(accrual.get("employer_id"), "employer_id")
@@ -130,15 +148,30 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
 
         rights = _envelope(operations, "legal_rights")
         rights_payload = rights["payload"]
+        expected_right_type = "right.created_and_extinguished" if fully_paid else "right.created"
         if (rights["event_type"], rights_payload.get("holder_id"), rights_payload.get("obligor_id"),
             rights_payload.get("right_type"), rights_payload.get("scope"),
             rights_payload.get("legal_instrument_ref")) != (
-            "right.created", worker, employer, "wage_claim", claim_id, accrual.get("contract_ref")):
-            raise CoordinatorError("legal wage claim differs from verified worker, employer or contract")
+            expected_right_type, worker, employer, "wage_claim", claim_id, accrual.get("contract_ref")):
+            raise CoordinatorError("legal wage claim state does not match the wage payment state")
         required_evidence = {
             accrual.get("contract_ref"), accrual.get("contract_evidence_ref"),
             accrual.get("delivery_evidence_ref"), accrual.get("verification_ref"),
         }
+        if fully_paid:
+            last_payment = payment_events[-1]
+            settlement_event_id = _text(rights_payload.get("settlement_event_id"), "settlement_event_id")
+            settlement_evidence_ref = _text(rights_payload.get("settlement_evidence_ref"), "settlement_evidence_ref")
+            settled_amount = _decimal(rights_payload.get("settled_amount"), "settled_amount")
+            if (settlement_event_id != last_payment.get("event_id")
+                    or settlement_evidence_ref != last_payment.get("evidence_ref")
+                    or settled_amount != accrual_amount):
+                raise CoordinatorError("legal extinguishment must reference the final full wage settlement")
+            required_evidence.add(settlement_evidence_ref)
+        elif any(field in rights_payload for field in (
+            "settlement_event_id", "settlement_evidence_ref", "settled_amount"
+        )):
+            raise CoordinatorError("an unpaid or partially paid wage claim cannot be extinguished")
         if not required_evidence.issubset(set(rights_payload.get("evidence_refs", []))):
             raise CoordinatorError("legal wage claim omits one or more source evidence references")
 
