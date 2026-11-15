@@ -1,6 +1,9 @@
 import base64
+import sqlite3
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -152,6 +155,57 @@ class CanonicalEconomicEntityRegisterTests(unittest.TestCase):
         self.assertTrue(snapshot["verified"])
         self.assertEqual(snapshot["status"], "ACTIVE")
 
+
+
+    def test_restart_replays_signed_history_and_preserves_resolver_digest(self):
+        self._register()
+        before = self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+        restarted = CanonicalEconomicEntityRegister(
+            self.path, authority_verifier=self.authority.verifier,
+            tenant_authorizer=self.tenant_authorizer,
+            clock=lambda: datetime(2026, 11, 15, 9, 0, tzinfo=timezone.utc),
+        )
+        after = restarted.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
+        self.assertEqual(after["source_digest"], before["source_digest"])
+        self.assertEqual(after["version"], before["version"])
+        self.assertTrue(restarted.verify())
+
+    def test_concurrent_writers_cannot_commit_the_same_aggregate_version(self):
+        self._register()
+        barrier = threading.Barrier(2)
+
+        def attempt(event_id, jurisdiction):
+            barrier.wait(timeout=5)
+            try:
+                return self._event(
+                    event_id=event_id, event_type="entity.updated",
+                    payload={"changes": {"jurisdiction": jurisdiction}}, version=1,
+                ), None
+            except RegisterError as exc:
+                return None, exc
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = [
+                executor.submit(attempt, "CONCURRENT-A", "KZ-ALMATY"),
+                executor.submit(attempt, "CONCURRENT-B", "KZ-ASTANA"),
+            ]
+            results = [future.result(timeout=15) for future in futures]
+        self.assertEqual(sum(value is True for value, error in results), 1)
+        self.assertEqual(sum(isinstance(error, RegisterError) for value, error in results), 1)
+        state, version = self.store.state("tenant-kz::entity-001", principal_id="auditor")
+        self.assertEqual(version, 2)
+        self.assertIn(state["jurisdiction"], {"KZ-ALMATY", "KZ-ASTANA"})
+
+    def test_hash_chain_tampering_fails_closed(self):
+        self._register()
+        with sqlite3.connect(self.path) as connection:
+            connection.execute("DROP TRIGGER register_events_no_update")
+            connection.execute(
+                "UPDATE register_events SET payload_json='{}' WHERE event_id='ENTITY-REGISTERED'"
+            )
+        self.assertFalse(self.store.verify())
+        with self.assertRaises(RegisterError):
+            self.store.resolve_entity("tenant-kz", "entity-001", principal_id="auditor")
 
     def test_metaverse_resolver_adapter_exposes_two_argument_contract(self):
         self._register()
