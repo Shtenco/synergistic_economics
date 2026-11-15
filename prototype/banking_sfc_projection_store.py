@@ -169,21 +169,56 @@ class BankingSFCProjectionStore:
             con.execute("BEGIN IMMEDIATE")
             try:
                 latest = con.execute(
-                    "SELECT source_sequence,source_digest,mapping_version,projection_digest,"
-                    "instrument_registry_digest,sector_registry_digest,opening_snapshot_digest "
-                    "FROM banking_sfc_snapshots WHERE source_register_id=? "
-                    "ORDER BY source_sequence DESC LIMIT 1", (source_register_id,)
+                    "SELECT s.snapshot_id,s.source_sequence,s.source_digest,s.mapping_version,"
+                    "s.projection_digest,s.instrument_registry_digest,s.sector_registry_digest,"
+                    "s.opening_snapshot_digest,s.projection_json,c.source_register_id AS checkpoint_source_register_id,"
+                    "c.applied_through_sequence,c.projection_digest AS checkpoint_projection_digest,"
+                    "c.checkpoint_digest FROM banking_sfc_snapshots s "
+                    "LEFT JOIN banking_sfc_checkpoints c USING(snapshot_id) "
+                    "WHERE s.source_register_id=? ORDER BY s.source_sequence DESC LIMIT 1",
+                    (source_register_id,)
                 ).fetchone()
                 if latest:
+                    # Never treat a duplicate source cursor as successful until the
+                    # previously committed snapshot and its checkpoint have been
+                    # independently revalidated. SQLite triggers protect normal
+                    # writes, but offline/file-level corruption must fail closed too.
+                    if (latest["checkpoint_source_register_id"] != source_register_id
+                            or latest["applied_through_sequence"] != latest["source_sequence"]
+                            or latest["checkpoint_projection_digest"] != latest["projection_digest"]
+                            or latest["checkpoint_digest"] is None):
+                        raise BankingSFCStoreError("latest projection snapshot has no valid matching checkpoint")
+                    stored_checkpoint_body = {
+                        "store_id": STORE_ID, "schema_version": SCHEMA_VERSION,
+                        "snapshot_id": latest["snapshot_id"],
+                        "source_register_id": source_register_id,
+                        "applied_through_sequence": latest["source_sequence"],
+                        "source_digest": latest["source_digest"],
+                        "mapping_version": latest["mapping_version"],
+                        "instrument_registry_digest": latest["instrument_registry_digest"],
+                        "sector_registry_digest": latest["sector_registry_digest"],
+                        "opening_snapshot_digest": latest["opening_snapshot_digest"],
+                        "projection_digest": latest["projection_digest"],
+                    }
+                    stored_projection_digest = hashlib.sha256(
+                        latest["projection_json"].encode("utf-8")
+                    ).hexdigest()
+                    if (_digest(stored_checkpoint_body) != latest["checkpoint_digest"]
+                            or stored_projection_digest != latest["projection_digest"]):
+                        raise BankingSFCStoreError("latest projection snapshot/checkpoint integrity verification failed")
                     if source_sequence < latest["source_sequence"]:
                         raise BankingSFCStoreError("stale source cursor")
                     if source_sequence == latest["source_sequence"]:
-                        if (source_digest, mapping_version, projection_digest, instrument_registry_digest,
-                            sector_registry_digest, opening_snapshot_digest) == (
-                            latest["source_digest"], latest["mapping_version"], latest["projection_digest"],
-                            latest["instrument_registry_digest"], latest["sector_registry_digest"],
-                            latest["opening_snapshot_digest"]
+                        if (snapshot_id, source_digest, mapping_version, projection_digest,
+                            instrument_registry_digest, sector_registry_digest, opening_snapshot_digest,
+                            projection_json) == (
+                            latest["snapshot_id"], latest["source_digest"], latest["mapping_version"],
+                            latest["projection_digest"], latest["instrument_registry_digest"],
+                            latest["sector_registry_digest"], latest["opening_snapshot_digest"],
+                            latest["projection_json"]
                         ):
+                            if checkpoint_digest != latest["checkpoint_digest"]:
+                                raise BankingSFCStoreError("replayed checkpoint digest differs from stored checkpoint")
                             con.execute("COMMIT")
                             return {"snapshot_id": snapshot_id, "checkpoint_digest": checkpoint_digest,
                                     "projection_digest": projection_digest, "replayed": True}
