@@ -245,6 +245,142 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertEqual(snapshots[0].source_sequence, 5)
             self.assertEqual(snapshots[1].source_chain_hash, snapshots[0].source_chain_hash)
 
+    def test_legacy_loan_and_refinancing_openings_project_without_double_counting_creation(self):
+        base_terms, base_sectors, _identities, _fixture_snapshot = fixture()
+        loan_id = "LOAN:LEGACY-LOAN-1"
+        deposit_id = "DEPOSIT:household-1:bank-1:LCU"
+        reserve_id = "RESERVE:bank-1:central-bank-1:LCU"
+        refi_id = "CBREFI:LEGACY-REFI-1"
+        terms = InstrumentTermsRegistry(
+            "terms-legacy-opening-v1",
+            tuple(replace(term, effective_from_period=1) for term in base_terms.terms)
+            + tuple(replace(instrument(item_id, instrument_class), effective_from_period=1)
+                    for item_id, instrument_class in (
+                        (loan_id, "LOAN"), (deposit_id, "DEPOSIT"),
+                        (reserve_id, "RESERVE"), (refi_id, "CBREFI"),
+                    )),
+        )
+        sectors = EffectiveDatedSectorRegistry(
+            base_sectors.version,
+            base_sectors.allowed_sector_codes,
+            base_sectors.memberships + (
+                SectorMembership("central-bank-1", "CBank", 1, None),
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "legacy-financial.sqlite3",
+                sectors={
+                    "household-1": "H", "bank-1": "CB",
+                    "central-bank-1": "CBank",
+                },
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="LEGACY-DEPOSIT-OPEN", entity_id="household-1",
+                bank_id="bank-1", currency="LCU", account_ref="LEGACY-DEPOSIT",
+                opening_balance="1000", evidence_ref="DEPOSIT-OPEN-EVIDENCE",
+                actor_id="financial-root", authority_ref="BANK-OPENING",
+                effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:00Z", expected_revision=0,
+            )
+            register.open_bank_reserve_account(
+                event_id="LEGACY-RESERVE-OPEN", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU",
+                account_ref="LEGACY-RESERVE", opening_balance="200",
+                evidence_ref="RESERVE-OPEN-EVIDENCE", actor_id="financial-root",
+                authority_ref="CBANK-OPENING", effective_at="2026-11-15T00:00:01Z",
+                recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
+            )
+            register.record_existing_bank_loan(
+                event_id="LEGACY-LOAN-OPENING", loan_id="LEGACY-LOAN-1",
+                borrower_id="household-1", bank_id="bank-1", currency="LCU",
+                original_principal="150", outstanding_principal="100",
+                origination_period_index=0, opening_period_index=1,
+                contract_ref="LEGACY-LOAN-CONTRACT",
+                contract_evidence_ref="SIGNED-LEGACY-LOAN-CONTRACT",
+                evidence_ref="LEGACY-LOAN-OPENING-CERTIFICATE",
+                actor_id="financial-root", authority_ref="LOAN-OPENING-AUTHORITY",
+                effective_at="2026-11-15T00:00:02Z",
+                recorded_at="2026-11-15T00:00:02Z", expected_revision=2,
+            )
+            register.record_existing_refinancing_facility(
+                event_id="LEGACY-REFI-OPENING", facility_id="LEGACY-REFI-1",
+                bank_id="bank-1", central_bank_id="central-bank-1", currency="LCU",
+                original_principal="150", outstanding_principal="100",
+                origination_period_index=0, opening_period_index=1,
+                contract_ref="LEGACY-REFI-CONTRACT",
+                contract_evidence_ref="SIGNED-LEGACY-REFI-CONTRACT",
+                evidence_ref="LEGACY-REFI-OPENING-CERTIFICATE",
+                actor_id="financial-root", authority_ref="REFI-OPENING-AUTHORITY",
+                effective_at="2026-11-15T00:00:03Z",
+                recorded_at="2026-11-15T00:00:03Z", expected_revision=3,
+            )
+            self.assertEqual(
+                register.deposit_balance("household-1", "LCU", principal_id="financial-root")[0],
+                Decimal("1000"),
+            )
+            self.assertEqual(
+                register.reserve_balance("bank-1", "central-bank-1", "LCU", principal_id="financial-root")[0],
+                Decimal("200"),
+            )
+            register.commit_bank_credit(
+                event_id="LEGACY-LOAN-REPAY", event_type="bank.loan_principal_repaid",
+                loan_id="LEGACY-LOAN-1", borrower_id="household-1", bank_id="bank-1",
+                currency="LCU", amount="20", period_index=1,
+                evidence_ref="LEGACY-LOAN-REPAYMENT", causation_id="LEGACY-LOAN-OPENING",
+                actor_id="financial-root", authority_ref="BANK-CREDIT-POLICY",
+                effective_at="2026-11-15T00:00:04Z",
+                recorded_at="2026-11-15T00:00:04Z", expected_revision=4,
+            )
+            register.commit_central_bank_refinancing(
+                event_id="LEGACY-REFI-REPAY",
+                event_type="central_bank.refinancing_principal_repaid",
+                facility_id="LEGACY-REFI-1", bank_id="bank-1",
+                central_bank_id="central-bank-1", currency="LCU", amount="30",
+                period_index=1, evidence_ref="LEGACY-REFI-REPAYMENT",
+                actor_id="financial-root", authority_ref="REFI-POLICY",
+                effective_at="2026-11-15T00:00:05Z",
+                recorded_at="2026-11-15T00:00:05Z", expected_revision=5,
+                causation_id="LEGACY-REFI-OPENING",
+            )
+            snapshots = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[1, 2],
+                instrument_registry=terms, sector_registry=sectors,
+            )
+            self.assertEqual(len(snapshots[0].positions), 8)
+            opening1 = {
+                (item.identity.instrument_id, item.identity.holder_entity_id): Decimal(item.balance)
+                for item in snapshots[0].positions
+            }
+            opening2 = {
+                (item.identity.instrument_id, item.identity.holder_entity_id): Decimal(item.balance)
+                for item in snapshots[1].positions
+            }
+            self.assertEqual(opening1[(loan_id, "bank-1")], Decimal("100"))
+            self.assertEqual(opening1[(refi_id, "central-bank-1")], Decimal("100"))
+            self.assertEqual(opening1[(deposit_id, "household-1")], Decimal("1000"))
+            self.assertEqual(opening1[(reserve_id, "bank-1")], Decimal("200"))
+            self.assertEqual(opening2[(loan_id, "bank-1")], Decimal("80"))
+            self.assertEqual(opening2[(refi_id, "central-bank-1")], Decimal("70"))
+            self.assertEqual(opening2[(deposit_id, "household-1")], Decimal("980"))
+            self.assertEqual(opening2[(reserve_id, "bank-1")], Decimal("170"))
+            store = BankingSFCProjectionStore(Path(directory) / "legacy-projection.sqlite")
+            projection, receipt = project_and_persist(
+                register, principal_id="financial-root", instrument_registry=terms,
+                sector_registry=sectors, opening_snapshots=snapshots, store=store,
+            )
+            recovered, checkpoint = rebuild_and_verify(
+                register, principal_id="financial-root", instrument_registry=terms,
+                sector_registry=sectors, opening_snapshots=snapshots, store=store,
+            )
+            self.assertEqual(projection.source_digest, recovered.source_digest)
+            self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
+            self.assertEqual(projection.excluded_opening_event_count, 4)
+
     def test_opening_builder_includes_unpaid_wage_claim_and_payable_stocks(self):
         claim_id = "ENGAGEMENT-1:DELIVERY-1"
         wage_instrument = f"WAGE:{claim_id}"
