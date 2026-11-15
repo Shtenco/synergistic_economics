@@ -237,6 +237,20 @@ class FixedAssetLedger:
                     for cohort in self.cohorts.values()
                     if cohort.owner_id == owner_id), ZERO)
 
+    def work_in_progress_value(self, owner_id, period):
+        """Paid supplier advances plus delivered assets not yet commissioned."""
+        _text(owner_id, "owner_id")
+        _period(period, "period")
+        total = ZERO
+        for order_id, order in self.orders.items():
+            if order.borrower_id != owner_id:
+                continue
+            delivered = self._delivered[order_id]
+            undelivered = order.quantity - delivered
+            not_yet_commissioned = delivered if period < order.commissioning_period else ZERO
+            total += (undelivered + not_yet_commissioned) * order.unit_cost
+        return total
+
     def physical_reconciliation(self, order_id):
         if order_id not in self.orders:
             raise FixedAssetError("unknown investment order")
