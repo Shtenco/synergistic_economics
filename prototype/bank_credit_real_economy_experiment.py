@@ -222,7 +222,8 @@ class BankCreditAllocationExperiment:
         income_gini = _gini(household_income)
         debt_income = debt_total / borrower_income if borrower_income > 0 else ZERO
         debt_assets = debt_total / assets_total if assets_total > 0 else ZERO
-        expected_money = original_cash + self.credit_amount - total_destroyed
+        credit_created = self.credit_amount if debt else ZERO
+        expected_money = original_cash + credit_created - total_destroyed
         actual_money = model._system_cash()
         money_error = actual_money - expected_money
         physical_error = max(
