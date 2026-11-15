@@ -171,7 +171,7 @@ class DurableEventRegister:
                 CREATE TRIGGER IF NOT EXISTS register_meta_instance_id_immutable
                     BEFORE UPDATE OF register_instance_id ON register_meta
                     WHEN OLD.register_instance_id IS NOT NULL
-                         AND NEW.register_instance_id != OLD.register_instance_id
+                         AND NEW.register_instance_id IS NOT OLD.register_instance_id
                     BEGIN SELECT RAISE(ABORT,'register instance identity is immutable'); END;
                 CREATE TRIGGER IF NOT EXISTS register_meta_no_delete
                     BEFORE DELETE ON register_meta
