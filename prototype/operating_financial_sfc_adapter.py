@@ -261,8 +261,15 @@ class OperatingFinancialSFCAdapter:
                 raise OperatingFinancialSFCAdapterError("immutable native envelope JSON is invalid") from exc
             if not isinstance(envelope, Mapping) or envelope.get("event_type") != row.get("event_type"):
                 raise OperatingFinancialSFCAdapterError("history event type differs from immutable envelope")
-            if "native_envelope_json" in row and envelope.get("payload") != row.get("payload"):
-                raise OperatingFinancialSFCAdapterError("immutable envelope payload differs from committed history payload")
+            if "native_envelope_json" in row:
+                envelope_digest = hashlib.sha256(envelope_json.encode("utf-8")).hexdigest()
+                if envelope_digest != row.get("native_envelope_sha256"):
+                    raise OperatingFinancialSFCAdapterError("immutable native envelope digest mismatch")
+                if envelope.get("payload") != row.get("payload"):
+                    raise OperatingFinancialSFCAdapterError("immutable envelope payload differs from committed history payload")
+                for field in ("event_type", "effective_at", "recorded_at", "actor_id", "authority_ref", "idempotency_key"):
+                    if envelope.get(field) != row.get(field):
+                        raise OperatingFinancialSFCAdapterError(f"immutable envelope {field} differs from event-chain metadata")
             if envelope.get("idempotency_key") != row.get("idempotency_key", native_id):
                 raise OperatingFinancialSFCAdapterError("history event ID differs from immutable idempotency key")
             if row.get("aggregate_id") not in (None, "operating-financial"):
@@ -414,6 +421,7 @@ class OperatingFinancialSFCAdapter:
                 "commit_sequence": row.get("commit_sequence"),
                 "event_id": row.get("event_id"),
                 "payload_sha256": row.get("payload_sha256"),
+                "native_envelope_sha256": row.get("native_envelope_sha256"),
                 "chain_hash": row.get("chain_hash"),
             } for row in ordered_rows],
             sort_keys=True, separators=(",", ":"), ensure_ascii=False,
