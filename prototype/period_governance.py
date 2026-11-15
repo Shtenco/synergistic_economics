@@ -259,6 +259,7 @@ class PeriodGovernance:
         normalized = []
         seen = set()
         signer_keys = {_required(manifest.get("signer_key_id"), "period checkpoint signer_key_id")}
+        source_register_ids = set()
         empty_event_root = hashlib.sha256(_canonical([]).encode("utf-8")).hexdigest()
         for entry in entries:
             if not isinstance(entry, dict) or set(entry) != {
@@ -307,6 +308,11 @@ class PeriodGovernance:
                     f"{name} attestation signing key is not authorized for that native register"
                 )
             source_id = _required(attestation.get("source_register_id"), "source_register_id")
+            if source_id in source_register_ids:
+                raise PeriodGovernanceError(
+                    "each register completeness declaration must identify a distinct source register"
+                )
+            source_register_ids.add(source_id)
             sequence = attestation.get("source_sequence")
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
                 raise PeriodGovernanceError("register source_sequence must be a non-negative integer")
