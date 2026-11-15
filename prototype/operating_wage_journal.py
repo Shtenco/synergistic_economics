@@ -436,3 +436,39 @@ class OperatingWageJournal:
         self.deposits[employer_key] = employer_cash - amount
         self.deposits[worker_key] = self.deposits.get(worker_key, D("0")) + amount
         return event
+
+
+def native_financial_operation(events, *, actor_id, authority_ref, effective_at, recorded_at,
+                               expected_revision=0):
+    """Build one immutable native financial event group from wage journal events."""
+    if not isinstance(events, (tuple, list)) or not events:
+        raise OperatingWageError("at least one wage event is required")
+    for value, field in ((actor_id, "actor_id"), (authority_ref, "authority_ref"),
+                         (effective_at, "effective_at"), (recorded_at, "recorded_at")):
+        _text(value, field)
+    claim_ids = {event.claim_id for event in events}
+    if len(claim_ids) != 1:
+        raise OperatingWageError("one native financial group may contain only one wage claim")
+    if any(not isinstance(event, OperatingEvent) for event in events):
+        raise OperatingWageError("native wage group requires OperatingEvent values")
+    from operating_financial_register import wage_stock_flow_movement_specs
+    payload_events = [event.to_native_payload() for event in events]
+    movements = wage_stock_flow_movement_specs(payload_events)
+    claim_id = next(iter(claim_ids))
+    native_id = f"WAGE-GROUP:{claim_id}:{events[-1].event_id}"
+    envelope = {
+        "event_type": "wage.event_group_committed",
+        "effective_at": effective_at,
+        "recorded_at": recorded_at,
+        "actor_id": actor_id,
+        "authority_ref": authority_ref,
+        "idempotency_key": native_id,
+        "payload": {"claim_id": claim_id, "events": payload_events},
+        "stock_flow_movements": movements,
+    }
+    return {
+        "stream_id": f"wage:{claim_id}",
+        "native_event_id": native_id,
+        "expected_revision": expected_revision,
+        "payload": envelope,
+    }
