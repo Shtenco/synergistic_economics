@@ -579,6 +579,22 @@ class InputOutputEconomyTests(unittest.TestCase):
             )
 
 
+    def test_pro_rata_rounding_residual_never_makes_small_allocations_negative(self):
+        from io_economy import _scale_allocations
+
+        source = {
+            ("firm", f"seller-{index:02d}"): D("0.00000001")
+            for index in range(10)
+        }
+        target = D("0.00000005")
+        scaled = _scale_allocations(source, target)
+
+        self.assertEqual(sum(scaled.values(), D("0")), target)
+        self.assertTrue(all(value >= 0 for value in scaled.values()))
+        self.assertTrue(all(scaled[key] <= source[key] for key in source))
+        self.assertEqual(sum(value > 0 for value in scaled.values()), 5)
+
+
     def test_unsettleable_micro_trade_does_not_transfer_stock_or_seller_cash(self):
         from io_economy import FirmConfig, HouseholdConfig, MarketOrder, Product
 
