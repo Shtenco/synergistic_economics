@@ -68,6 +68,15 @@ class HouseholdIncomePayment:
     period: int
     evidence_ref: str
 
+    def __post_init__(self):
+        try:
+            amount = dec(self.amount)
+        except Exception as exc:
+            raise EconomyError("income payment amount must be a finite positive Decimal") from exc
+        if not amount.is_finite() or amount <= 0:
+            raise EconomyError("income payment amount must be a finite positive Decimal")
+        object.__setattr__(self, "amount", amount)
+
 @dataclass
 class FirmState:
     config: FirmConfig
