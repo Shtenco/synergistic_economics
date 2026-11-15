@@ -10,7 +10,10 @@ from operating_financial_sfc_adapter import (
 )
 from banking_sfc_projection_store import BankingSFCProjectionStore
 from sfc_projection_kernel import SFCIdentity
-from sfc_source_contracts import OpeningPosition, OpeningStockSnapshot
+from sfc_source_contracts import (
+    EffectiveDatedSectorRegistry, InstrumentTermsRegistry,
+    OpeningPosition, OpeningStockSnapshot,
+)
 
 
 def _opening_digest(snapshots):
@@ -54,12 +57,19 @@ def build_opening_snapshots_from_register(
     """
     if getattr(register, "REGISTER_NAME", None) != "financial" or not register.verify():
         raise OperatingFinancialSFCAdapterError("verified native financial register is required")
+    if not isinstance(instrument_registry, InstrumentTermsRegistry):
+        raise OperatingFinancialSFCAdapterError("versioned instrument registry is required")
+    if not isinstance(sector_registry, EffectiveDatedSectorRegistry):
+        raise OperatingFinancialSFCAdapterError("effective-dated sector registry is required")
     if not isinstance(periods, (tuple, list)) or not periods:
         raise OperatingFinancialSFCAdapterError("one or more opening periods are required")
+    if any(not isinstance(value, int) or isinstance(value, bool) or value < 1
+           for value in periods):
+        raise OperatingFinancialSFCAdapterError(
+            "opening periods must be unique, positive and contiguous"
+        )
     ordered_periods = sorted(periods)
-    if (any(not isinstance(value, int) or isinstance(value, bool) or value < 1
-            for value in ordered_periods)
-            or len(set(ordered_periods)) != len(ordered_periods)
+    if (len(set(ordered_periods)) != len(ordered_periods)
             or ordered_periods != list(range(ordered_periods[0], ordered_periods[-1] + 1))):
         raise OperatingFinancialSFCAdapterError(
             "opening periods must be unique, positive and contiguous"
