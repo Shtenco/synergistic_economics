@@ -181,3 +181,10 @@ A subsequent source inspection found that the earlier statement “no durable na
 - `prototype/test_banking_sfc_projection_store.py` and `prototype/test_banking_sfc_projection_pipeline.py`: store rollback/idempotency/recovery and pipeline contract tests.
 
 The remaining integration gap is narrower than this audit originally stated: the native financial register now has a durable projection/checkpoint path. It is still not a six-register period-close assembler, not a bridge into the legacy generic `SFCProjectionStore`, and not a complete capital-account reconciliation. The pipeline is single-host SQLite; its test failpoints cover rollback after snapshot/checkpoint writes, but do not establish process-kill testing at every filesystem boundary or distributed recovery. The current Prototype workflow run observed for the previous audited HEAD was cancelled; no green result is claimed for the latest changes until CI completes on the exact HEAD.
+
+
+## Addendum — period/currency financial net-lending conservation (2026-11-15)
+
+The native adapter now enforces a stronger invariant after mapping transaction assets and liabilities: the sum of sector financial net lending must equal zero **separately for every effective period and currency**. This prevents offsetting errors in different periods or currencies from cancelling in a grand total. The six-sector interbank/refinancing regression test now asserts this per-period/per-currency conservation as well as the aggregate fixture result.
+
+This is a financial-instrument mirror invariant only. It does not replace the full SFC capital-account reconciliation, nor does it establish the completeness of non-financial transactions.
