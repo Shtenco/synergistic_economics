@@ -897,7 +897,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         opening_event = next(row for row in history if row["event_id"] == "LEGACY-LOAN-OPENING")
         native_envelope = json.loads(opening_event["native_envelope_json"])
         self.assertIsNone(native_envelope.get("stock_flow_movements"))
-        self.assertIn("no current-period credit creation", native_envelope["no_stock_flow_effect"])
+        self.assertEqual(native_envelope["no_stock_flow_effect"], "NO_STOCK_FLOW_EFFECT")
         self.register.commit_bank_credit(
             event_id="LEGACY-LOAN-REPAYMENT", event_type="bank.loan_principal_repaid",
             loan_id="LEGACY-LOAN-1", borrower_id="worker-1", bank_id="bank-1",
