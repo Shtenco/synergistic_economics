@@ -1,6 +1,11 @@
 """Adversarial tests for the native banking-to-SFC adapter."""
 import json
+import tempfile
 import unittest
+from pathlib import Path
+
+from operating_financial_register import OperatingFinancialRegister
+from sfc_projection_kernel import SFCIdentity
 
 from operating_financial_register import bank_credit_stock_flow_movement_specs
 from operating_financial_sfc_adapter import (
@@ -222,6 +227,94 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         self.assertEqual(result.roll_forward[(identities[0], 4)].opening, 100)
         self.assertEqual(result.roll_forward[(identities[0], 4)].transactions, -35)
         self.assertEqual(result.roll_forward[(identities[0], 4)].closing, 65)
+
+    def test_from_register_replays_real_durable_financial_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={"household-1": "H", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root",
+                authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="DEPOSIT-OPEN-1",
+                entity_id="household-1",
+                bank_id="bank-1",
+                currency="LCU",
+                account_ref="ACCOUNT-1",
+                opening_balance="0",
+                evidence_ref="DEPOSIT-OPEN-EVIDENCE",
+                actor_id="financial-root",
+                authority_ref="ACCOUNT-OPENING",
+                effective_at="2026-11-15T00:00:01Z",
+                recorded_at="2026-11-15T00:00:01Z",
+                expected_revision=0,
+            )
+            register.commit_bank_credit(
+                event_id="LOAN-ORIG-1",
+                event_type="bank.loan_originated",
+                loan_id="LOAN-1",
+                borrower_id="household-1",
+                bank_id="bank-1",
+                currency="LCU",
+                amount="100",
+                period_index=3,
+                evidence_ref="SIGNED-LOAN-1",
+                actor_id="financial-root",
+                authority_ref="CREDIT-POLICY",
+                effective_at="2026-11-15T00:00:02Z",
+                recorded_at="2026-11-15T00:00:02Z",
+                expected_revision=1,
+            )
+            loan_id = "LOAN:LOAN-1"
+            deposit_id = "DEPOSIT:household-1:bank-1:LCU"
+            terms = InstrumentTermsRegistry("terms-v1", (
+                instrument(loan_id, "LOAN"),
+                instrument(deposit_id, "DEPOSIT"),
+            ))
+            sectors = EffectiveDatedSectorRegistry(
+                "sectors-v1",
+                frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+                (
+                    SectorMembership("household-1", "H", 1, None),
+                    SectorMembership("bank-1", "CB", 1, None),
+                ),
+            )
+            identities = (
+                SFCIdentity(loan_id, "LOAN", "bank-1", "CB", "household-1", "H",
+                            "LCU", "2028-12-31", "LCU:0.01", "NOMINAL"),
+                SFCIdentity(loan_id, "LOAN", "household-1", "H", "bank-1", "CB",
+                            "LCU", "2028-12-31", "LCU:0.01", "NOMINAL"),
+                SFCIdentity(deposit_id, "DEPOSIT", "household-1", "H", "bank-1", "CB",
+                            "LCU", "ON_DEMAND", "LCU:0.01", "NOMINAL"),
+                SFCIdentity(deposit_id, "DEPOSIT", "bank-1", "CB", "household-1", "H",
+                            "LCU", "ON_DEMAND", "LCU:0.01", "NOMINAL"),
+            )
+            snapshot = OpeningStockSnapshot(
+                "opening-v3", 3,
+                terms.version, terms.digest,
+                sectors.version, sectors.digest,
+                identities,
+                tuple(
+                    OpeningPosition(identity, "0", f"CERT-{i}", f"SOURCE-{i}")
+                    for i, identity in enumerate(identities)
+                ),
+            )
+            result = OperatingFinancialSFCAdapter.from_register(
+                register,
+                principal_id="financial-root",
+                instrument_registry=terms,
+                sector_registry=sectors,
+                opening_snapshots=[snapshot],
+            )
+            self.assertEqual(result.source_event_count, 2)
+            self.assertEqual(result.excluded_opening_event_count, 1)
+            self.assertEqual(result.mapped_source_event_count, 1)
+            self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 100)
+            self.assertEqual(result.roll_forward[(identities[1], 3)].closing, 100)
 
     def test_snapshot_period_gap_is_rejected(self):
         terms, sectors, _, first = fixture(3)
