@@ -49,6 +49,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
         self.pins = dict(
             source_register_id="operating-financial:principal-1",
             source_sequence=4,
+            source_chain_hash="a" * 64,
             instrument_registry_digest="instrument-digest-v1",
             sector_registry_digest="sector-digest-v1",
             opening_snapshot_digest="opening-digest-v1",
@@ -64,6 +65,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
             opening_snapshot_digest=args["opening_snapshot_digest"],
             source_register_id=args["source_register_id"],
             source_sequence=args["source_sequence"],
+            source_chain_hash=args["source_chain_hash"],
             **({"fault_at": args["fault_at"]} if "fault_at" in args else {}),
         )
 
@@ -72,6 +74,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
             projection or sample_projection(),
             source_register_id=self.pins["source_register_id"],
             source_sequence=self.pins["source_sequence"],
+            source_chain_hash=self.pins["source_chain_hash"],
             instrument_registry_digest=self.pins["instrument_registry_digest"],
             sector_registry_digest=self.pins["sector_registry_digest"],
             opening_snapshot_digest=self.pins["opening_snapshot_digest"],
@@ -103,6 +106,11 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
         self.assertFalse(advanced["replayed"])
         self.assertEqual(self.store.latest_checkpoint(self.pins["source_register_id"])
                          ["applied_through_sequence"], 6)
+
+    def test_source_chain_tail_change_at_same_cursor_is_rejected(self):
+        self.append()
+        with self.assertRaisesRegex(BankingSFCStoreError, "reused with changed"):
+            self.append(source_chain_hash="b" * 64)
 
     def test_registry_or_opening_drift_is_rejected(self):
         self.append()
@@ -154,6 +162,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
                 sample_projection(),
                 source_register_id=self.pins["source_register_id"],
                 source_sequence=4,
+                source_chain_hash=self.pins["source_chain_hash"],
                 instrument_registry_digest=self.pins["instrument_registry_digest"],
                 sector_registry_digest=" ",
                 opening_snapshot_digest=self.pins["opening_snapshot_digest"],
