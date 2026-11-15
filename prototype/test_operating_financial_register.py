@@ -895,8 +895,9 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             "operating-financial", principal_id="financial-root",
         )
         opening_event = next(row for row in history if row["event_id"] == "LEGACY-LOAN-OPENING")
-        self.assertIsNone(opening_event["payload"].get("stock_flow_movements"))
-        self.assertIn("no current-period credit creation", opening_event["payload"]["no_stock_flow_effect"])
+        native_envelope = json.loads(opening_event["native_envelope_json"])
+        self.assertIsNone(native_envelope.get("stock_flow_movements"))
+        self.assertIn("no current-period credit creation", native_envelope["no_stock_flow_effect"])
         self.register.commit_bank_credit(
             event_id="LEGACY-LOAN-REPAYMENT", event_type="bank.loan_principal_repaid",
             loan_id="LEGACY-LOAN-1", borrower_id="worker-1", bank_id="bank-1",
@@ -946,9 +947,9 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             effective_at=T, recorded_at=T, expected_revision=1,
         )
         self.assertEqual(
-            register.reserve_balance(
+            register.bank_reserve_snapshot(
                 "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
-            )[0],
+            )["reserve_balance"],
             D("200"),
         )
         facility, version = register.refinancing_state(
