@@ -227,12 +227,114 @@ def loan_origination(ledger: DoubleEntryLedger, *, lender_cash: str,
     if len({a.currency for a in (lender_cash_account, lender_receivable_account,
                                   borrower_cash_account, borrower_payable_account)}) != 1:
         raise BalanceError("loan accounts must use one currency; model FX separately")
+    if len(set(account_ids)) != 4:
+        raise BalanceError("loan must use four distinct accounts")
+    if ledger.balance(lender_cash) < amount:
+        raise BalanceError("lender cash balance is insufficient for loan disbursement")
+    lender_entry_id = f"{entry_prefix}-L"
+    borrower_entry_id = f"{entry_prefix}-B"
+    if (not entry_prefix or lender_entry_id in ledger._entry_ids
+            or borrower_entry_id in ledger._entry_ids):
+        raise BalanceError("loan entry IDs must be non-empty, unique and unused")
+    # Preflight both IDs and all account/currency/balance conditions above before
+    # either side is posted. The in-memory ledger is single-threaded.
     ledger.post(JournalEntry(
-        f"{entry_prefix}-L", "Loan disbursement — lender",
+        lender_entry_id, "Loan disbursement — lender",
         (Posting(lender_receivable, debit=amount), Posting(lender_cash, credit=amount))))
     ledger.post(JournalEntry(
-        f"{entry_prefix}-B", "Loan proceeds and liability — borrower",
+        borrower_entry_id, "Loan proceeds and liability — borrower",
         (Posting(borrower_cash, debit=amount), Posting(borrower_payable, credit=amount))))
+
+
+def _bank_credit_accounts(ledger, *, bank_loan_receivable, bank_deposit_liability,
+                          borrower_deposit_asset, borrower_loan_payable):
+    account_ids = (bank_loan_receivable, bank_deposit_liability,
+                   borrower_deposit_asset, borrower_loan_payable)
+    if len(set(account_ids)) != 4:
+        raise BalanceError("bank credit must use four distinct accounts")
+    expected = (
+        (bank_loan_receivable, "asset"),
+        (bank_deposit_liability, "liability"),
+        (borrower_deposit_asset, "asset"),
+        (borrower_loan_payable, "liability"),
+    )
+    for account_id, kind in expected:
+        if account_id not in ledger.accounts or ledger.accounts[account_id].kind != kind:
+            raise BalanceError(f"{account_id} must be an existing {kind} account")
+    bank_asset = ledger.accounts[bank_loan_receivable]
+    bank_liability = ledger.accounts[bank_deposit_liability]
+    borrower_asset = ledger.accounts[borrower_deposit_asset]
+    borrower_liability = ledger.accounts[borrower_loan_payable]
+    if bank_asset.owner != bank_liability.owner:
+        raise BalanceError("bank loan asset and deposit liability must belong to the same bank")
+    if borrower_asset.owner != borrower_liability.owner:
+        raise BalanceError("borrower deposit asset and loan liability must belong to the same borrower")
+    if bank_asset.owner == borrower_asset.owner:
+        raise BalanceError("bank and borrower must be distinct entities")
+    if len({a.currency for a in (bank_asset, bank_liability,
+                                  borrower_asset, borrower_liability)}) != 1:
+        raise BalanceError("bank credit accounts must use one currency; model FX separately")
+    return bank_asset, bank_liability, borrower_asset, borrower_liability
+
+
+def bank_loan_origination(ledger: DoubleEntryLedger, *, bank_loan_receivable: str,
+                          bank_deposit_liability: str, borrower_deposit_asset: str,
+                          borrower_loan_payable: str, amount, entry_id: str):
+    """Create a bank loan and matching deposit money in one balanced journal entry.
+
+    This records the accounting mechanics only. Capital, liquidity, collateral,
+    credit-risk, demand and regulatory limits must be enforced by policy layers.
+    """
+    amount = money(amount)
+    if amount <= 0:
+        raise BalanceError("bank loan principal must be positive")
+    _bank_credit_accounts(
+        ledger, bank_loan_receivable=bank_loan_receivable,
+        bank_deposit_liability=bank_deposit_liability,
+        borrower_deposit_asset=borrower_deposit_asset,
+        borrower_loan_payable=borrower_loan_payable,
+    )
+    ledger.post(JournalEntry(
+        entry_id, "Bank loan origination creates matching deposit",
+        (
+            Posting(bank_loan_receivable, debit=amount),
+            Posting(borrower_deposit_asset, debit=amount),
+            Posting(bank_deposit_liability, credit=amount),
+            Posting(borrower_loan_payable, credit=amount),
+        ),
+    ))
+
+
+def bank_loan_principal_repayment(ledger: DoubleEntryLedger, *, bank_loan_receivable: str,
+                                  bank_deposit_liability: str, borrower_deposit_asset: str,
+                                  borrower_loan_payable: str, amount, entry_id: str):
+    """Repay principal by extinguishing matching deposit and loan positions."""
+    amount = money(amount)
+    if amount <= 0:
+        raise BalanceError("bank loan repayment must be positive")
+    _bank_credit_accounts(
+        ledger, bank_loan_receivable=bank_loan_receivable,
+        bank_deposit_liability=bank_deposit_liability,
+        borrower_deposit_asset=borrower_deposit_asset,
+        borrower_loan_payable=borrower_loan_payable,
+    )
+    if ledger.balance(borrower_deposit_asset) < amount:
+        raise BalanceError("borrower deposit balance is insufficient for principal repayment")
+    if ledger.balance(bank_deposit_liability) < amount:
+        raise BalanceError("bank deposit liability is insufficient for principal repayment")
+    if ledger.balance(bank_loan_receivable) < amount:
+        raise BalanceError("bank loan principal outstanding is insufficient")
+    if ledger.balance(borrower_loan_payable) < amount:
+        raise BalanceError("borrower loan principal outstanding is insufficient")
+    ledger.post(JournalEntry(
+        entry_id, "Bank loan principal repayment extinguishes deposit money",
+        (
+            Posting(bank_deposit_liability, debit=amount),
+            Posting(borrower_loan_payable, debit=amount),
+            Posting(bank_loan_receivable, credit=amount),
+            Posting(borrower_deposit_asset, credit=amount),
+        ),
+    ))
 
 
 def net_worth(assets, liabilities) -> D:
