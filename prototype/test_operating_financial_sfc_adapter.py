@@ -429,7 +429,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             }
 
         household_loan = self.loan_event(
-            "HOUSEHOLD-LOAN-1", "bank.loan_originated", "15", 3, 2
+            "HOUSEHOLD-LOAN-1", "bank.loan_originated", "15", 3, 3
         )
         household_payload = json.loads(household_loan["payload_json"])
         household_payload["payload"]["loan_id"] = "LOAN-HH"
