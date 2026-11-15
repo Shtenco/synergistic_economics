@@ -1220,10 +1220,19 @@ class OperatingFinancialRegister(DurableEventRegister):
         # from any supported subsystem update the same shared deposit/reserve stock.
         position_to_account = {}
         for key, item in positions_by_account.items():
-            for identity in item["identities"]:
-                if identity.position_id in position_to_account:
-                    raise OperatingFinancialRegisterError("duplicate financial account position identity")
-                position_to_account[identity.position_id] = key
+            # The account's native balance is the holder-side asset. The mirrored
+            # issuer-side liability is a separate SFC position, not a second
+            # movement of this same account balance.
+            asset_identities = [
+                identity for identity in item["identities"]
+                if identity.position_id.endswith(":ASSET")
+            ]
+            if len(asset_identities) != 1:
+                raise OperatingFinancialRegisterError("financial account must have exactly one holder-side asset identity")
+            identity = asset_identities[0]
+            if identity.position_id in position_to_account:
+                raise OperatingFinancialRegisterError("duplicate financial account position identity")
+            position_to_account[identity.position_id] = key
 
         seen_sequences = set()
         for row in history:
