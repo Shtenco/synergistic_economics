@@ -16,9 +16,9 @@ from economic_stock_flow_reconciliation import (
 T = "2026-11-15T00:00:00Z"
 
 
-def append_labour(register, event_id, event_type, payload, version):
+def append_labour(register, event_id, event_type, payload, version, aggregate_id="ENG-1"):
     return register.append_event(
-        event_id=event_id, idempotency_key=event_id, aggregate_id="ENG-1",
+        event_id=event_id, idempotency_key=event_id, aggregate_id=aggregate_id,
         event_type=event_type, effective_at=T, recorded_at=T,
         actor_id="coordinator", authority_ref="AUTH:LABOUR",
         payload=payload, expected_version=version,
@@ -96,6 +96,22 @@ class OperatingWageJournalTests(unittest.TestCase):
         )
         with self.assertRaises(OperatingWageError):
             verified_delivery_from_register(self.labour, "ENG-2", "coordinator", verification_ref="V2")
+        append_labour(self.labour, "U1", "engagement.offered", {
+            "person_ref":"worker-2", "activity_id":"employer-1", "period":"P1",
+            "classification":"unpaid_care", "consent_basis":"CARE-AGREEMENT", "planned_hours":"1",
+        }, 0, aggregate_id="ENG-UNPAID")
+        append_labour(self.labour, "U2", "engagement.accepted", {"consent_ref":"CARE-CONSENT","accepted_hours":"1"},
+                      1, aggregate_id="ENG-UNPAID")
+        append_labour(self.labour, "U3", "engagement.scheduled", {"scheduled_hours":"1"},
+                      2, aggregate_id="ENG-UNPAID")
+        append_labour(self.labour, "U4", "engagement.started", {}, 3, aggregate_id="ENG-UNPAID")
+        append_labour(self.labour, "U5", "engagement.delivered", {"delivered_hours":"1","evidence_ref":"CARE-TIMESHEET"},
+                      4, aggregate_id="ENG-UNPAID")
+        append_labour(self.labour, "U6", "engagement.verified", {"verification_ref":"CARE-VERIFY"},
+                      5, aggregate_id="ENG-UNPAID")
+        with self.assertRaisesRegex(OperatingWageError, "cannot enter wage accrual"):
+            verified_delivery_from_register(self.labour, "ENG-UNPAID", "coordinator",
+                                             verification_ref="CARE-VERIFY")
         forged = type(self.delivery)(
             engagement_id=self.delivery.engagement_id, delivery_event_id="FORGED-DELIVERY",
             verification_ref=self.delivery.verification_ref, worker_id=self.delivery.worker_id,
