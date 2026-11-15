@@ -1,9 +1,12 @@
 """Integration tests for source-verified banking SFC persistence/recovery."""
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
-from banking_sfc_projection_pipeline import project_and_persist, rebuild_and_verify
+from banking_sfc_projection_pipeline import (
+    build_opening_snapshots_from_register, project_and_persist, rebuild_and_verify,
+)
 from banking_sfc_projection_store import BankingSFCProjectionStore
 from operating_financial_register import OperatingFinancialRegister
 from test_operating_financial_sfc_adapter import fixture, history_row
@@ -44,8 +47,18 @@ class FakeFinancialRegister:
 
 
 class BankingSFCPipelineTests(unittest.TestCase):
+    @staticmethod
+    def pinned(snapshot, principal_id="auditor"):
+        return replace(
+            snapshot,
+            source_register_id=f"financial:{'a' * 32}:{principal_id}",
+            source_sequence=7,
+            source_chain_hash="b" * 64,
+        )
+
     def test_verified_source_replay_persists_and_recovers_same_checkpoint(self):
         terms, sectors, _identities, snapshot = fixture()
+        snapshot = self.pinned(snapshot)
         payload = {
             "loan_id": "LOAN-1",
             "borrower_id": "household-1",
@@ -75,7 +88,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertEqual(checkpoint["applied_through_sequence"], 7)
 
     def test_real_durable_financial_register_projects_and_recovers_exact_chain_tail(self):
-        terms, sectors, _identities, snapshot = fixture()
+        terms, sectors, _identities, _fixture_snapshot = fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             register_path = root / "financial.sqlite3"
@@ -102,6 +115,15 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:00Z",
                 recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
             )
+            snapshot = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[3],
+                instrument_registry=terms, sector_registry=sectors,
+            )[0]
+            self.assertEqual(snapshot.source_register_id,
+                             f"financial:{register.register_instance_id}:financial-root")
+            self.assertEqual(snapshot.source_sequence, 3)
+            self.assertEqual(snapshot.source_chain_hash, register.source_checkpoint()["tail_hash"])
+            self.assertEqual(len(snapshot.positions), 4)
             store = BankingSFCProjectionStore(root / "projection.sqlite")
             projection, receipt = project_and_persist(
                 register, principal_id="financial-root", instrument_registry=terms,
@@ -120,8 +142,27 @@ class BankingSFCPipelineTests(unittest.TestCase):
                                  "financial:" + register.register_instance_id + ":financial-root"
                              )["source_chain_hash"])
 
+    def test_pipeline_rejects_openings_without_source_checkpoint_provenance(self):
+        terms, sectors, _identities, snapshot = fixture()
+        source = FakeFinancialRegister([
+            history_row("LOAN-ORIG-1", "bank.loan_originated", {
+                "loan_id": "LOAN-1", "borrower_id": "household-1",
+                "bank_id": "bank-1", "currency": "LCU", "amount": "100",
+                "period_index": 3, "evidence_ref": "SIGNED-LOAN-1",
+            }, sequence=7)
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            store = BankingSFCProjectionStore(Path(directory) / "projection.sqlite")
+            with self.assertRaisesRegex(ValueError, "not pinned to the exact verified financial source checkpoint"):
+                project_and_persist(
+                    source, principal_id="auditor", instrument_registry=terms,
+                    sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                )
+            self.assertIsNone(store.latest_checkpoint("financial:" + "a" * 32 + ":auditor"))
+
     def test_caller_cannot_substitute_another_source_register_identity(self):
         terms, sectors, _identities, snapshot = fixture()
+        snapshot = self.pinned(snapshot)
         source = FakeFinancialRegister([
             history_row("LOAN-ORIG-1", "bank.loan_originated", {
                 "loan_id": "LOAN-1", "borrower_id": "household-1",
@@ -182,10 +223,13 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 {"register_instance_id": "a" * 32, "event_count": 8, "tail_hash": "c" * 64},
             )
             source.chain_hash_at = lambda sequence: "d" * 64
+            forked_snapshot = replace(
+                snapshot, source_sequence=8, source_chain_hash="c" * 64,
+            )
             with self.assertRaisesRegex(ValueError, "diverges from the previously sealed checkpoint"):
                 project_and_persist(
                     source, principal_id="auditor", instrument_registry=terms,
-                    sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                    sector_registry=sectors, opening_snapshots=[forked_snapshot], store=store,
                 )
             latest = store.latest_checkpoint("financial:" + "a" * 32 + ":auditor")
             self.assertEqual(latest["applied_through_sequence"], 7)
