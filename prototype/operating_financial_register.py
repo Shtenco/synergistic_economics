@@ -1162,6 +1162,8 @@ class OperatingFinancialRegister(DurableEventRegister):
             raise OperatingFinancialRegisterError("durable financial account is missing its opening source event")
         for key, row in opening_rows.items():
             payload = row.get("payload")
+            if not isinstance(payload, Mapping):
+                raise OperatingFinancialRegisterError("financial account opening payload must be a mapping")
             account = positions_by_account[key]["account"]
             expected_opening = (
                 payload.get("opening_balance") if isinstance(payload, Mapping) else None
