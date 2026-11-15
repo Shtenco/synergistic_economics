@@ -151,6 +151,13 @@ class BankCreditAllocationExperiment:
             self._set_borrower_cash(model, kind, borrower_id, cash_balance + amount)
             debt[(kind, borrower_id)] = amount
             assets[(kind, borrower_id)] = ZERO
+            credit_event_id = f"CREDIT-ORIGINATION:{scenario}:{kind}:{borrower_id}"
+            model._event(f"p1:credit-origination:{scenario}:{kind}:{borrower_id}",
+                         "credit_origination", {
+                "credit_event_id": credit_event_id, "scenario": scenario,
+                "borrower_kind": kind, "borrower_id": borrower_id,
+                "principal": str(amount), "deposit_created": str(amount),
+            })
 
         asset_price_index = ZERO
         if scenario == "asset_purchase":
@@ -292,7 +299,7 @@ class BankCreditAllocationExperiment:
             try:
                 capex_order = model.place_capex_order(
                     order_id="CAPEX-FARM-NORTH-001",
-                    credit_event_id="CREDIT-ORIGINATION-PRODUCTIVE-CAPEX",
+                    credit_event_id="CREDIT-ORIGINATION:productive_capex:firm:farm-north",
                     payment_event_id="CAPEX-PAYMENT-PRODUCTIVE-CAPEX",
                     buyer_id="farm-north", supplier_id="machine-works",
                     asset_type="machinery", quantity=D("1"), unit_cost=D("520"),
@@ -308,7 +315,8 @@ class BankCreditAllocationExperiment:
         destroyed = ZERO
         credit_events = [{
             "event": "credit_origination",
-            "event_id": f"CREDIT-ORIGINATION:{scenario}",
+            "event_ids": [f"CREDIT-ORIGINATION:{scenario}:{kind}:{borrower_id}"
+                          for kind, borrower_id in sorted(debt)],
             "scenario": scenario,
             "principal": str(self.credit_amount if debt else ZERO),
             "borrowers": [list(key) for key in sorted(debt)],
