@@ -180,13 +180,17 @@ def main():
         def verify(ref, digest):
             selected_anchor = attestation_anchor if ref in attestation_refs else anchor
             return _verify_bool(ref, digest, trust, selected_anchor)
+        register_authorizer = lambda name,key_id,declaration: (
+            key_id == register_signers[name].key_id
+            and declaration.get("register_name") == name
+        )
         governance = PeriodGovernance(
             root / "period-governance.sqlite3", verify, "synergy-period-governance",
-            _authorization_verifier,
+            _authorization_verifier, register_authorizer,
         )
         wrong_service = PeriodGovernance(
             root / "wrong-service.sqlite3", verify, "another-ledger",
-            _authorization_verifier,
+            _authorization_verifier, register_authorizer,
         )
         _rejects(lambda: wrong_service.close_period(
             7, 0, close_ref, close_digest, "controller-A"
