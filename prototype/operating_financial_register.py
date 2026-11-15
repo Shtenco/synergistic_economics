@@ -1866,7 +1866,6 @@ class OperatingFinancialRegister(DurableEventRegister):
             "effective_at": effective_at, "recorded_at": recorded_at,
             "actor_id": actor_id, "authority_ref": authority_ref,
             "idempotency_key": event_id, "payload": payload,
-            "stock_flow_movements": None,
             "no_stock_flow_effect": (
                 NO_STOCK_FLOW_EFFECT
             ),
