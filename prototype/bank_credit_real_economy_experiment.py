@@ -21,7 +21,7 @@ class CreditExperimentError(ValueError):
     pass
 
 
-SCENARIOS = ("baseline", "productive", "consumption", "asset_purchase")
+SCENARIOS = ("baseline", "productive", "productive_capex", "consumption", "asset_purchase")
 
 
 def _gini(values):
@@ -80,6 +80,11 @@ class CreditPeriodMetrics:
     household_wage_income_gini: str
     household_wage_income: dict
     household_labour_hours: dict
+    household_unemployment_hours: dict
+    household_income_by_source: dict
+    capital_formation_by_product: dict
+    firm_production_by_firm: dict
+    firm_commissioned_capacity_by_firm: dict
     physical_balance_error: str
     monetary_conservation_error: str
 
@@ -131,6 +136,8 @@ class BankCreditAllocationExperiment:
         borrowers = []
         if scenario == "productive":
             borrowers = [("firm", key) for key in sorted(model.firms)]
+        elif scenario == "productive_capex":
+            borrowers = [("firm", "farm-north")]
         elif scenario in ("consumption", "asset_purchase"):
             borrowers = [("household", key) for key in sorted(model.households)]
         else:
@@ -188,7 +195,9 @@ class BankCreditAllocationExperiment:
         for (kind, borrower_id), principal in debt.items():
             if kind == "firm":
                 state = model.firms[borrower_id]
-                asset_value = state.cash + self._firm_inventory_value(model, state)
+                asset_value = (state.cash + self._firm_inventory_value(model, state)
+                               + model.fixed_asset_ledger.carrying_value(borrower_id, period)
+                               + model.fixed_asset_ledger.work_in_progress_value(borrower_id, period))
                 income = state.sales_revenue
             else:
                 state = model.households[borrower_id]
@@ -263,6 +272,11 @@ class BankCreditAllocationExperiment:
             household_wage_income_gini=str(income_gini),
             household_wage_income={k: str(v.period_wage_income) for k, v in model.households.items()},
             household_labour_hours={k: str(v.period_labour_hours) for k, v in model.households.items()},
+            household_unemployment_hours={k: str(v.period_unemployment_hours) for k, v in model.households.items()},
+            household_income_by_source={k: {source: str(amount) for source, amount in v.period_income_by_source.items()} for k, v in model.households.items()},
+            capital_formation_by_product=result.capital_formation,
+            firm_production_by_firm=result.firm_production_by_firm,
+            firm_commissioned_capacity_by_firm=result.firm_commissioned_capacity_by_firm,
             physical_balance_error=str(physical_error),
             monetary_conservation_error=str(money_error),
         )
@@ -273,6 +287,22 @@ class BankCreditAllocationExperiment:
         model = CreditEnabledInputOutputEconomy()
         original_cash = model._system_cash()
         debt, asset_holdings, asset_price_index = self._issue_credit(model, scenario)
+        capex_order = None
+        if scenario == "productive_capex":
+            try:
+                capex_order = model.place_capex_order(
+                    order_id="CAPEX-FARM-NORTH-001",
+                    credit_event_id="CREDIT-ORIGINATION-PRODUCTIVE-CAPEX",
+                    payment_event_id="CAPEX-PAYMENT-PRODUCTIVE-CAPEX",
+                    buyer_id="farm-north", supplier_id="machine-works",
+                    asset_type="machinery", quantity=D("1"), unit_cost=D("520"),
+                    order_period=1, delivery_period=2, commissioning_period=3,
+                    useful_life_periods=5, residual_value_per_unit=D("52"),
+                    service_capacity_per_unit=D("3"), currency="LCU",
+                    payment_evidence_ref="BANK-PAYMENT:CAPEX-FARM-NORTH-001",
+                )
+            except Exception as exc:
+                raise CreditExperimentError(f"productive capex order failed: {exc}") from exc
         self._initial_debt = dict(debt)
         arrears = {key: ZERO for key in debt}
         destroyed = ZERO
@@ -334,6 +364,16 @@ class BankCreditAllocationExperiment:
             "deposit_money_destroyed": str(destroyed),
             "net_new_deposit_money": final.net_new_deposit_money,
             "asset_market_cash": str(model.asset_market_cash),
+            "capex_order": None if capex_order is None else {
+                "order_id": capex_order.order_id,
+                "credit_event_id": capex_order.credit_event_id,
+                "payment_event_id": capex_order.payment_event_id,
+                "delivery_period": capex_order.delivery_period,
+                "commissioning_period": capex_order.commissioning_period,
+                "quantity": str(capex_order.quantity),
+                "unit_cost": str(capex_order.unit_cost),
+                "service_capacity_per_unit": str(capex_order.service_capacity_per_unit),
+            },
             "summary": {
                 "cumulative_gross_value_added_proxy": str(sum(
                     (D(item.gross_value_added_proxy) for item in metrics), ZERO
@@ -343,6 +383,8 @@ class BankCreditAllocationExperiment:
                 "final_employment_hours": final.employment_hours,
                 "final_labour_productivity_proxy": final.labour_productivity_proxy,
                 "final_household_wage_income_gini": final.household_wage_income_gini,
+                "final_firm_commissioned_capacity": final.firm_commissioned_capacity_by_firm,
+                "cumulative_capital_formation_by_product": {key: str(sum((D(item.capital_formation_by_product[key]) for item in metrics), ZERO)) for key in final.capital_formation_by_product},
                 "final_borrower_net_worth_proxy": final.borrower_net_worth_proxy,
                 "final_insolvent_borrower_count": final.insolvent_borrower_count,
                 "final_debt_to_income_proxy": final.debt_to_income_proxy,
@@ -366,6 +408,7 @@ class BankCreditAllocationExperiment:
             "periods": self.periods,
             "assumptions": {
                 "productive": "working capital distributed equally across firms",
+                "productive_capex": "credit to farm-north pays for one machinery unit; physical delivery in period 2; commissioning and additional capacity in period 3",
                 "consumption": "new deposits distributed equally across households",
                 "asset_purchase": "household deposits immediately exchanged for an external financial asset",
                 "principal_repayment": "equal principal schedule from period 2; cash-constrained, unpaid amounts become arrears",
