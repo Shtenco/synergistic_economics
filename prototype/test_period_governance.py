@@ -45,9 +45,16 @@ def make_checkpoint_bundle(*, period=3, generation=0, zero_status_override=None)
             "closing_state_hash": closing,
             "reconciliation_hash": digest({"register": name, "reconciliation": True}),
         }
+        signed_attestation_manifest = {
+            "service_id": "synergy-sfc",
+            "period": period,
+            "projection_generation": generation,
+            "signer_key_id": f"{name}-independent-register-key",
+            "register_declaration": attestation,
+        }
         ref = f"attestation:{name}:{period}:{generation}"
-        att_digest = digest(attestation)
-        manifests[ref] = (att_digest, attestation)
+        att_digest = digest(signed_attestation_manifest)
+        manifests[ref] = (att_digest, signed_attestation_manifest)
         references.append({
             "register_name": name,
             "attestation_ref": ref,
@@ -56,6 +63,7 @@ def make_checkpoint_bundle(*, period=3, generation=0, zero_status_override=None)
     references.sort(key=lambda item: item["register_name"])
     close_manifest = {
         "service_id": "synergy-sfc",
+        "signer_key_id": "global-period-close-key",
         "period": period,
         "projection_generation": generation,
         "period_closed": True,
@@ -121,10 +129,12 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
         manifests, ref, _ = make_checkpoint_bundle()
         name = "physical"
         att_ref = f"attestation:{name}:3:0"
-        attestation = dict(manifests[att_ref][1])
-        attestation["closing_state_hash"] = digest({"register": name, "state": "changed"})
-        att_digest = digest(attestation)
-        manifests[att_ref] = (att_digest, attestation)
+        signed_attestation = dict(manifests[att_ref][1])
+        declaration = dict(signed_attestation["register_declaration"])
+        declaration["closing_state_hash"] = digest({"register": name, "state": "changed"})
+        signed_attestation["register_declaration"] = declaration
+        att_digest = digest(signed_attestation)
+        manifests[att_ref] = (att_digest, signed_attestation)
         close_manifest = dict(manifests[ref][1])
         refs = [dict(item) for item in close_manifest["register_completeness"]]
         for item in refs:
