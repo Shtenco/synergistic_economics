@@ -300,6 +300,28 @@ class OpeningStockSnapshot:
             raise SFCSourceContractError(
                 f"opening snapshot is incomplete (missing={missing}, extra={extra})"
             )
+        balances = {item.identity: Decimal(item.balance) for item in self.positions}
+        for identity, balance in balances.items():
+            mirror = SFCIdentity(
+                instrument_id=identity.instrument_id,
+                instrument_class=identity.instrument_class,
+                holder_entity_id=identity.issuer_entity_id,
+                holder_sector=identity.issuer_sector,
+                issuer_entity_id=identity.holder_entity_id,
+                issuer_sector=identity.holder_sector,
+                currency=identity.currency,
+                maturity=identity.maturity,
+                denomination=identity.denomination,
+                valuation_basis=identity.valuation_basis,
+            )
+            if mirror not in balances:
+                raise SFCSourceContractError(
+                    f"opening position has no bilateral mirror: {identity.instrument_id}"
+                )
+            if balances[mirror] != balance:
+                raise SFCSourceContractError(
+                    f"opening bilateral mirror balances differ: {identity.instrument_id}"
+                )
 
     @property
     def digest(self) -> str:
