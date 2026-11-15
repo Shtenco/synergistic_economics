@@ -55,6 +55,7 @@ def make_checkpoint_bundle(*, period=3, generation=0, zero_status_override=None)
             "event_count": count,
             "coverage_count": count,
             "event_log_root": event_root,
+            "instrument_opening_hash": opening,
             "projection_state_hash": closing,
             "signer_key_id": f"{name}-independent-register-key",
             "register_declaration": attestation,
