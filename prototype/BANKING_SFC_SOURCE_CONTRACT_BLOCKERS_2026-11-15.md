@@ -18,7 +18,7 @@ This is a **working projection slice**, not a complete six-sector SFC. A durable
 2. Instrument terms include instrument class, denomination, currency, valuation basis, maturity classification/date, rate type/reference/spread, reset frequency, day-count convention, payment frequency, repayment type and effective periods. Missing or ambiguous terms fail closed.
 3. Sector membership resolves holder and issuer entities by movement period; overlapping, missing or unsupported membership fails closed.
 4. `prototype/operating_financial_sfc_adapter.py` is a separate native adapter. It does not route operating-financial envelopes through GOLD-2A or `sfc_projection_store.py`.
-5. The adapter covers the currently supported opening events (deposit and reserve account openings) and movement events (wage event groups, bank credit, interbank payments, central-bank refinancing). It validates mirror pairs, event-to-movement assignment, source coverage, registry digests and explicit opening rows before replay.
+5. The adapter covers five native opening-position families (deposits, reserves, loan principal, central-bank refinancing principal, and wage receivables/payables) plus movement events (wage event groups, bank credit, interbank payments, central-bank refinancing). It validates mirror pairs, event-to-movement assignment, source coverage, registry digests and explicit opening rows before replay.
 6. `from_register()` verifies the durable financial register hash chain before reading its immutable history. Direct `build()` tests exercise projection mapping independently with synthetic immutable history rows.
 7. The projection reports source-event counts, mapped coverage, opening exclusions, position roll-forwards and sector financial net lending by period/sector/currency.
 
@@ -47,12 +47,13 @@ Next:
 
 **Partially implemented.** The snapshot contract requires explicit expected identities and explicit positions, pins both registry versions/digests, and rejects missing or ambiguous openings. The durable register now reconstructs bilateral loan/refinancing principal openings from immutable originations and repayments, and reconstructs deposit/reserve openings by replaying all prior native transaction movements that touch those shared accounts. This includes bank-credit money creation/repayment, wage settlement, interbank deposit/reserve transfers and central-bank refinancing. Openings are period-boundary values: movements in the requested period are excluded, while earlier-period movements are included. The exporter's evidence digest binds the account-opening event and each prior affecting event-chain row.
 
-Account-opening events now carry an explicit first-active period (defaulting to period 1 for backward-compatible callers). An account is omitted from earlier snapshots, its opening balance is included at its first-active period, and prior movements are replayed only from periods at or after that opening period. The exporter verifies the native register chain and envelope digest, but its digest is not a signed completeness attestation or a source-checkpoint binding. Complete OpeningStockSnapshot composition across every financial instrument is still not automatic.
+Account-opening events now carry an explicit first-active period (defaulting to period 1 for backward-compatible callers). An account is omitted from earlier snapshots, its opening balance is included at its first-active period, and prior movements are replayed only from periods at or after that opening period. The exporter verifies the native register chain and envelope digest, but its digest is not a signed completeness attestation or a source-checkpoint binding. The five supported native opening families are now automatically composed into registry-resolved `OpeningStockSnapshot` objects, pinned to the exact durable financial source checkpoint. This does not cover unrecorded pre-existing loan/refinancing principal or unsupported financial instruments.
 
 Next:
 - preserve the backward-compatible rule that legacy account-opening events without a period are period-1 openings; do not retroactively reinterpret sealed legacy history;
-- compose loan, refinancing, deposit, reserve, wage claims/payables and all other supported positions into one complete SFC OpeningStockSnapshot with duplicate/mirror/currency checks and conversion to version-resolved SFCIdentity values;
-- bind each snapshot to the exact durable register checkpoint (register identity, sequence and digest) and require signed period-completeness declarations, including explicit zero-activity declarations;
+- add separately attested native opening-principal events/contracts for loan and refinancing facilities that predate the durable event history; reject unproven legacy principal rather than inventing a zero or synthetic opening;
+- extend the composed snapshot only when additional financial instrument classes gain native lifecycle/opening exporters and versioned terms;
+- retain exact checkpoint binding and mirror/identity checks; signed period-completeness declarations remain a separate six-register governance requirement, including explicit zero-activity declarations;
 - test restart/recovery using composed snapshots derived from actual durable history.
 
 ### B4. Sector-flow mapping and mirror integrity
@@ -95,7 +96,7 @@ The durable-history integration test for interbank and refinancing events throug
 
 1. **Done, partial scope:** versioned instrument terms and explicit financial position identity resolution.
 2. **Done, partial scope:** effective-dated sector registry with digest pinning at projection.
-3. **Partially done:** historical loan/refinancing and deposit/reserve opening exporters exist; composing all exports into a registry-resolved, checkpoint-pinned `OpeningStockSnapshot` with signed completeness remains.
+3. **Done for five recorded native families; partial overall:** deposits, reserves, loan principal, refinancing principal and wage claims/payables are composed into registry-resolved, checkpoint-pinned `OpeningStockSnapshot` objects. Pre-history loan/refinancing principal and additional unsupported instruments still require native evidenced opening contracts/events; signed six-register completeness remains separate.
 4. **Done, supported events only:** separate native financial SFC adapter and movement mapper.
 5. **Done, limited scope:** native financial SQLite projection snapshot/checkpoint with atomic persistence; normalized per-event/per-movement relational coverage tables remain future work.
 6. **Partially done:** deterministic mapping/replay, hash-chain verification, real-register persistence/recovery integration and transaction failpoint tests; subprocess kill/restart testing at filesystem boundaries remains.
@@ -125,7 +126,7 @@ The earlier “Not implemented” wording for durable financial projection persi
 
 A real-register integration test has now been added to ensure the durable `OperatingFinancialRegister` (not only a fake source) flows through `project_and_persist()` and `rebuild_and_verify()`. It asserts deterministic source replay and equality of the persisted/recovered projection digest. This test is committed but not yet confirmed by CI.
 
-Still open: automatic composition of all historical opening exports into a registry-resolved, source-checkpoint-pinned SFC snapshot; signed completeness declarations for all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
+Still open: independently attested pre-history loan/refinancing opening principal and any additional unsupported financial instrument exporters; live signed completeness declarations from all required registers; production integration with physical/capital/product/labour/legal-rights domains; a complete capital account and financial-vs-capital net-lending reconciliation; interest/fees/arrears/default/impairment/collateral lifecycle; and exact-HEAD green CI. Do not treat a six-sector financial projection or zero-sum synthetic fixture as proof of full SFC closure or solved liquidity scarcity.
 
 ## Addendum — source-history cursor validation hardening (2026-11-15)
 
@@ -150,7 +151,7 @@ Each emitted opening evidence reference is a deterministic digest over the contr
 
 Regression coverage checks loan openings at origination, immediately before repayment, and after repayment; equivalent refinancing tests cover the advance and repayment boundaries.
 
-**Remaining boundary:** loan/refinancing and deposit/reserve historical opening exporters now exist, including the shared deposit/reserve movements caused by prior loan, wage, interbank and refinancing transactions. They still emit legacy `PositionIdentity` rows rather than one composed, registry-resolved SFC `OpeningStockSnapshot`; they do not yet bind the composed snapshot to the persisted financial-register checkpoint or prove signed period completeness. End-to-end adapter replay from automatically composed snapshots remains open.
+**Historical note — superseded by the checkpoint-pinned opening addenda below:** at this stage, the exporters still emitted legacy `PositionIdentity` rows. The later builder now composes five native opening families into registry-resolved, checkpoint-pinned `OpeningStockSnapshot` objects. The remaining gap is not composition for recorded lifecycles; it is independently evidenced principal that predates the durable event history, unsupported instrument classes, and live signed period completeness.
 
 
 ## Addendum — period-pinned account openings and exact financial arithmetic (2026-11-15)
@@ -159,7 +160,7 @@ Deposit and reserve account-opening events now carry `period_index` (default 1 f
 
 The financial reducer now executes accepted monetary arithmetic under a bounded high-precision Decimal context, rejects source decimals beyond the exact-decimal bounds, and uses exact summation for bank balance snapshots and historical opening reconstruction. A regression test uses a principal larger than 28 significant digits, repays a unit amount, and checks the exact remaining loan, deposit and aggregate bank balances.
 
-These changes improve the financial register's period semantics and arithmetic; they do not yet compose all exported rows into a source-checkpoint-pinned SFC snapshot or establish six-register closure. Exact-HEAD CI must confirm the current implementation.
+These changes improve the financial register's period semantics and arithmetic. The later checkpoint-pinned builder addenda supersede the composition limitation stated here; six-register closure remains unproven. Exact-HEAD CI must confirm the current implementation.
 
 
 ## Addendum — durable source-instance and chain-tail checkpoint binding (2026-11-15)
