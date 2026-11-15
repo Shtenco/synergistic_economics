@@ -49,6 +49,13 @@ def make_checkpoint_bundle(*, period=3, generation=0, zero_status_override=None)
             "service_id": "synergy-sfc",
             "period": period,
             "projection_generation": generation,
+            "period_closed": False,
+            "commit_sequence": attestation["source_sequence"],
+            "applied_through_cursor": attestation["source_sequence"],
+            "event_count": count,
+            "coverage_count": count,
+            "event_log_root": event_root,
+            "projection_state_hash": closing,
             "signer_key_id": f"{name}-independent-register-key",
             "register_declaration": attestation,
         }
@@ -133,6 +140,7 @@ class PeriodGovernanceCompletenessTests(unittest.TestCase):
         declaration = dict(signed_attestation["register_declaration"])
         declaration["closing_state_hash"] = digest({"register": name, "state": "changed"})
         signed_attestation["register_declaration"] = declaration
+        signed_attestation["projection_state_hash"] = declaration["closing_state_hash"]
         att_digest = digest(signed_attestation)
         manifests[att_ref] = (att_digest, signed_attestation)
         close_manifest = dict(manifests[ref][1])
