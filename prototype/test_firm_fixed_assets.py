@@ -75,10 +75,21 @@ class FixedAssetLedgerTests(unittest.TestCase):
                                 order_currency="KZT", payment_evidence_ref="payment:1")
         ledger.deliver(event_id="delivery-1", order_id=item.order_id, quantity="2",
                        period=2, evidence_ref="receipt:1")
-        ledger.retire(event_id="retire-1", cohort_id="cohort:capex-1", quantity="1",
+        ledger.retire(event_id="retire-1", cohort_id="cohort:capex-1:delivery-1", quantity="1",
                      period=4, evidence_ref="scrap-certificate:1")
         self.assertEqual(ledger.commissioned_capacity("farm-north", 4), D("4"))
-        self.assertEqual(ledger.cohorts["cohort:capex-1"].active_quantity, D("1"))
+        self.assertEqual(ledger.cohorts["cohort:capex-1:delivery-1"].active_quantity, D("1"))
+
+    def test_capacity_expires_after_useful_life(self):
+        ledger = FixedAssetLedger()
+        item = order()
+        ledger.place_paid_order(item, payment_amount="2000", payment_currency="KZT",
+                                order_currency="KZT", payment_evidence_ref="payment:1")
+        ledger.deliver(event_id="delivery-1", order_id=item.order_id, quantity="2",
+                       period=2, evidence_ref="receipt:1")
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 7), D("8"))
+        self.assertEqual(ledger.commissioned_capacity("farm-north", 8), D("0"))
+        self.assertEqual(ledger.carrying_value("farm-north", 8), D("200"))
 
     def test_order_requires_explicit_credit_and_payment_identity(self):
         with self.assertRaises(FixedAssetError):
