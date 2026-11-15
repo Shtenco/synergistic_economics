@@ -47,6 +47,7 @@ class FirmConfig:
     initial_cash: D
     initial_inventory: dict
     domestic_ask_markup: D = D("0.90")
+    household_labour_shares: dict = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class HouseholdConfig:
@@ -71,6 +72,8 @@ class HouseholdState:
     cash: D
     consumption: dict = field(default_factory=dict)
     wage_income: D = ZERO
+    period_wage_income: D = ZERO
+    period_labour_hours: D = ZERO
     expenditure: D = ZERO
 
 @dataclass
@@ -91,6 +94,8 @@ class PeriodResult:
     closing_inventory: dict
     shortages: dict
     wages: D
+    household_wage_income: dict
+    household_labour_hours: dict
     household_expenditure: D
     import_expenditure: D
     gross_value_added_proxy: D
@@ -149,15 +154,15 @@ class InputOutputEconomy:
     @staticmethod
     def default_firms():
         return [
-            FirmConfig("farm-north", "grain", {"energy": D("0.12"), "logistics": D("0.08")}, D("0.40"), D("12"), D("24"), D("8"), D("5200"), {"grain": D("7"), "energy": D("1"), "logistics": D("1")}),
-            FirmConfig("farm-south", "grain", {"energy": D("0.15"), "logistics": D("0.10")}, D("0.42"), D("10"), D("20"), D("8"), D("4100"), {"grain": D("5"), "energy": D("1"), "logistics": D("1")}),
-            FirmConfig("power-east", "energy", {"metals": D("0.025"), "machinery": D("0.006")}, D("0.18"), D("15"), D("28"), D("9"), D("6200"), {"energy": D("5"), "metals": D("0.5"), "machinery": D("0.1")}),
-            FirmConfig("power-west", "energy", {"metals": D("0.03"), "machinery": D("0.005")}, D("0.20"), D("12"), D("22"), D("9"), D("5000"), {"energy": D("4"), "metals": D("0.5"), "machinery": D("0.1")}),
-            FirmConfig("mine-central", "metals", {"energy": D("0.20"), "machinery": D("0.012"), "logistics": D("0.04")}, D("0.35"), D("11"), D("18"), D("10"), D("6000"), {"metals": D("3"), "energy": D("2"), "machinery": D("0.2"), "logistics": D("0.5")}),
-            FirmConfig("machine-works", "machinery", {"metals": D("0.55"), "energy": D("0.30"), "logistics": D("0.10")}, D("1.20"), D("8"), D("7"), D("14"), D("8500"), {"machinery": D("1"), "metals": D("2"), "energy": D("2"), "logistics": D("0.5")}),
-            FirmConfig("transport-coop", "logistics", {"energy": D("0.28"), "machinery": D("0.018")}, D("0.55"), D("14"), D("22"), D("9"), D("4800"), {"logistics": D("3"), "energy": D("2"), "machinery": D("0.2")}),
-            FirmConfig("food-coop", "food", {"grain": D("0.72"), "energy": D("0.10"), "logistics": D("0.12")}, D("0.62"), D("12"), D("18"), D("9"), D("5600"), {"food": D("2"), "grain": D("2"), "energy": D("1"), "logistics": D("0.5")}),
-            FirmConfig("care-network", "care", {"food": D("0.025"), "energy": D("0.08"), "logistics": D("0.04")}, D("1.10"), D("9"), D("12"), D("11"), D("6300"), {"care": D("1"), "food": D("0.2"), "energy": D("1"), "logistics": D("0.2")}),
+            FirmConfig("farm-north", "grain", {"energy": D("0.12"), "logistics": D("0.08")}, D("0.40"), D("12"), D("24"), D("8"), D("5200"), {"grain": D("7"), "energy": D("1"), "logistics": D("1")}, household_labour_shares={"household-1": D("0.8"), "household-2": D("0.2")}),
+            FirmConfig("farm-south", "grain", {"energy": D("0.15"), "logistics": D("0.10")}, D("0.42"), D("10"), D("20"), D("8"), D("4100"), {"grain": D("5"), "energy": D("1"), "logistics": D("1")}, household_labour_shares={"household-2": D("0.7"), "household-3": D("0.3")}),
+            FirmConfig("power-east", "energy", {"metals": D("0.025"), "machinery": D("0.006")}, D("0.18"), D("15"), D("28"), D("9"), D("6200"), {"energy": D("5"), "metals": D("0.5"), "machinery": D("0.1")}, household_labour_shares={"household-1": D("0.6"), "household-2": D("0.4")}),
+            FirmConfig("power-west", "energy", {"metals": D("0.03"), "machinery": D("0.005")}, D("0.20"), D("12"), D("22"), D("9"), D("5000"), {"energy": D("4"), "metals": D("0.5"), "machinery": D("0.1")}, household_labour_shares={"household-2": D("0.4"), "household-3": D("0.6")}),
+            FirmConfig("mine-central", "metals", {"energy": D("0.20"), "machinery": D("0.012"), "logistics": D("0.04")}, D("0.35"), D("11"), D("18"), D("10"), D("6000"), {"metals": D("3"), "energy": D("2"), "machinery": D("0.2"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.2"), "household-3": D("0.8")}),
+            FirmConfig("machine-works", "machinery", {"metals": D("0.55"), "energy": D("0.30"), "logistics": D("0.10")}, D("1.20"), D("8"), D("7"), D("14"), D("8500"), {"machinery": D("1"), "metals": D("2"), "energy": D("2"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.5"), "household-2": D("0.5")}),
+            FirmConfig("transport-coop", "logistics", {"energy": D("0.28"), "machinery": D("0.018")}, D("0.55"), D("14"), D("22"), D("9"), D("4800"), {"logistics": D("3"), "energy": D("2"), "machinery": D("0.2")}, household_labour_shares={"household-2": D("0.7"), "household-3": D("0.3")}),
+            FirmConfig("food-coop", "food", {"grain": D("0.72"), "energy": D("0.10"), "logistics": D("0.12")}, D("0.62"), D("12"), D("18"), D("9"), D("5600"), {"food": D("2"), "grain": D("2"), "energy": D("1"), "logistics": D("0.5")}, household_labour_shares={"household-1": D("0.3"), "household-2": D("0.7")}),
+            FirmConfig("care-network", "care", {"food": D("0.025"), "energy": D("0.08"), "logistics": D("0.04")}, D("1.10"), D("9"), D("12"), D("11"), D("6300"), {"care": D("1"), "food": D("0.2"), "energy": D("1"), "logistics": D("0.2")}, household_labour_shares={"household-1": D("0.2"), "household-3": D("0.8")}),
         ]
 
     @staticmethod
@@ -203,6 +208,16 @@ class InputOutputEconomy:
                 raise EconomyError("negative firm parameter or non-positive ask markup")
             if f.labour_per_unit <= 0:
                 raise EconomyError("labour_per_unit must be positive")
+        household_ids_set = set(household_ids)
+        for f in self.firm_configs:
+            shares = f.household_labour_shares
+            if shares:
+                if set(shares) - household_ids_set:
+                    raise EconomyError("firm labour allocation references unknown household")
+                if any(not value.is_finite() or value < 0 for value in shares.values()):
+                    raise EconomyError("firm labour shares must be finite and non-negative")
+                if sum(shares.values(), ZERO) != D("1"):
+                    raise EconomyError("explicit firm labour shares must sum exactly to one")
         for h in self.household_configs:
             if set(h.basket) - known or any(not v.is_finite() or v < 0 for v in h.basket.values()):
                 raise EconomyError("invalid household basket")
@@ -210,6 +225,19 @@ class InputOutputEconomy:
                     or h.initial_cash < 0
                     or not D("0") <= h.consumption_propensity <= D("1")):
                 raise EconomyError("invalid household budget")
+
+    def _labour_shares(self, firm_config):
+        if firm_config.household_labour_shares:
+            return dict(sorted(firm_config.household_labour_shares.items()))
+        # Backwards-compatible fallback for custom legacy fixtures only. The
+        # canonical default economy uses explicit firm-to-household allocations.
+        household_ids = sorted(self.households)
+        if not household_ids:
+            return {}
+        each = D("1") / D(len(household_ids))
+        shares = {key: each for key in household_ids}
+        shares[household_ids[-1]] += D("1") - sum(shares.values(), ZERO)
+        return shares
 
     def _system_cash(self):
         return sum((f.cash for f in self.firms.values()), ZERO) + sum((h.cash for h in self.households.values()), ZERO) + self.import_cash
@@ -400,6 +428,9 @@ class InputOutputEconomy:
                 "traded": actual_traded, "shortage": shortage, "price": clearing_price}
 
     def step(self, period):
+        for household in self.households.values():
+            household.period_wage_income = ZERO
+            household.period_labour_hours = ZERO
         household_spend_open = sum((h.expenditure for h in self.households.values()), ZERO)
         household_consumption_open = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
@@ -445,17 +476,28 @@ class InputOutputEconomy:
             production[c.output_product] += actual
             wages_total += wage
             gross_value_added += actual * self.prices[c.output_product] - input_value
-            # Wage payments become household income, split evenly across households.
-            household_states = list(self.households.values())
-            if household_states and wage > 0:
-                shares = [cash(wage / D(len(household_states))) for _ in household_states]
-                shares[-1] += wage - sum(shares, ZERO)
-                for household, share in zip(household_states, shares):
-                    household.cash += share
-                    household.wage_income += share
+            # Allocate wages and paid labour hours through explicit firm-level
+            # employment shares; cash and hour residuals are assigned exactly.
+            wage_shares = self._labour_shares(c)
+            labour_hours = actual * c.labour_per_unit
+            wage_by_household = {key: cash(wage * share) for key, share in wage_shares.items()}
+            hours_by_household = {key: qty(labour_hours * share) for key, share in wage_shares.items()}
+            if wage_by_household:
+                last_household = sorted(wage_by_household)[-1]
+                wage_by_household[last_household] += wage - sum(wage_by_household.values(), ZERO)
+                hours_by_household[last_household] += labour_hours - sum(hours_by_household.values(), ZERO)
+            for household_id, share in wage_by_household.items():
+                household = self.households[household_id]
+                household.cash += share
+                household.wage_income += share
+                household.period_wage_income += share
+                household.period_labour_hours += hours_by_household[household_id]
             self._event(f"p{period}:production:{firm_id}", "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
-                "intermediate_input_value": str(input_value), "wages": str(wage)
+                "intermediate_input_value": str(input_value), "wages": str(wage),
+                "labour_hours": str(labour_hours),
+                "wage_by_household": {k: str(v) for k, v in wage_by_household.items()},
+                "labour_hours_by_household": {k: str(v) for k, v in hours_by_household.items()}
             })
         household_consumption = {
             p.product_id: sum((h.consumption.get(p.product_id, ZERO) for h in self.households.values()), ZERO)
@@ -495,7 +537,10 @@ class InputOutputEconomy:
             household_consumption={k: str(v) for k, v in household_consumption.items()},
             closing_inventory={k: str(v) for k, v in closing_stock.items()},
             shortages={k: str(market[k]["shortage"]) for k in market},
-            wages=wages_total, household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
+            wages=wages_total,
+            household_wage_income={k: str(v.period_wage_income) for k, v in self.households.items()},
+            household_labour_hours={k: str(v.period_labour_hours) for k, v in self.households.items()},
+            household_expenditure=sum((h.expenditure for h in self.households.values()), ZERO) - household_spend_open,
             import_expenditure=sum((market[k]["imports"] * market[k]["price"] for k in market), ZERO),
             gross_value_added_proxy=gross_value_added, system_cash=system_cash,
             cash_error=cash_error, physical_balance_error=physical_error, event_digest=digest
