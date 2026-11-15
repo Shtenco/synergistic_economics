@@ -17,7 +17,9 @@ from operating_financial_sfc_adapter import (
     OperatingFinancialSFCAdapter,
     OperatingFinancialSFCAdapterError,
 )
-from banking_sfc_projection_pipeline import project_and_persist, rebuild_and_verify
+from banking_sfc_projection_pipeline import (
+    build_opening_snapshots_from_register, project_and_persist, rebuild_and_verify,
+)
 from banking_sfc_projection_store import BankingSFCProjectionStore
 from sfc_source_contracts import (
     EffectiveDatedSectorRegistry,
@@ -320,26 +322,11 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
                     SectorMembership("bank-1", "CB", 1, None),
                 ),
             )
-            identities = (
-                SFCIdentity(loan_id, "LOAN", "bank-1", "CB", "household-1", "H",
-                            "LCU", "2028-12-31", "LCU:0.01", "NOMINAL"),
-                SFCIdentity(loan_id, "LOAN", "household-1", "H", "bank-1", "CB",
-                            "LCU", "2028-12-31", "LCU:0.01", "NOMINAL"),
-                SFCIdentity(deposit_id, "DEPOSIT", "household-1", "H", "bank-1", "CB",
-                            "LCU", "ON_DEMAND", "LCU:0.01", "NOMINAL"),
-                SFCIdentity(deposit_id, "DEPOSIT", "bank-1", "CB", "household-1", "H",
-                            "LCU", "ON_DEMAND", "LCU:0.01", "NOMINAL"),
-            )
-            snapshot = OpeningStockSnapshot(
-                "opening-v3", 3,
-                terms.version, terms.digest,
-                sectors.version, sectors.digest,
-                identities,
-                tuple(
-                    OpeningPosition(identity, "0", f"CERT-{i}", f"SOURCE-{i}")
-                    for i, identity in enumerate(identities)
-                ),
-            )
+            snapshot = build_opening_snapshots_from_register(
+                register, principal_id="financial-root", periods=[3],
+                instrument_registry=terms, sector_registry=sectors,
+            )[0]
+            identities = snapshot.expected_identities
             result = OperatingFinancialSFCAdapter.from_register(
                 register,
                 principal_id="financial-root",
