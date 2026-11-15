@@ -14,6 +14,7 @@ def ledger_with_accounts():
     for account in [
         Account("cash:lender", "lender", "asset"),
         Account("loan:lender", "lender", "asset"),
+        Account("equity:lender", "lender", "equity"),
         Account("cash:borrower", "borrower", "asset"),
         Account("debt:borrower", "borrower", "liability"),
         Account("income:borrower", "borrower", "income"),
@@ -23,7 +24,7 @@ def ledger_with_accounts():
         ledger.add_account(account)
     ledger.post(JournalEntry("open-lender", "opening", (
         Posting("cash:lender", debit=money(100)),
-        Posting("loan:lender", credit=money(100)),
+        Posting("equity:lender", credit=money(100)),
     )))
     return ledger
 
