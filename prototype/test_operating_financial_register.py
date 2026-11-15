@@ -8,6 +8,9 @@ from operating_wage_journal import (
     OperatingWageJournal, WageContract, verified_delivery_from_register,
     native_financial_operation,
 )
+from economic_stock_flow_reconciliation import (
+    OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
+)
 from operating_financial_register import (
     OperatingFinancialRegister, OperatingFinancialRegisterError,
 )
@@ -120,6 +123,55 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(version, 1)
         self.assertEqual(state["outstanding_amount"], "0.00")
         self.assertTrue(reopened.verify())
+
+
+    def test_wage_group_movements_close_in_canonical_sfc_reconciliation(self):
+        operation = self.operation()
+        common_id = "COMMON-WAGE-1"
+        participant_events = []
+        for name in ("physical", "capital", "labour", "product", "legal_rights", "financial"):
+            if name == "financial":
+                payload = operation["payload"]["payload"]
+            else:
+                payload = {"no_stock_flow_effect": f"not implicated by wage-only fixture: {name}"}
+            participant_events.append({
+                "register_id": name, "common_event_id": common_id,
+                "native_event_id": f"{common_id}:{name}", "aggregate_version": 1,
+                "payload": payload,
+            })
+        groups = ({
+            "schema_version": 1, "transaction_id": common_id,
+            "common_event_id": common_id, "events": tuple(participant_events),
+        },)
+        movements = movements_from_event_groups(groups)
+        self.assertEqual(len(movements), 8)
+        identities = sorted({movement.identity for movement in movements})
+        openings, closings = [], []
+        for identity in identities:
+            instrument = identity.instrument_id
+            if instrument.startswith("DEPOSIT:employer-1:"):
+                initial = D("1000")
+            elif instrument.startswith("DEPOSIT:worker-1:"):
+                initial = D("10")
+            else:
+                initial = D("0")
+            balance = initial
+            for period in (1, 2):
+                openings.append(OpeningPosition(identity, period, balance, f"OPEN:{identity.position_id}:{period}"))
+                balance += sum((movement.amount for movement in movements
+                                if movement.identity == identity and movement.period_index == period), D("0"))
+                closings.append(ClosingPosition(identity, period, balance, f"CLOSE:{identity.position_id}:{period}"))
+        result = reconcile_periods(tuple(openings), movements, tuple(closings))
+        self.assertEqual(result.event_count, 8)
+        self.assertEqual(result.mirror_group_count, 4)
+        wage_positions = [item for item in result.periods if item.identity.instrument_id.startswith("WAGE:")]
+        self.assertTrue(all(item.closing == D("0.00") for item in wage_positions if item.period_index == 2))
+        employer_positions = [item for item in result.periods
+                              if item.identity.instrument_id.startswith("DEPOSIT:employer-1:")]
+        worker_positions = [item for item in result.periods
+                            if item.identity.instrument_id.startswith("DEPOSIT:worker-1:")]
+        self.assertTrue(all(item.closing == D("960.00") for item in employer_positions if item.period_index == 2))
+        self.assertTrue(all(item.closing == D("50.00") for item in worker_positions if item.period_index == 2))
 
     def test_stock_flow_mapper_tampering_is_rejected_before_prepare(self):
         operation = self.operation()
