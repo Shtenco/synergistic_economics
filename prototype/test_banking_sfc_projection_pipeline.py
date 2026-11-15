@@ -5,6 +5,7 @@ from pathlib import Path
 
 from banking_sfc_projection_pipeline import project_and_persist, rebuild_and_verify
 from banking_sfc_projection_store import BankingSFCProjectionStore
+from operating_financial_register import OperatingFinancialRegister
 from test_operating_financial_sfc_adapter import fixture, history_row
 
 
@@ -60,6 +61,52 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertEqual(projection.source_digest, recovered.source_digest)
             self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
             self.assertEqual(checkpoint["applied_through_sequence"], 7)
+
+    def test_real_durable_financial_register_projects_and_recovers_exact_chain_tail(self):
+        terms, sectors, _identities, snapshot = fixture()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            register_path = root / "financial.sqlite3"
+            register = OperatingFinancialRegister(
+                register_path,
+                sectors={"household-1": "H", "bank-1": "CB"},
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root", authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            register.open_deposit_account(
+                event_id="OPEN-HOUSEHOLD", entity_id="household-1", bank_id="bank-1",
+                currency="LCU", account_ref="HOUSEHOLD-ACCOUNT", opening_balance="0",
+                evidence_ref="BANK-OPEN-HOUSEHOLD", actor_id="financial-root",
+                authority_ref="BANK-OPENING", effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:00Z", expected_revision=0,
+            )
+            register.commit_bank_credit(
+                event_id="REAL-LOAN-ORIGINATION", event_type="bank.loan_originated",
+                loan_id="LOAN-1", borrower_id="household-1", bank_id="bank-1",
+                currency="LCU", amount="100", period_index=3,
+                evidence_ref="SIGNED-REAL-LOAN", actor_id="financial-root",
+                authority_ref="CREDIT-POLICY", effective_at="2026-11-15T00:00:00Z",
+                recorded_at="2026-11-15T00:00:01Z", expected_revision=1,
+            )
+            store = BankingSFCProjectionStore(root / "projection.sqlite")
+            projection, receipt = project_and_persist(
+                register, principal_id="financial-root", instrument_registry=terms,
+                sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+            )
+            recovered, checkpoint = rebuild_and_verify(
+                register, principal_id="financial-root", instrument_registry=terms,
+                sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+            )
+            self.assertEqual(projection.source_digest, recovered.source_digest)
+            self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
+            self.assertEqual(checkpoint["applied_through_sequence"], 3)
+            self.assertEqual(projection.mapped_source_event_count, 1)
+            self.assertEqual(register.source_checkpoint()["tail_hash"],
+                             store.latest_checkpoint(
+                                 "financial:" + register.register_instance_id + ":financial-root"
+                             )["source_chain_hash"])
 
     def test_caller_cannot_substitute_another_source_register_identity(self):
         terms, sectors, _identities, snapshot = fixture()
