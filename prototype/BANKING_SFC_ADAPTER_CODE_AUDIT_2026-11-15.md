@@ -144,11 +144,12 @@ stored per-row tables because those tables do not exist.
 
 The pipeline's `source_register_id` is an explicit caller-supplied stable
 identity. The adapter still needs a first-class source-register identity
-contract, key/authority governance, signed multi-register period-close
-assembler, complete loan/refinancing opening exporters, capital-account
-integration, and instrument lifecycle events for interest, arrears, impairment,
-default, restructuring and write-off. No distributed consensus or off-host
-disaster recovery is claimed.
+contract, production key/authority governance and native publication into the
+existing `period_governance.py` six-attestation close gate, complete
+evidence-backed loan/refinancing opening exporters, capital-account integration,
+and instrument lifecycle events for interest, arrears, impairment, default,
+restructuring and write-off. No distributed consensus or off-host disaster
+recovery is claimed.
 
 ### Validation status after this follow-up
 
