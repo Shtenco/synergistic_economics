@@ -132,7 +132,9 @@ class OperatingFinancialRegister(DurableEventRegister):
 
     @staticmethod
     def write_permission(event_type):
-        return "financial:write" if event_type == "wage.event_group_committed" else "financial:admin"
+        return "financial:write" if event_type in {
+            "wage.event_group_committed", "deposit.account_opened"
+        } else "financial:admin"
 
     def _validate_postings(self, event):
         amount = _decimal(event.get("amount"), "posting amount", positive=True)
@@ -283,26 +285,85 @@ class OperatingFinancialRegister(DurableEventRegister):
             "event_ids": list(state["event_ids"]) + [event_id],
         }
 
+    @staticmethod
+    def _deposit_key(entity_id, currency):
+        return f"{_text(entity_id, 'deposit entity')}:{_text(currency, 'deposit currency')}"
+
+    def _reduce_deposit_opening(self, state, event):
+        payload = event["payload"]
+        entity = _text(payload.get("entity_id"), "deposit entity_id")
+        bank = _text(payload.get("bank_id"), "deposit bank_id")
+        currency = _text(payload.get("currency"), "deposit currency")
+        account_ref = _text(payload.get("account_ref"), "deposit account_ref")
+        evidence_ref = _text(payload.get("evidence_ref"), "deposit evidence_ref")
+        balance = _decimal(payload.get("opening_balance"), "opening_balance")
+        if balance < 0:
+            raise OperatingFinancialRegisterError("opening deposit balance cannot be negative")
+        if entity == bank:
+            raise OperatingFinancialRegisterError("deposit owner and issuing bank must be distinct")
+        for participant in (entity, bank):
+            if participant not in self.sectors:
+                raise OperatingFinancialRegisterError(f"missing explicit institutional sector for {participant}")
+        key = self._deposit_key(entity, currency)
+        if key in state["deposits"]:
+            raise OperatingFinancialRegisterError("deposit account already has an opening record")
+        if any(item["account_ref"] == account_ref for item in state["deposits"].values()):
+            raise OperatingFinancialRegisterError("deposit account reference already exists")
+        state["deposits"][key] = {
+            "entity_id": entity, "bank_id": bank, "currency": currency,
+            "account_ref": account_ref, "opening_balance": str(balance),
+            "balance": str(balance), "opening_evidence_ref": evidence_ref,
+        }
+        return state
+
     def reduce_event(self, old, event):
-        if event["event_type"] != "wage.event_group_committed":
-            raise OperatingFinancialRegisterError("operating financial register accepts only wage event groups")
+        if event["aggregate_id"] != "operating-financial":
+            raise OperatingFinancialRegisterError("all operating financial events must use the global financial stream")
+        state = old or {"claims": {}, "deposits": {}}
+        state = {"claims": dict(state.get("claims", {})),
+                 "deposits": {key: dict(value) for key, value in state.get("deposits", {}).items()}}
+        event_type = event["event_type"]
+        if event_type == "deposit.account_opened":
+            return self._reduce_deposit_opening(state, event)
+        if event_type != "wage.event_group_committed":
+            raise OperatingFinancialRegisterError("unsupported operating financial event type")
+
         payload = event["payload"]
         claim_id = _text(payload.get("claim_id"), "claim_id")
-        if event["aggregate_id"] != f"wage:{claim_id}":
-            raise OperatingFinancialRegisterError("financial wage stream ID must bind the claim ID")
         events = payload.get("events")
         if not isinstance(events, list) or not events:
             raise OperatingFinancialRegisterError("wage event group must contain a non-empty event list")
-        state = old
+        claim_state = state["claims"].get(claim_id)
         seen = set()
         for subevent in events:
             if not isinstance(subevent, dict) or subevent.get("claim_id") != claim_id:
                 raise OperatingFinancialRegisterError("wage event group contains a malformed or cross-claim subevent")
             event_id = _text(subevent.get("event_id"), "subevent event_id")
-            if event_id in seen or (state is not None and event_id in state["event_ids"]):
+            if event_id in seen or (claim_state is not None and event_id in claim_state["event_ids"]):
                 raise OperatingFinancialRegisterError("duplicate wage subevent ID")
             seen.add(event_id)
-            state = self._apply_subevent(state, subevent)
+            if subevent.get("event_type") == "wage_payment":
+                employer = _text(subevent.get("employer_id"), "employer_id")
+                worker = _text(subevent.get("worker_id"), "worker_id")
+                bank = _text(subevent.get("bank_id"), "bank_id")
+                currency = _text(subevent.get("currency"), "currency")
+                amount = _decimal(subevent.get("amount"), "payment amount", positive=True)
+                employer_key = self._deposit_key(employer, currency)
+                worker_key = self._deposit_key(worker, currency)
+                employer_account = state["deposits"].get(employer_key)
+                worker_account = state["deposits"].get(worker_key)
+                if employer_account is None or worker_account is None:
+                    raise OperatingFinancialRegisterError("both employer and worker require durable deposit accounts")
+                if (employer_account["bank_id"] != bank or worker_account["bank_id"] != bank):
+                    raise OperatingFinancialRegisterError("wage payment bank differs from the authoritative deposit accounts")
+                employer_balance = D(employer_account["balance"])
+                worker_balance = D(worker_account["balance"])
+                if employer_balance < amount:
+                    raise OperatingFinancialRegisterError("insufficient durable employer deposit balance")
+                state["deposits"][employer_key]["balance"] = str(employer_balance - amount)
+                state["deposits"][worker_key]["balance"] = str(worker_balance + amount)
+            claim_state = self._apply_subevent(claim_state, subevent)
+        state["claims"][claim_id] = claim_state
         return state
 
     def prepare(self, txid, operation):
@@ -311,12 +372,21 @@ class OperatingFinancialRegister(DurableEventRegister):
         envelope = normalize_event_envelope("financial", operation["payload"])
         if envelope.get("idempotency_key") != operation.get("native_event_id"):
             raise OperatingFinancialRegisterError("financial native event and idempotency IDs must match")
-        events = envelope["payload"].get("events")
-        if not isinstance(events, list) or not events:
-            raise OperatingFinancialRegisterError("wage event group must contain subevents")
-        expected = wage_stock_flow_movement_specs(events)
-        if envelope.get("stock_flow_movements") != expected:
-            raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
+        if operation.get("stream_id") != "operating-financial":
+            raise OperatingFinancialRegisterError("financial operation must target the global operating-financial stream")
+        if envelope["event_type"] == "wage.event_group_committed":
+            events = envelope["payload"].get("events")
+            if not isinstance(events, list) or not events:
+                raise OperatingFinancialRegisterError("wage event group must contain subevents")
+            expected = wage_stock_flow_movement_specs(events)
+            if envelope.get("stock_flow_movements") != expected:
+                raise OperatingFinancialRegisterError("financial stock-flow movements differ from canonical wage mapper")
+        elif envelope["event_type"] == "deposit.account_opened":
+            if envelope.get("stock_flow_movements") is not None:
+                raise OperatingFinancialRegisterError("deposit opening must initialize a stock, not invent a transaction movement")
+            _text(envelope.get("no_stock_flow_effect"), "deposit opening no_stock_flow_effect")
+        else:
+            raise OperatingFinancialRegisterError("unsupported operating financial prepare event")
         try:
             return super().prepare(txid, operation)
         except OperatingFinancialRegisterError:
@@ -324,7 +394,47 @@ class OperatingFinancialRegister(DurableEventRegister):
         except RegisterError as exc:
             raise OperatingFinancialRegisterError(str(exc)) from exc
 
+    def open_deposit_account(self, *, event_id, entity_id, bank_id, currency,
+                             account_ref, opening_balance, evidence_ref,
+                             actor_id, authority_ref, effective_at, recorded_at,
+                             expected_revision):
+        event_id = _text(event_id, "event_id")
+        operation = {
+            "stream_id": "operating-financial",
+            "native_event_id": event_id,
+            "expected_revision": expected_revision,
+            "payload": {
+                "event_type": "deposit.account_opened",
+                "effective_at": effective_at, "recorded_at": recorded_at,
+                "actor_id": actor_id, "authority_ref": authority_ref,
+                "idempotency_key": event_id,
+                "payload": {
+                    "entity_id": entity_id, "bank_id": bank_id, "currency": currency,
+                    "account_ref": account_ref, "opening_balance": str(_decimal(opening_balance, "opening_balance")),
+                    "evidence_ref": evidence_ref,
+                },
+                "no_stock_flow_effect": "account opening establishes a financial opening stock, not a period transaction movement",
+            },
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def claim_state(self, claim_id, *, principal_id):
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            return None, version
+        return state["claims"].get(claim_id), version
+
+    def deposit_balance(self, entity_id, currency, *, principal_id):
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+        account = state["deposits"].get(self._deposit_key(entity_id, currency))
+        if account is None:
+            raise OperatingFinancialRegisterError("durable deposit account does not exist")
+        return D(account["balance"]), version
+
     def append_event(self, **kwargs):
-        if kwargs.get("event_type") == "wage.event_group_committed":
-            raise OperatingFinancialRegisterError("wage domain events must commit through the native prepare/commit protocol")
+        if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened"}:
+            raise OperatingFinancialRegisterError("operating financial events must commit through the native prepare/commit protocol")
         return super().append_event(**kwargs)
