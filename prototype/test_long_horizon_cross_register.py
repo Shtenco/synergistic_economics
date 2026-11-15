@@ -402,6 +402,9 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
             signer=Ed25519Signer.generate("synergy-period-test-key")
             trust=TrustedKeyRegistry({signer.key_id:signer.public_bytes()})
             anchor=LocalImmutableAnchor(root/"period-checkpoint-anchor.sqlite3")
+            register_attestation_anchor=LocalImmutableAnchor(
+                root/"register-period-attestations-anchor.sqlite3")
+            register_attestation_refs=set()
 
             def make_checkpoint(generation, sequence, projection_hash, event_root,
                                 snapshot_hashes, commit_sequence, event_count):
@@ -413,6 +416,53 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                     for name,path in sorted(generation_paths.items())
                 }).encode("utf-8")
                 backup_digest=hashlib.sha256(backup_bytes).hexdigest()
+                empty_event_root=sha(canonical([]))
+                register_completeness=[]
+                for name in REGISTERS:
+                    register_count=event_counts[name]
+                    activity_status="ZERO_ACTIVITY" if register_count==0 else "ACTIVITY"
+                    opening_state_hash=sha(canonical({
+                        "period":2033,"register":name,"opening_generation":generation,
+                    }))
+                    closing_state_hash=(
+                        opening_state_hash if register_count==0 else snapshot_hashes[name]
+                    )
+                    period_event_root=(
+                        empty_event_root if register_count==0 else sha(canonical({
+                            "register":name,"source_event_root":event_root,
+                            "period_event_count":register_count,
+                        }))
+                    )
+                    attestation={
+                        "service_id":"SYNERGY-LONG-HORIZON-TEST",
+                        "declaration_type":"register_period_completeness",
+                        "register_name":name,"period":2033,
+                        "projection_generation":generation,"complete":True,
+                        "source_register_id":f"test-register:{name}:generation-{generation}",
+                        "source_sequence":register_count,
+                        "source_chain_hash":sha(canonical({
+                            "register":name,"source_event_root":event_root,
+                            "source_sequence":register_count,
+                        })),
+                        "period_event_count":register_count,
+                        "period_event_root":period_event_root,
+                        "activity_status":activity_status,
+                        "opening_state_hash":opening_state_hash,
+                        "closing_state_hash":closing_state_hash,
+                        "reconciliation_hash":sha(canonical({
+                            "register":name,"opening":opening_state_hash,
+                            "closing":closing_state_hash,"event_root":period_event_root,
+                        })),
+                    }
+                    attestation_ref,attestation_digest=publish_checkpoint(
+                        attestation,signer,register_attestation_anchor)
+                    register_attestation_refs.add(attestation_ref)
+                    register_completeness.append({
+                        "register_name":name,"attestation_ref":attestation_ref,
+                        "attestation_digest":attestation_digest,
+                    })
+                register_completeness.sort(key=lambda item:item["register_name"])
+                register_completeness_digest=sha(canonical(register_completeness))
                 manifest={
                     "manifest_schema_version":1,"service_id":"SYNERGY-LONG-HORIZON-TEST",
                     "database_schema_version":4,"mapper_version":"gold2a-entity-journal-mapper@1",
@@ -423,6 +473,8 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                     "projection_state_hash":projection_hash,"coverage_count":event_count,
                     "applied_through_cursor":commit_sequence,"period":2033,"period_closed":True,
                     "backup_sha256":backup_digest,"checkpoint_sequence":sequence,
+                    "register_completeness":register_completeness,
+                    "register_completeness_digest":register_completeness_digest,
                     "created_at_utc":"2026-11-13T13:00:00Z","signer_key_id":signer.key_id,
                 }
                 return publish_checkpoint(manifest,signer,anchor)
@@ -439,9 +491,17 @@ class LongHorizonNativeCrossRegisterTests(unittest.TestCase):
                     and kid=="period-governance-integration-key" else None),
                 is_revoked=lambda issuer,kid,jti: False,
             )
+            def verify_governance_checkpoint(ref,digest):
+                selected_anchor=(
+                    register_attestation_anchor if ref in register_attestation_refs else anchor
+                )
+                return verify_checkpoint(
+                    ref,digest,trust,selected_anchor,require_latest=False,
+                )
+
             governance=PeriodGovernance(
                 root/"period-governance.sqlite3",
-                lambda ref,digest:verify_checkpoint(ref,digest,trust,anchor,require_latest=False),
+                verify_governance_checkpoint,
                 "SYNERGY-LONG-HORIZON-TEST",
                 approval_verifier,
             )
