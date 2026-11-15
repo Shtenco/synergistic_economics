@@ -68,6 +68,10 @@ class DurableRegisterInstanceIdentityTests(unittest.TestCase):
                         (uuid.uuid4().hex,),
                     )
                 with self.assertRaises(sqlite3.IntegrityError):
+                    con.execute(
+                        "UPDATE register_meta SET register_instance_id=NULL WHERE singleton_id=1"
+                    )
+                with self.assertRaises(sqlite3.IntegrityError):
                     con.execute("DELETE FROM register_meta WHERE singleton_id=1")
             reopened = DurableEventRegister(database)
             self.assertEqual(reopened.register_instance_id, identity)
