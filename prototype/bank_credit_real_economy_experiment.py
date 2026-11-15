@@ -247,7 +247,7 @@ class BankCreditAllocationExperiment:
             asset_price_index=str(asset_price_index),
             outstanding_bank_loan_assets=str(debt_total),
             borrower_principal_liabilities=str(debt_total),
-            net_new_deposit_money=str(self.credit_amount - total_destroyed),
+            net_new_deposit_money=str(credit_created - total_destroyed),
             principal_repaid=str(total_repaid),
             principal_due=str(due_for_period),
             arrears=str(sum(arrears.values(), ZERO)),
