@@ -692,6 +692,12 @@ class PeriodGovernance:
                 if request is None:
                     raise PeriodGovernanceError("unknown reopen request")
                 if request["state"] == "PUBLISHED":
+                    if (manifest.get("period") != request["period"]
+                            or manifest.get("projection_generation") != request["new_generation"]
+                            or manifest.get("period_closed") is not True):
+                        raise PeriodGovernanceError(
+                            "publication retry checkpoint does not identify the published generation"
+                        )
                     declarations = self._verify_register_completeness(
                         manifest, request["period"], request["new_generation"],
                     )
@@ -795,6 +801,21 @@ class PeriodGovernance:
                 if con.in_transaction:
                     con.execute("ROLLBACK")
                 raise
+
+    def register_period_attestations(self, period, generation):
+        period = _period(period)
+        if not isinstance(generation, int) or isinstance(generation, bool) or generation < 0:
+            raise PeriodGovernanceError("generation must be a non-negative integer")
+        with closing(self._connect()) as con:
+            rows = con.execute(
+                "SELECT register_name,attestation_ref,attestation_digest,source_register_id,"
+                "source_sequence,source_chain_hash,period_event_count,period_event_root,"
+                "activity_status,opening_state_hash,closing_state_hash,reconciliation_hash "
+                "FROM register_period_attestations WHERE period=? AND generation=? "
+                "ORDER BY register_name",
+                (period, generation),
+            ).fetchall()
+            return tuple(dict(row) for row in rows)
 
     def active_generation(self, period):
         period = _period(period)
