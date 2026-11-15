@@ -103,6 +103,20 @@ class FixedAssetLedgerTests(unittest.TestCase):
         self.assertEqual(ledger.carrying_value("farm-north", 4), D("1230"))
         self.assertEqual(ledger.carrying_value("farm-north", 6), D("820"))
 
+    def test_retirement_effective_period_cannot_move_backwards(self):
+        ledger = FixedAssetLedger()
+        item = order()
+        ledger.place_paid_order(item, payment_amount="2000", payment_currency="KZT",
+                                order_currency="KZT", payment_evidence_ref="payment:1")
+        ledger.deliver(event_id="delivery-1", order_id=item.order_id, quantity="2",
+                       period=2, evidence_ref="receipt:1")
+        cohort_id = "cohort:capex-1:delivery-1"
+        ledger.retire(event_id="retire-later", cohort_id=cohort_id, quantity="0.5",
+                      period=5, evidence_ref="scrap:later")
+        with self.assertRaises(FixedAssetError):
+            ledger.retire(event_id="retire-backdated", cohort_id=cohort_id, quantity="0.5",
+                          period=4, evidence_ref="scrap:backdated")
+
     def test_capacity_expires_after_useful_life(self):
         ledger = FixedAssetLedger()
         item = order()
