@@ -259,6 +259,76 @@ class InputOutputEconomyTests(unittest.TestCase):
             sum((D(v) for v in result.household_unemployment_hours.values()), D("0")),
         )
 
+    def test_paid_machinery_capex_enters_production_only_after_delivery_and_commissioning(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[
+                Product("grain", "unit", D("1"), D("1"), D("0")),
+                Product("machinery", "unit", D("520"), D("520"), D("0")),
+            ],
+            firms=[
+                FirmConfig("farm", "grain", {}, D("1"), D("2"), D("2"),
+                           D("1"), D("1000"), {}),
+                FirmConfig("machine-works", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("1000"), {"machinery": D("1")}),
+            ],
+            households=[
+                HouseholdConfig("household-1", D("0"), {}, D("0"), D("100"))
+            ],
+        )
+        model.place_capex_order(
+            order_id="CAPEX-TRACTOR-1",
+            credit_event_id="CREDIT-ORIGINATION-1",
+            payment_event_id="CAPEX-PAYMENT-1",
+            buyer_id="farm", supplier_id="machine-works",
+            asset_type="machinery", quantity=D("1"), unit_cost=D("520"),
+            order_period=1, delivery_period=2, commissioning_period=3,
+            useful_life_periods=5, residual_value_per_unit=D("52"),
+            service_capacity_per_unit=D("3"),
+            currency="LCU", payment_evidence_ref="BANK-PAYMENT-EVIDENCE",
+        )
+        first = model.step(1)
+        second = model.step(2)
+        third = model.step(3)
+        self.assertEqual(first.firm_commissioned_capacity_by_firm["farm"], "0")
+        self.assertEqual(second.firm_commissioned_capacity_by_firm["farm"], "0")
+        self.assertEqual(third.firm_commissioned_capacity_by_firm["farm"], "3")
+        self.assertEqual(first.firm_production_by_firm["farm"], "2.00000000")
+        self.assertEqual(second.firm_production_by_firm["farm"], "0")
+        self.assertEqual(third.firm_production_by_firm["farm"], "3.00000000")
+        self.assertEqual(second.capital_formation["machinery"], "1")
+        self.assertEqual(third.capital_formation["machinery"], "0")
+        self.assertEqual(D(third.physical_balance_error["machinery"]), D("0"))
+        self.assertEqual(D(third.cash_error), D("0"))
+        self.assertEqual(model.firms["machine-works"].cash, D("1520.00"))
+        self.assertEqual(model.fixed_asset_ledger.carrying_value("farm", 3), D("520"))
+
+    def test_capex_cannot_be_paid_without_supplier_stock_or_buyer_cash(self):
+        from io_economy import FirmConfig, HouseholdConfig, Product
+        model = InputOutputEconomy(
+            products=[Product("machinery", "unit", D("520"), D("520"), D("0"))],
+            firms=[
+                FirmConfig("buyer", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("0"), {}),
+                FirmConfig("supplier", "machinery", {}, D("1"), D("0"), D("0"),
+                           D("1"), D("100"), {"machinery": D("1")}),
+            ],
+            households=[HouseholdConfig("household-1", D("0"), {}, D("0"), D("0"))],
+        )
+        args = dict(
+            order_id="CAPEX-1", credit_event_id="CREDIT-1",
+            payment_event_id="PAYMENT-1", buyer_id="buyer",
+            supplier_id="supplier", asset_type="machinery", quantity=D("1"),
+            unit_cost=D("520"), order_period=1, delivery_period=2,
+            commissioning_period=3, useful_life_periods=5,
+            residual_value_per_unit=D("52"), service_capacity_per_unit=D("1"),
+            currency="LCU", payment_evidence_ref="PAYMENT-EVIDENCE",
+        )
+        with self.assertRaises(EconomyError):
+            model.place_capex_order(**args)
+        self.assertEqual(model.firms["supplier"].cash, D("100"))
+        self.assertEqual(model.firms["supplier"].inventory["machinery"], D("1"))
+
     def test_nonwage_income_sources_are_funded_and_separately_recorded(self):
         from io_economy import HouseholdIncomePayment, HouseholdConfig, FirmConfig, Product
         payments = [
