@@ -94,6 +94,18 @@ class InterbankSettlementTests(unittest.TestCase):
         self.assertEqual(payment["status"], "SETTLED")
         self.assertEqual(payment["amount"], "70.00")
         self.assertEqual(revision, 5)
+        bank_a = self.register.bank_principal_snapshot(
+            "bank-a", "LCU", principal_id="root",
+        )
+        bank_b = self.register.bank_principal_snapshot(
+            "bank-b", "LCU", principal_id="root",
+        )
+        self.assertEqual(bank_a["deposit_liabilities"], D("30.00"))
+        self.assertEqual(bank_a["reserve_assets"], D("430.00"))
+        self.assertEqual(bank_a["reserve_to_deposit_liability_ratio"], D("430") / D("30"))
+        self.assertEqual(bank_b["deposit_liabilities"], D("100.00"))
+        self.assertEqual(bank_b["reserve_assets"], D("170.00"))
+        self.assertEqual(bank_b["reserve_to_deposit_liability_ratio"], D("1.7"))
         self.assertTrue(self.register.verify())
 
     def test_insufficient_reserves_reject_without_any_partial_posting(self):
