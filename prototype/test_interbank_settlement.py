@@ -7,6 +7,9 @@ from operating_financial_register import (
     OperatingFinancialRegister, OperatingFinancialRegisterError,
     interbank_payment_stock_flow_movement_specs,
 )
+from economic_stock_flow_reconciliation import (
+    OpeningPosition, ClosingPosition, movements_from_event_groups, reconcile_periods,
+)
 
 T = "2026-11-15T00:00:00Z"
 
@@ -189,6 +192,71 @@ class InterbankSettlementTests(unittest.TestCase):
             self.assertEqual(pair[0]["amount"], pair[1]["amount"])
             self.assertEqual({item["mirror_side"] for item in pair},
                              {"asset_holder", "liability_issuer"})
+
+
+    def test_interbank_settlement_reconciles_deposits_and_central_bank_reserves(self):
+        self.settle()
+        specs = interbank_payment_stock_flow_movement_specs({
+            "event_id": "PAYMENT-EVENT-1",
+            "event_type": "bank.interbank_payment_settled",
+            "payment_id": "PAYMENT-1", "payer_id": "payer", "payee_id": "payee",
+            "payer_bank_id": "bank-a", "payee_bank_id": "bank-b",
+            "central_bank_id": "central-bank", "currency": "LCU",
+            "amount": "70.00", "period_index": 2, "evidence_ref": "EVIDENCE:PAYMENT-1",
+        })
+        names = ("physical", "capital", "labour", "product", "legal_rights", "financial")
+        participants = []
+        for name in names:
+            payload = ({"stock_flow_movements": specs} if name == "financial"
+                       else {"no_stock_flow_effect": f"not implicated: {name}"})
+            participants.append({
+                "register_id": name, "common_event_id": "PAYMENT-EVENT-1",
+                "native_event_id": f"PAYMENT-EVENT-1:{name}",
+                "aggregate_version": 1, "payload": payload,
+            })
+        groups = ({
+            "schema_version": 1, "transaction_id": "PAYMENT-EVENT-1",
+            "common_event_id": "PAYMENT-EVENT-1", "events": tuple(participants),
+        },)
+        movements = movements_from_event_groups(groups)
+        self.assertEqual(len(movements), 8)
+        opening_rows = (
+            self.register.deposit_opening_positions(period_index=1, principal_id="root")
+            + self.register.reserve_opening_positions(period_index=1, principal_id="root")
+        )
+        initial = {row.identity: row.amount for row in opening_rows}
+        identities = {movement.identity for movement in movements}
+        self.assertEqual(len(identities), 8)
+        openings, closings = [], []
+        for identity in identities:
+            balance = initial[identity]
+            openings.append(OpeningPosition(
+                identity, 1, balance, f"OPEN:{identity.position_id}:P1",
+            ))
+            closings.append(ClosingPosition(
+                identity, 1, balance, f"CLOSE:{identity.position_id}:P1",
+            ))
+            openings.append(OpeningPosition(
+                identity, 2, balance, f"OPEN:{identity.position_id}:P2",
+            ))
+            closing = balance + sum((
+                movement.amount for movement in movements
+                if movement.identity == identity and movement.period_index == 2
+            ), D("0"))
+            closings.append(ClosingPosition(
+                identity, 2, closing, f"CLOSE:{identity.position_id}:P2",
+            ))
+        result = reconcile_periods(tuple(openings), movements, tuple(closings))
+        self.assertEqual(result.event_count, 8)
+        self.assertEqual(result.mirror_group_count, 4)
+        closing = {
+            row.identity.position_id: row.closing
+            for row in result.periods if row.period_index == 2
+        }
+        self.assertEqual(closing["DEPOSIT:payer:bank-a:LCU:ASSET"], D("30.00"))
+        self.assertEqual(closing["DEPOSIT:payee:bank-b:LCU:ASSET"], D("100.00"))
+        self.assertEqual(closing["RESERVE:bank-a:central-bank:LCU:ASSET"], D("430.00"))
+        self.assertEqual(closing["RESERVE:bank-b:central-bank:LCU:ASSET"], D("170.00"))
 
     def test_reserve_opening_positions_are_mirrored_and_replayable(self):
         positions = self.register.reserve_opening_positions(
