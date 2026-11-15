@@ -663,7 +663,7 @@ class InputOutputEconomy:
                 state.expenditure += payment
         imported = ZERO
         domestic_sold = ZERO
-        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in actual_buyer_allocations.values()), ZERO)
+        buyer_cash = sum((cash(qty_value * clearing_price) for qty_value in settled_buyer_allocations.values()), ZERO)
         seller_items = [(key, amount) for key, amount in sorted(seller_allocations.items()) if amount > 0]
         seller_cash_assigned = ZERO
         for index, ((kind, seller_id), amount) in enumerate(seller_items):
