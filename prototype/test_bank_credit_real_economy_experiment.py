@@ -85,8 +85,14 @@ class BankCreditRealEconomyExperimentTests(unittest.TestCase):
             "consumer_price_index", "outstanding_bank_loan_assets",
             "borrower_principal_liabilities", "borrower_net_worth_proxy",
             "debt_service_liquidity_coverage", "household_wage_income_gini",
+            "household_wage_income", "household_labour_hours",
         ):
             self.assertIn(key, row)
+        wage_income = {k: D(v) for k, v in row["household_wage_income"].items()}
+        labour_hours = {k: D(v) for k, v in row["household_labour_hours"].items()}
+        self.assertGreater(D(row["household_wage_income_gini"]), D("0"))
+        self.assertGreater(len({v for v in wage_income.values()}), 1)
+        self.assertGreater(len({v for v in labour_hours.values()}), 1)
 
 
 if __name__ == "__main__":
