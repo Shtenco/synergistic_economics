@@ -191,18 +191,23 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         movements = movements_from_event_groups(groups)
         self.assertEqual(len(movements), 8)
         identities = sorted({movement.identity for movement in movements})
+        durable_openings = {
+            row.identity: (row.amount, row.evidence_ref)
+            for row in self.register.deposit_opening_positions(
+                period_index=1, principal_id="financial-root",
+            )
+        }
         openings, closings = [], []
         for identity in identities:
-            instrument = identity.instrument_id
-            if instrument.startswith("DEPOSIT:employer-1:"):
-                initial = D("1000")
-            elif instrument.startswith("DEPOSIT:worker-1:"):
-                initial = D("10")
-            else:
-                initial = D("0")
+            initial, opening_evidence = durable_openings.get(
+                identity, (D("0"), f"OPEN-WAGE:{identity.position_id}"),
+            )
             balance = initial
             for period in (1, 2):
-                openings.append(OpeningPosition(identity, period, balance, f"OPEN:{identity.position_id}:{period}"))
+                openings.append(OpeningPosition(
+                    identity, period, balance,
+                    opening_evidence if period == 1 else f"OPEN:{identity.position_id}:{period}",
+                ))
                 balance += sum((movement.amount for movement in movements
                                 if movement.identity == identity and movement.period_index == period), D("0"))
                 closings.append(ClosingPosition(identity, period, balance, f"CLOSE:{identity.position_id}:{period}"))
