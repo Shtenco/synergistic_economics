@@ -56,19 +56,26 @@ class PeriodGovernance:
     authorization_verifier(approver_id, role, request_context, evidence_ref)
     must authenticate the identity, authorize the role for this exact request,
     and verify an independently issued approval assertion.
+    register_attestation_authorizer(register_name, signer_key_id, declaration)
+    must verify that the independently trusted signing key is authorized to
+    attest for that exact native register.
     """
 
     def __init__(self, database_path, checkpoint_verifier: Callable[[str, str], dict],
-                 service_id: str, authorization_verifier: Callable[[str, str, dict, str], bool]):
+                 service_id: str, authorization_verifier: Callable[[str, str, dict, str], bool],
+                 register_attestation_authorizer: Callable[[str, str, dict], bool]):
         if not callable(checkpoint_verifier):
             raise PeriodGovernanceError("an external checkpoint verifier is mandatory")
         if not callable(authorization_verifier):
             raise PeriodGovernanceError("an independent approval authorization verifier is mandatory")
+        if not callable(register_attestation_authorizer):
+            raise PeriodGovernanceError("a per-register attestation authority verifier is mandatory")
         self.service_id = _required(service_id, "service_id")
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         self.checkpoint_verifier = checkpoint_verifier
         self.authorization_verifier = authorization_verifier
+        self.register_attestation_authorizer = register_attestation_authorizer
         with closing(self._connect()) as con:
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS period_closures(
@@ -294,6 +301,10 @@ class PeriodGovernance:
             ):
                 raise PeriodGovernanceError(
                     f"{name} attestation does not certify this complete period/generation"
+                )
+            if not self.register_attestation_authorizer(name, signer_key, attestation):
+                raise PeriodGovernanceError(
+                    f"{name} attestation signing key is not authorized for that native register"
                 )
             source_id = _required(attestation.get("source_register_id"), "source_register_id")
             sequence = attestation.get("source_sequence")
