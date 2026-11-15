@@ -106,7 +106,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 project_and_persist(
                     source, principal_id="auditor", instrument_registry=terms,
                     sector_registry=sectors, opening_snapshots=[snapshot], store=store,
-                    source_register_id="financial-register:auditor",
+                    source_register_id=source.register_instance_id,
                 )
             self.assertIsNone(store.latest_checkpoint(source.register_instance_id))
 
