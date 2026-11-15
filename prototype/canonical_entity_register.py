@@ -439,3 +439,18 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             "external_refs": list(state["external_refs"]),
             "effective_as_of": instant,
         }
+
+
+class CanonicalEconomicEntityResolverAdapter:
+    """Least-privilege adapter exposing the two-argument Metaverse resolver contract."""
+
+    def __init__(self, register: CanonicalEconomicEntityRegister, *, service_principal_id: str):
+        if not isinstance(register, CanonicalEconomicEntityRegister):
+            raise TypeError("register must be a CanonicalEconomicEntityRegister")
+        self.register = register
+        self.service_principal_id = required_text(service_principal_id, "service_principal_id")
+
+    def resolve_entity(self, tenant_id: str, economic_entity_id: str) -> Mapping[str, Any]:
+        return self.register.resolve_entity(
+            tenant_id, economic_entity_id, principal_id=self.service_principal_id
+        )
