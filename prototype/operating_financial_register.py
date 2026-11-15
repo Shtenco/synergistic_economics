@@ -6,6 +6,8 @@ protocol. It is intentionally not an EntityJournal and does not alter GOLD-2A.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import hashlib
+import json
 from typing import Mapping
 
 from durable_event_register import DurableEventRegister, RegisterError
@@ -926,6 +928,146 @@ class OperatingFinancialRegister(DurableEventRegister):
         }
         token = self.prepare(event_id, operation)
         return self.commit(event_id, token)
+
+    def _credit_facility_opening_positions(self, *, period_index, principal_id, facility_kind):
+        """Reconstruct loan/refinancing debt openings from committed source events.
+
+        Only originations before the requested period contribute to its opening
+        balance. Originations in the requested period produce explicit zero
+        opening rows; repayments in the requested period affect closing, not
+        opening. Evidence refs bind the contributing immutable event-chain rows.
+        """
+        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index < 1:
+            raise OperatingFinancialRegisterError("opening period_index must be a positive integer")
+        if facility_kind not in {"loan", "refinancing"}:
+            raise OperatingFinancialRegisterError("unsupported financial facility opening kind")
+        if not self.verify():
+            raise OperatingFinancialRegisterError("financial source register hash-chain verification failed")
+        history = self.history("operating-financial", principal_id=principal_id)
+        if not history:
+            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+
+        if facility_kind == "loan":
+            origin_type = "bank.loan_originated"
+            repayment_type = "bank.loan_principal_repaid"
+            id_field = "loan_id"
+            amount_field = "amount"
+        else:
+            origin_type = "central_bank.refinancing_advanced"
+            repayment_type = "central_bank.refinancing_principal_repaid"
+            id_field = "facility_id"
+            amount_field = "amount"
+
+        facilities = {}
+        seen_event_ids = set()
+        for row in history:
+            event_id = _text(row.get("event_id"), "history.event_id")
+            if event_id in seen_event_ids:
+                raise OperatingFinancialRegisterError("duplicate event ID in financial source history")
+            seen_event_ids.add(event_id)
+            event_type = row.get("event_type")
+            if event_type not in {origin_type, repayment_type}:
+                continue
+            payload = row.get("payload")
+            if not isinstance(payload, Mapping):
+                raise OperatingFinancialRegisterError("financial facility history payload must be a mapping")
+            event_period = payload.get("period_index")
+            if not isinstance(event_period, int) or isinstance(event_period, bool) or event_period < 1:
+                raise OperatingFinancialRegisterError("financial facility history period must be a positive integer")
+            if event_period > period_index:
+                continue
+            facility_id = _text(payload.get(id_field), id_field)
+            amount = _decimal(payload.get(amount_field), amount_field, positive=True)
+            evidence_ref = _text(payload.get("evidence_ref"), "evidence_ref")
+            if event_type == origin_type:
+                if facility_id in facilities:
+                    raise OperatingFinancialRegisterError("duplicate facility origination in source history")
+                if facility_kind == "loan":
+                    identity_fields = {
+                        "borrower_id": _text(payload.get("borrower_id"), "borrower_id"),
+                        "bank_id": _text(payload.get("bank_id"), "bank_id"),
+                        "currency": _text(payload.get("currency"), "currency"),
+                    }
+                else:
+                    identity_fields = {
+                        "bank_id": _text(payload.get("bank_id"), "bank_id"),
+                        "central_bank_id": _text(payload.get("central_bank_id"), "central_bank_id"),
+                        "currency": _text(payload.get("currency"), "currency"),
+                    }
+                facilities[facility_id] = {
+                    **identity_fields,
+                    "opening_balance": amount if event_period < period_index else D("0"),
+                    "origin_period": event_period,
+                    "proof_rows": [row],
+                }
+                continue
+
+            facility = facilities.get(facility_id)
+            if facility is None:
+                raise OperatingFinancialRegisterError("facility repayment precedes its origination in source history")
+            if event_period < facility["origin_period"]:
+                raise OperatingFinancialRegisterError("facility repayment period precedes origination")
+            expected_fields = (
+                ("borrower_id", "bank_id", "currency") if facility_kind == "loan"
+                else ("bank_id", "central_bank_id", "currency")
+            )
+            for field in expected_fields:
+                if payload.get(field) != facility[field]:
+                    raise OperatingFinancialRegisterError("facility repayment identity differs from its origination")
+            if event_period < period_index:
+                facility["opening_balance"] -= amount
+                if facility["opening_balance"] < 0:
+                    raise OperatingFinancialRegisterError("facility opening balance became negative during history replay")
+                facility["proof_rows"].append(row)
+
+        from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
+        positions = []
+        for facility_id, item in sorted(facilities.items()):
+            currency = item["currency"]
+            proof = [{
+                "event_id": row["event_id"],
+                "commit_sequence": row["commit_sequence"],
+                "payload_sha256": row["payload_sha256"],
+                "chain_hash": row["chain_hash"],
+                "evidence_ref": row["payload"]["evidence_ref"],
+            } for row in item["proof_rows"]]
+            proof_digest = hashlib.sha256(
+                json.dumps(proof, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            evidence = f"financial-opening-v1:{facility_kind}:{period_index}:{proof_digest}"
+            if facility_kind == "loan":
+                instrument = f"LOAN:{facility_id}"
+                pairs = (
+                    (f"{instrument}:BANK-ASSET", item["bank_id"], item["borrower_id"]),
+                    (f"{instrument}:BORROWER-LIABILITY", item["borrower_id"], item["bank_id"]),
+                )
+            else:
+                instrument = f"CBREFI:{facility_id}"
+                pairs = (
+                    (f"{instrument}:CB-ASSET", item["central_bank_id"], item["bank_id"]),
+                    (f"{instrument}:BANK-LIABILITY", item["bank_id"], item["central_bank_id"]),
+                )
+            for position_id, holder, issuer in pairs:
+                identity = PositionIdentity(
+                    "financial", position_id, "monetary", currency, currency,
+                    "NOMINAL", holder, issuer, instrument,
+                )
+                positions.append(OpeningPosition(
+                    identity, period_index, item["opening_balance"], evidence,
+                ))
+        return tuple(positions)
+
+    def loan_opening_positions(self, *, period_index, principal_id):
+        """Export bilateral loan-principal opening positions for one period."""
+        return self._credit_facility_opening_positions(
+            period_index=period_index, principal_id=principal_id, facility_kind="loan",
+        )
+
+    def refinancing_opening_positions(self, *, period_index, principal_id):
+        """Export central-bank refinancing principal opening positions for one period."""
+        return self._credit_facility_opening_positions(
+            period_index=period_index, principal_id=principal_id, facility_kind="refinancing",
+        )
 
     def reserve_opening_positions(self, *, period_index, principal_id):
         if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index != 1:
