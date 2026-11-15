@@ -763,14 +763,6 @@ class InputOutputEconomy:
                 household_id: f"WAGE-PAYMENT:{period}:{firm_id}:{household_id}"
                 for household_id, share in wage_by_household.items() if share > 0
             }
-            for household_id, share in wage_by_household.items():
-                household = self.households[household_id]
-                household.cash += share
-                household.wage_income += share
-                household.period_wage_income += share
-                household.period_labour_hours += hours_by_household[household_id]
-                household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
-                household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
             self._event(production_event_key, "production", {
                 "firm": firm_id, "product": c.output_product, "quantity": str(actual),
                 "intermediate_input_value": str(input_value), "wages": str(wage),
@@ -790,6 +782,13 @@ class InputOutputEconomy:
             for household_id, share in wage_by_household.items():
                 if share <= 0:
                     continue
+                household = self.households[household_id]
+                household.cash += share
+                household.wage_income += share
+                household.period_wage_income += share
+                household.period_labour_hours += hours_by_household[household_id]
+                household.period_income_by_source["wages"] = household.period_income_by_source.get("wages", ZERO) + share
+                household.cumulative_income_by_source["wages"] = household.cumulative_income_by_source.get("wages", ZERO) + share
                 wage_event_id = wage_payment_event_ids[household_id]
                 self._event(f"p{period}:wage-payment:{firm_id}:{household_id}", "wage_payment", {
                     "event_id": wage_event_id, "firm_id": firm_id,
