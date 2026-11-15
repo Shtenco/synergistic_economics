@@ -387,6 +387,18 @@ class OperatingFinancialSFCAdapter:
         except SFCProjectionError as exc:
             raise OperatingFinancialSFCAdapterError(str(exc)) from exc
 
+        # A non-zero position cannot silently disappear from a later complete
+        # opening snapshot. Extinction/write-off must be represented by an
+        # explicit transaction or other-volume-change contract, not omission.
+        snapshot_period_set = set(periods)
+        for (identity, period), roll in roll_forward.items():
+            next_period = period + 1
+            if next_period in snapshot_period_set and (identity, next_period) not in openings:
+                if roll.closing != 0:
+                    raise OperatingFinancialSFCAdapterError(
+                        f"non-zero position {identity.instrument_id} disappears from period {next_period} opening"
+                    )
+
         nl = {}
         keys = set(transaction_assets) | set(transaction_liabilities)
         for key in keys:
