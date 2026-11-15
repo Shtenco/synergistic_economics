@@ -438,7 +438,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             self.register.deposit_balance(
                 "worker-1", "LCU", principal_id="financial-root",
             )[0],
-            expected + D("9.00"),
+            D("123456789012345678901234567899.00"),
         )
         snapshot = self.register.bank_principal_snapshot(
             "bank-1", "LCU", principal_id="financial-root",
@@ -446,7 +446,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(snapshot["loan_assets"], expected)
         self.assertEqual(
             snapshot["deposit_liabilities"],
-            expected + D("1009.00"),
+            D("123456789012345678901234568899.00"),
         )
 
     def test_refinancing_state_retains_original_advance_period_after_repayment(self):
