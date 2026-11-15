@@ -555,6 +555,9 @@ class OperatingFinancialRegister(DurableEventRegister):
         currency = _text(payload.get("currency"), "currency")
         account_ref = _text(payload.get("account_ref"), "reserve account_ref")
         evidence = _text(payload.get("evidence_ref"), "reserve evidence_ref")
+        opening_period = payload.get("period_index", 1)
+        if not isinstance(opening_period, int) or isinstance(opening_period, bool) or opening_period < 1:
+            raise OperatingFinancialRegisterError("reserve opening period_index must be a positive integer")
         balance = _decimal(payload.get("opening_balance"), "reserve opening_balance")
         minor_unit = _decimal(payload.get("minor_unit", "0.01"), "reserve minor_unit", positive=True)
         if bank == central_bank or balance < 0:
@@ -576,7 +579,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "bank_id": bank, "central_bank_id": central_bank, "currency": currency,
             "account_ref": account_ref, "opening_balance": str(balance),
             "balance": str(balance), "minor_unit": str(minor_unit),
-            "opening_evidence_ref": evidence,
+            "opening_evidence_ref": evidence, "opening_period_index": opening_period,
         }
         return state
 
@@ -729,6 +732,9 @@ class OperatingFinancialRegister(DurableEventRegister):
         currency = _text(payload.get("currency"), "deposit currency")
         account_ref = _text(payload.get("account_ref"), "deposit account_ref")
         evidence_ref = _text(payload.get("evidence_ref"), "deposit evidence_ref")
+        opening_period = payload.get("period_index", 1)
+        if not isinstance(opening_period, int) or isinstance(opening_period, bool) or opening_period < 1:
+            raise OperatingFinancialRegisterError("deposit opening period_index must be a positive integer")
         balance = _decimal(payload.get("opening_balance"), "opening_balance")
         minor_unit = _decimal(payload.get("minor_unit", "0.01"), "deposit minor_unit", positive=True)
         if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
@@ -753,7 +759,7 @@ class OperatingFinancialRegister(DurableEventRegister):
             "entity_id": entity, "bank_id": bank, "currency": currency,
             "account_ref": account_ref, "opening_balance": str(balance),
             "balance": str(balance), "minor_unit": str(minor_unit),
-            "opening_evidence_ref": evidence_ref,
+            "opening_evidence_ref": evidence_ref, "opening_period_index": opening_period,
         }
         return state
 
@@ -895,7 +901,7 @@ class OperatingFinancialRegister(DurableEventRegister):
     def open_deposit_account(self, *, event_id, entity_id, bank_id, currency,
                              account_ref, opening_balance, evidence_ref,
                              actor_id, authority_ref, effective_at, recorded_at,
-                             expected_revision, minor_unit="0.01"):
+                             expected_revision, minor_unit="0.01", period_index=1):
         event_id = _text(event_id, "event_id")
         operation = {
             "stream_id": "operating-financial",
@@ -910,7 +916,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                     "entity_id": entity_id, "bank_id": bank_id, "currency": currency,
                     "account_ref": account_ref, "opening_balance": str(_decimal(opening_balance, "opening_balance")),
                     "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
-                    "evidence_ref": evidence_ref,
+                    "evidence_ref": evidence_ref, "period_index": period_index,
                 },
                 "no_stock_flow_effect": "account opening establishes a financial opening stock, not a period transaction movement",
             },
@@ -922,7 +928,7 @@ class OperatingFinancialRegister(DurableEventRegister):
     def open_bank_reserve_account(self, *, event_id, bank_id, central_bank_id,
                                   currency, account_ref, opening_balance, evidence_ref,
                                   actor_id, authority_ref, effective_at, recorded_at,
-                                  expected_revision, minor_unit="0.01"):
+                                  expected_revision, minor_unit="0.01", period_index=1):
         event_id = _text(event_id, "event_id")
         operation = {
             "stream_id": "operating-financial", "native_event_id": event_id,
@@ -937,7 +943,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                     "currency": currency, "account_ref": account_ref,
                     "opening_balance": str(_decimal(opening_balance, "opening_balance")),
                     "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
-                    "evidence_ref": evidence_ref,
+                    "evidence_ref": evidence_ref, "period_index": period_index,
                 },
                 "no_stock_flow_effect": "reserve account opening establishes an opening stock, not a period transaction movement",
             },
@@ -1105,7 +1111,11 @@ class OperatingFinancialRegister(DurableEventRegister):
         if not history:
             raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
         state, _ = self.state("operating-financial", principal_id=principal_id)
-        accounts = state.get("deposits" if account_kind == "deposit" else "reserves", {})
+        all_accounts = state.get("deposits" if account_kind == "deposit" else "reserves", {})
+        accounts = {
+            key: account for key, account in all_accounts.items()
+            if account.get("opening_period_index", 1) <= period_index
+        }
         if not accounts:
             return ()
 
@@ -1155,8 +1165,15 @@ class OperatingFinancialRegister(DurableEventRegister):
                 account_key = self._reserve_key(
                     payload.get("bank_id"), payload.get("central_bank_id"), payload.get("currency"),
                 )
+            opening_period = payload.get("period_index", 1)
+            if not isinstance(opening_period, int) or isinstance(opening_period, bool) or opening_period < 1:
+                raise OperatingFinancialRegisterError("financial account opening period must be positive")
+            if opening_period > period_index:
+                continue
             if account_key not in positions_by_account or account_key in opening_rows:
                 raise OperatingFinancialRegisterError("duplicate or unknown financial account opening event")
+            if positions_by_account[account_key]["account"].get("opening_period_index", 1) != opening_period:
+                raise OperatingFinancialRegisterError("financial account opening period differs from immutable source event")
             opening_rows[account_key] = row
         if set(opening_rows) != set(positions_by_account):
             raise OperatingFinancialRegisterError("durable financial account is missing its opening source event")
@@ -1243,6 +1260,9 @@ class OperatingFinancialRegister(DurableEventRegister):
                 movement_period = movement.get("period_index")
                 if not isinstance(movement_period, int) or isinstance(movement_period, bool) or movement_period < 1:
                     raise OperatingFinancialRegisterError("financial account movement period must be positive")
+                opening_period = positions_by_account[account_key]["account"].get("opening_period_index", 1)
+                if movement_period < opening_period:
+                    raise OperatingFinancialRegisterError("financial account movement predates its opening period")
                 amount = _decimal(movement.get("amount"), "financial account movement amount")
                 if movement_period < period_index:
                     with localcontext() as context:
