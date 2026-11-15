@@ -378,6 +378,16 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(register.bank_reserve_snapshot(
             "bank-1", "central-bank-1", "LCU", principal_id="financial-root",
         )["reserve_balance"], D("50"))
+        # An origination during period 1 is a T-flow in period 1, not an
+        # opening stock at the start of period 1.
+        self.assertEqual(
+            register.loan_opening_positions(period_index=1, principal_id="financial-root"),
+            (),
+        )
+        self.assertEqual(
+            register.refinancing_opening_positions(period_index=1, principal_id="financial-root"),
+            (),
+        )
         with self.assertRaisesRegex(
             OperatingFinancialRegisterError,
             "no evidenced opening balance for the requested earlier period",
