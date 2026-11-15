@@ -26,6 +26,39 @@ def qty_floor(value):
     """Round physical quantities down so execution cannot consume unavailable stock."""
     return dec(value).quantize(QTY, rounding=ROUND_DOWN)
 
+def _scale_allocations(allocations, total):
+    """Scale non-negative physical allocations without negative residual plugs."""
+    total = dec(total)
+    if not total.is_finite() or total < 0:
+        raise EconomyError("allocation target must be finite and non-negative")
+    source_total = sum(allocations.values(), ZERO)
+    if any(not value.is_finite() or value < 0 for value in allocations.values()):
+        raise EconomyError("source allocations must be finite and non-negative")
+    if total > source_total:
+        raise EconomyError("allocation target exceeds source quantity")
+    if source_total == 0:
+        if total != 0:
+            raise EconomyError("cannot allocate a positive target from zero source quantity")
+        return {key: ZERO for key in allocations}
+    scaled = {
+        key: qty_floor(value * total / source_total)
+        for key, value in allocations.items()
+    }
+    residual = total - sum(scaled.values(), ZERO)
+    # Assign the sub-quantum residual to the largest remaining capacity first.
+    # This prevents a tiny final seller/buyer from becoming negative and then
+    # disappearing from settlement when positive rows are filtered.
+    for key in sorted(allocations, key=lambda item: (-allocations[item], item)):
+        if residual <= 0:
+            break
+        capacity = allocations[key] - scaled[key]
+        addition = min(capacity, residual)
+        scaled[key] += addition
+        residual -= addition
+    if residual != 0 or any(value < 0 or value > allocations[key] for key, value in scaled.items()):
+        raise EconomyError("deterministic allocation residual could not be assigned within source capacities")
+    return scaled
+
 def cash(value):
     return dec(value).quantize(CENT, rounding=ROUND_HALF_UP)
 
@@ -595,11 +628,12 @@ class InputOutputEconomy:
         available = sum((o[2] for o in eligible_offers), ZERO)
         requested = sum((o.quantity for o in eligible_demand), ZERO)
         traded = min(available, requested)
-        buyer_allocations = {}
+        buyer_weights = {}
         if requested > 0 and traded > 0:
             for order in eligible_demand:
-                allocation = qty(traded * order.quantity / requested)
-                buyer_allocations[(order.buyer_kind, order.buyer_id)] = buyer_allocations.get((order.buyer_kind, order.buyer_id), ZERO) + allocation
+                key = (order.buyer_kind, order.buyer_id)
+                buyer_weights[key] = buyer_weights.get(key, ZERO) + order.quantity
+        buyer_allocations = _scale_allocations(buyer_weights, traded) if traded > 0 else {}
         seller_allocations = {}
         if available > 0 and traded > 0:
             # Merit order: use the lowest-ask supplier first; expensive imports
@@ -608,19 +642,10 @@ class InputOutputEconomy:
             for seller_id, seller_kind, offer_qty, ask in sorted(eligible_offers, key=lambda x: (x[3], x[1], x[0])):
                 allocation = min(offer_qty, remaining_supply)
                 if allocation > 0:
-                    seller_allocations[(seller_kind, seller_id)] = qty(allocation)
+                    seller_allocations[(seller_kind, seller_id)] = allocation
                     remaining_supply -= allocation
                 if remaining_supply <= 0:
                     break
-        # Correct tiny Decimal rounding drift deterministically on the last eligible buyer/seller.
-        if buyer_allocations:
-            drift = traded - sum(buyer_allocations.values(), ZERO)
-            key = sorted(buyer_allocations)[-1]
-            buyer_allocations[key] += drift
-        if seller_allocations:
-            drift = traded - sum(seller_allocations.values(), ZERO)
-            key = sorted(seller_allocations)[-1]
-            seller_allocations[key] += drift
         # Cash cap is checked again at execution; any residual quantity remains unfilled.
         actual_buyer_allocations = {}
         for key, amount in sorted(buyer_allocations.items()):
@@ -628,7 +653,7 @@ class InputOutputEconomy:
             available_cash = self.firms[buyer_id].cash if kind == "firm" else self.households[buyer_id].cash
             remaining_budget = buyer_budget.get(key, available_cash)
             spendable = min(available_cash, remaining_budget)
-            affordable = qty(spendable / clearing_price) if clearing_price > 0 else ZERO
+            affordable = qty_floor(spendable / clearing_price) if clearing_price > 0 else ZERO
             actual_buyer_allocations[key] = min(amount, affordable)
         # A positive physical allocation is not executable if its cash settlement
         # rounds to zero cents. Exclude it before computing traded quantity; otherwise
@@ -640,12 +665,9 @@ class InputOutputEconomy:
                 settled_buyer_allocations[key] = amount
         actual_traded = sum(settled_buyer_allocations.values(), ZERO)
         if actual_traded < traded and seller_allocations:
-            # Scale seller deliveries to the quantity that can actually settle.
-            for key in list(seller_allocations):
-                seller_allocations[key] = qty(seller_allocations[key] * actual_traded / traded)
-            drift = actual_traded - sum(seller_allocations.values(), ZERO)
-            key = sorted(seller_allocations)[-1]
-            seller_allocations[key] += drift
+            # Reconcile seller deliveries without assigning a negative rounding
+            # residual to a small final seller.
+            seller_allocations = _scale_allocations(seller_allocations, actual_traded)
         else:
             actual_traded = traded
         # Allocate only settled quantities to buyers' firm input stocks or household consumption.
