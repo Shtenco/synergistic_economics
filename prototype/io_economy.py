@@ -483,9 +483,14 @@ class InputOutputEconomy:
             wage_by_household = {key: cash(wage * share) for key, share in wage_shares.items()}
             hours_by_household = {key: qty(labour_hours * share) for key, share in wage_shares.items()}
             if wage_by_household:
-                last_household = sorted(wage_by_household)[-1]
-                wage_by_household[last_household] += wage - sum(wage_by_household.values(), ZERO)
-                hours_by_household[last_household] += labour_hours - sum(hours_by_household.values(), ZERO)
+                # Put any quantization residual on the largest allocation so
+                # a tiny/zero-share participant can never receive a negative
+                # residual merely because of lexical ordering.
+                residual_household = max(
+                    wage_shares, key=lambda key: (wage_shares[key], key)
+                )
+                wage_by_household[residual_household] += wage - sum(wage_by_household.values(), ZERO)
+                hours_by_household[residual_household] += labour_hours - sum(hours_by_household.values(), ZERO)
             for household_id, share in wage_by_household.items():
                 household = self.households[household_id]
                 household.cash += share
