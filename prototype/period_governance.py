@@ -522,6 +522,16 @@ class PeriodGovernance:
                 ).fetchone()
                 if closure is None:
                     raise PeriodGovernanceError("only a closed period can be reopened")
+                sealed_registers = con.execute(
+                    "SELECT register_name FROM register_period_attestations "
+                    "WHERE period=? AND generation=? ORDER BY register_name",
+                    (period, closure["generation"]),
+                ).fetchall()
+                if (len(sealed_registers) != len(REGISTERS)
+                        or {row["register_name"] for row in sealed_registers} != set(REGISTERS)):
+                    raise PeriodGovernanceError(
+                        "legacy closed period without six signed register attestations cannot be reopened"
+                    )
                 if (closure["checkpoint_ref"], closure["checkpoint_digest"]) != (ref, digest):
                     raise PeriodGovernanceError("pre-reopen checkpoint must match the currently active generation")
                 if (manifest.get("period") != period
