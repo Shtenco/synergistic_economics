@@ -187,7 +187,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             snapshot.version, snapshot.period_index,
             snapshot.instrument_registry_version, snapshot.instrument_registry_digest,
             snapshot.sector_registry_version, snapshot.sector_registry_digest,
-            identities[:3], snapshot.positions[:3],
+            identities[:2], snapshot.positions[:2],
         )
         row = self.loan_event("LOAN-ORIG-1", "bank.loan_originated", "100", 3)
         with self.assertRaises(OperatingFinancialSFCAdapterError):
