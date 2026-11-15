@@ -153,6 +153,7 @@ class BankingSFCProjectionStoreTests(unittest.TestCase):
                 sample_projection(),
                 source_register_id=self.pins["source_register_id"],
                 source_sequence=True,
+                source_chain_hash=self.pins["source_chain_hash"],
                 instrument_registry_digest=self.pins["instrument_registry_digest"],
                 sector_registry_digest=self.pins["sector_registry_digest"],
                 opening_snapshot_digest=self.pins["opening_snapshot_digest"],
