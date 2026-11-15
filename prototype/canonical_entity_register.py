@@ -114,6 +114,22 @@ class Ed25519EntityAuthorityVerifier:
         if not isinstance(trusted_keys, Mapping) or not trusted_keys:
             raise EconomicEntityRegisterError("at least one trusted authority key is required")
         self.trusted_keys = dict(trusted_keys)
+        for mapping_key, key in self.trusted_keys.items():
+            if not isinstance(key, TrustedEntityAuthorityKey) or mapping_key != key.key_id:
+                raise EconomicEntityRegisterError("trusted authority key map must use canonical key IDs")
+            required_text(key.key_id, "key.key_id")
+            required_text(key.issuer, "key.issuer")
+            required_text(key.tenant_id, "key.tenant_id")
+            if not isinstance(key.public_key_raw, bytes) or len(key.public_key_raw) != 32:
+                raise EconomicEntityRegisterError("Ed25519 public keys must be exactly 32 raw bytes")
+            if not isinstance(key.authority_refs, tuple) or not key.authority_refs:
+                raise EconomicEntityRegisterError("authority_refs must be a non-empty tuple")
+            for authority_ref in key.authority_refs:
+                required_text(authority_ref, "key.authority_ref")
+            if _parse_utc(key.valid_from, "key.valid_from") >= _parse_utc(key.valid_until, "key.valid_until"):
+                raise EconomicEntityRegisterError("trusted authority key validity interval is empty")
+            if key.revoked_at is not None:
+                _parse_utc(key.revoked_at, "key.revoked_at")
 
     def verify(self, event: Mapping[str, Any]) -> bool:
         payload = event.get("payload")
@@ -262,6 +278,10 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         )
 
     def _verify_event(self, event):
+        for field in ("event_id", "event_type", "aggregate_id", "actor_id", "authority_ref"):
+            required_text(event.get(field), field)
+        utc_timestamp(event.get("effective_at"), "effective_at")
+        utc_timestamp(event.get("recorded_at"), "recorded_at")
         if event.get("event_type") not in DOMAIN_EVENTS:
             raise EconomicEntityRegisterError("unsupported canonical entity event")
         if self.authority_verifier.verify(event) is not True:
@@ -333,6 +353,7 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
                 "external_refs": normalized,
                 "status": "ACTIVE",
                 "registered_at": event["effective_at"],
+                "last_effective_at": event["effective_at"],
                 "last_authority_event_ref": event["event_id"],
             }
 
@@ -341,6 +362,10 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         state = dict(old)
         if state["tenant_id"] != tenant_id or state["entity_id"] != entity_id:
             raise EconomicEntityRegisterError("tenant/entity identity is immutable")
+        if _parse_utc(event["effective_at"], "effective_at") < _parse_utc(
+            state["last_effective_at"], "last_effective_at"
+        ):
+            raise EconomicEntityRegisterError("entity event effective time cannot move backwards")
 
         if typ == "entity.updated":
             if set(payload) != {"tenant_id", "entity_id", "changes", "authority_attestation"}:
@@ -425,6 +450,7 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         else:
             raise EconomicEntityRegisterError(f"unsupported entity event: {typ}")
 
+        state["last_effective_at"] = event["effective_at"]
         state["last_authority_event_ref"] = event["event_id"]
         return state
 
@@ -494,7 +520,10 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
         history = self.history(aggregate_id, principal_id=principal_id)
         if not history:
             raise EconomicEntityRegisterError("canonical economic entity has no authoritative event history")
-        instant = as_of or self.clock().astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        now = self.clock()
+        if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
+            raise EconomicEntityRegisterError("resolver clock must return a timezone-aware datetime")
+        instant = as_of or now.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         sector = self._sector_at(state["sector_memberships"], instant)
         latest = history[-1]
         return {
