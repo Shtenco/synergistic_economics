@@ -56,6 +56,9 @@ The tests cover:
 - rejection of a payment without a prior accrual, altered movement metadata, altered postings and unauthorized actors;
 - separate accrual and later payment commits against consecutive financial aggregate revisions;
 - one six-register transaction that commits physical, capital, labour, product, legal-rights and financial participant events;
+- a partial-payment six-register transaction that leaves the legal wage claim active and the unpaid balance outstanding;
+- rejection of unsupported institutional-sector codes, missing bank-sector mapping, colliding worker/employer/bank identities and claim IDs not bound to the verified engagement/delivery;
+- retention of evidence references for every payment in the legal claim record;
 - legal extinguishment when the full wage claim is paid in that transaction;
 - rejection of a stale labour revision changed after coordinator submission, with all prepared participants aborted and no wage claim committed;
 - exclusion of non-stockable labour hours from physical stock positions.
