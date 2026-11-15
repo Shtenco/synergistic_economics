@@ -316,9 +316,10 @@ class OperatingFinancialSFCAdapter:
                         "amount": amount,
                         "_resolved_identity": identity,
                     })
-                    bucket_key = (period, identity.currency, (
-                        identity.holder_sector if side == "asset_holder" else identity.issuer_sector
-                    ))
+                    # The canonical financial identity is oriented to the balance-sheet
+                    # entity for both asset and liability rows; mirror_side determines
+                    # whether its amount enters assets or liabilities.
+                    bucket_key = (period, identity.holder_sector, identity.currency)
                     bucket = transaction_assets if side == "asset_holder" else transaction_liabilities
                     bucket.setdefault(bucket_key, []).append(amount)
 
