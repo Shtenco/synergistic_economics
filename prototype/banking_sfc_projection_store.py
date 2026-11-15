@@ -186,8 +186,8 @@ class BankingSFCProjectionStore:
                             return {"snapshot_id": snapshot_id, "checkpoint_digest": checkpoint_digest,
                                     "projection_digest": projection_digest, "replayed": True}
                         raise BankingSFCStoreError("source cursor reused with changed projection content")
-                    if source_sequence != latest["source_sequence"] + 1:
-                        raise BankingSFCStoreError("source cursor gap; full source replay is required")
+                    if source_sequence <= latest["source_sequence"]:
+                        raise BankingSFCStoreError("source cursor must advance monotonically")
                     if mapping_version != latest["mapping_version"]:
                         raise BankingSFCStoreError("mapping version changed; explicit rebuild required")
                     if (instrument_registry_digest != latest["instrument_registry_digest"]
