@@ -633,6 +633,29 @@ class OperatingFinancialRegister(DurableEventRegister):
             return None, version
         return state.get("loans", {}).get(loan_id), version
 
+    def bank_principal_snapshot(self, bank_id, currency, *, principal_id):
+        """Aggregate recorded deposit liabilities and loan principal by bank/currency.
+
+        This is a partial balance-sheet view: reserves, capital, accrued interest,
+        impairment and off-balance-sheet exposures are intentionally not inferred.
+        """
+        bank_id = _text(bank_id, "bank_id")
+        currency = _text(currency, "currency")
+        state, version = self.state("operating-financial", principal_id=principal_id)
+        if state is None:
+            raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+        deposits = sum((
+            D(item["balance"]) for item in state.get("deposits", {}).values()
+            if item["bank_id"] == bank_id and item["currency"] == currency
+        ), D("0"))
+        loans = sum((
+            D(item["outstanding_principal"]) for item in state.get("loans", {}).values()
+            if item["bank_id"] == bank_id and item["currency"] == currency
+        ), D("0"))
+        return {"bank_id": bank_id, "currency": currency,
+                "deposit_liabilities": deposits, "loan_assets": loans,
+                "revision": version}
+
     def claim_state(self, claim_id, *, principal_id):
         state, version = self.state("operating-financial", principal_id=principal_id)
         if state is None:
