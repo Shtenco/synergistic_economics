@@ -124,6 +124,18 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
         self.assertEqual(claim["event_ids"], ["WAGE-ACCRUAL-1", "WAGE-PAYMENT-1"])
         self.assertEqual(self.register.deposit_balance("employer-1", "LCU", principal_id="financial-root")[0], D("960.00"))
         self.assertEqual(self.register.deposit_balance("worker-1", "LCU", principal_id="financial-root")[0], D("50.00"))
+        deposit_opening_p2 = self.register.deposit_opening_positions(
+            period_index=2, principal_id="financial-root",
+        )
+        deposit_opening_p3 = self.register.deposit_opening_positions(
+            period_index=3, principal_id="financial-root",
+        )
+        p2_balances = {row.identity.position_id: row.amount for row in deposit_opening_p2}
+        p3_balances = {row.identity.position_id: row.amount for row in deposit_opening_p3}
+        self.assertEqual(p2_balances["DEPOSIT:employer-1:bank-1:LCU:ASSET"], D("1000"))
+        self.assertEqual(p2_balances["DEPOSIT:worker-1:bank-1:LCU:ASSET"], D("10"))
+        self.assertEqual(p3_balances["DEPOSIT:employer-1:bank-1:LCU:ASSET"], D("960"))
+        self.assertEqual(p3_balances["DEPOSIT:worker-1:bank-1:LCU:ASSET"], D("50"))
         self.assertTrue(self.register.verify())
 
 
