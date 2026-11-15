@@ -1485,6 +1485,46 @@ class OperatingFinancialRegister(DurableEventRegister):
         token = self.prepare(event_id, operation)
         return self.commit(event_id, token)
 
+    def record_existing_refinancing_facility(
+        self, *, event_id, facility_id, bank_id, central_bank_id, currency,
+        original_principal, outstanding_principal, origination_period_index,
+        opening_period_index, contract_ref, contract_evidence_ref, evidence_ref,
+        actor_id, authority_ref, effective_at, recorded_at, expected_revision,
+        minor_unit="0.01",
+    ):
+        """Record a pre-model refinancing liability without issuing new reserves."""
+        event_id = _text(event_id, "event_id")
+        payload = {
+            "facility_id": _text(facility_id, "facility_id"),
+            "bank_id": _text(bank_id, "bank_id"),
+            "central_bank_id": _text(central_bank_id, "central_bank_id"),
+            "currency": _text(currency, "currency"),
+            "original_principal": str(_decimal(original_principal, "original_principal", positive=True)),
+            "outstanding_principal": str(_decimal(outstanding_principal, "outstanding_principal")),
+            "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+            "origination_period_index": origination_period_index,
+            "period_index": opening_period_index,
+            "contract_ref": _text(contract_ref, "contract_ref"),
+            "contract_evidence_ref": _text(contract_evidence_ref, "contract_evidence_ref"),
+            "evidence_ref": _text(evidence_ref, "evidence_ref"),
+        }
+        envelope = {
+            "event_type": "central_bank.refinancing_opening_recorded",
+            "effective_at": effective_at, "recorded_at": recorded_at,
+            "actor_id": actor_id, "authority_ref": authority_ref,
+            "idempotency_key": event_id, "payload": payload,
+            "stock_flow_movements": None,
+            "no_stock_flow_effect": (
+                "historical central-bank refinancing opening position; no current-period reserve issuance"
+            ),
+        }
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision, "payload": envelope,
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
     def refinancing_state(self, facility_id, *, principal_id):
         state, version = self.state("operating-financial", principal_id=principal_id)
         if state is None:
@@ -1736,6 +1776,46 @@ class OperatingFinancialRegister(DurableEventRegister):
             "payload": payload,
             "stock_flow_movements": bank_credit_stock_flow_movement_specs(
                 {"event_id": event_id, **payload, "event_type": event_type}
+            ),
+        }
+        operation = {
+            "stream_id": "operating-financial", "native_event_id": event_id,
+            "expected_revision": expected_revision, "payload": envelope,
+        }
+        token = self.prepare(event_id, operation)
+        return self.commit(event_id, token)
+
+    def record_existing_bank_loan(
+        self, *, event_id, loan_id, borrower_id, bank_id, currency,
+        original_principal, outstanding_principal, origination_period_index,
+        opening_period_index, contract_ref, contract_evidence_ref, evidence_ref,
+        actor_id, authority_ref, effective_at, recorded_at, expected_revision,
+        minor_unit="0.01",
+    ):
+        """Record a pre-model loan stock without creating a deposit or T-flow."""
+        event_id = _text(event_id, "event_id")
+        payload = {
+            "loan_id": _text(loan_id, "loan_id"),
+            "borrower_id": _text(borrower_id, "borrower_id"),
+            "bank_id": _text(bank_id, "bank_id"),
+            "currency": _text(currency, "currency"),
+            "original_principal": str(_decimal(original_principal, "original_principal", positive=True)),
+            "outstanding_principal": str(_decimal(outstanding_principal, "outstanding_principal")),
+            "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
+            "origination_period_index": origination_period_index,
+            "period_index": opening_period_index,
+            "contract_ref": _text(contract_ref, "contract_ref"),
+            "contract_evidence_ref": _text(contract_evidence_ref, "contract_evidence_ref"),
+            "evidence_ref": _text(evidence_ref, "evidence_ref"),
+        }
+        envelope = {
+            "event_type": "bank.loan_opening_recorded",
+            "effective_at": effective_at, "recorded_at": recorded_at,
+            "actor_id": actor_id, "authority_ref": authority_ref,
+            "idempotency_key": event_id, "payload": payload,
+            "stock_flow_movements": None,
+            "no_stock_flow_effect": (
+                "historical loan principal opening position; no current-period credit creation or deposit issuance"
             ),
         }
         operation = {
