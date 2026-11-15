@@ -166,7 +166,8 @@ class BankingSFCProjectionStore:
             con.execute("BEGIN IMMEDIATE")
             try:
                 latest = con.execute(
-                    "SELECT source_sequence,source_digest,mapping_version,projection_digest "
+                    "SELECT source_sequence,source_digest,mapping_version,projection_digest,"
+                    "instrument_registry_digest,sector_registry_digest,opening_snapshot_digest "
                     "FROM banking_sfc_snapshots WHERE source_register_id=? "
                     "ORDER BY source_sequence DESC LIMIT 1", (source_register_id,)
                 ).fetchone()
@@ -174,15 +175,24 @@ class BankingSFCProjectionStore:
                     if source_sequence < latest["source_sequence"]:
                         raise BankingSFCStoreError("stale source cursor")
                     if source_sequence == latest["source_sequence"]:
-                        if (source_digest, mapping_version, projection_digest) == (
-                            latest["source_digest"], latest["mapping_version"], latest["projection_digest"]
+                        if (source_digest, mapping_version, projection_digest, instrument_registry_digest,
+                            sector_registry_digest, opening_snapshot_digest) == (
+                            latest["source_digest"], latest["mapping_version"], latest["projection_digest"],
+                            latest["instrument_registry_digest"], latest["sector_registry_digest"],
+                            latest["opening_snapshot_digest"]
                         ):
                             con.execute("COMMIT")
                             return {"snapshot_id": snapshot_id, "checkpoint_digest": checkpoint_digest,
                                     "projection_digest": projection_digest, "replayed": True}
                         raise BankingSFCStoreError("source cursor reused with changed projection content")
+                    if source_sequence != latest["source_sequence"] + 1:
+                        raise BankingSFCStoreError("source cursor gap; full source replay is required")
                     if mapping_version != latest["mapping_version"]:
                         raise BankingSFCStoreError("mapping version changed; explicit rebuild required")
+                    if (instrument_registry_digest != latest["instrument_registry_digest"]
+                            or sector_registry_digest != latest["sector_registry_digest"]
+                            or opening_snapshot_digest != latest["opening_snapshot_digest"]):
+                        raise BankingSFCStoreError("pinned registry/opening digest changed; explicit rebuild required")
                 con.execute(
                     "INSERT INTO banking_sfc_snapshots(snapshot_id,source_register_id,source_sequence,"
                     "source_digest,mapping_version,instrument_registry_digest,sector_registry_digest,"
