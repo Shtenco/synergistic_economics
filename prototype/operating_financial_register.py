@@ -848,6 +848,17 @@ class OperatingFinancialRegister(DurableEventRegister):
             )
             if envelope.get("stock_flow_movements") != expected:
                 raise OperatingFinancialRegisterError("interbank stock-flow movements differ from canonical mapper")
+        elif envelope["event_type"] in {
+            "central_bank.refinancing_advanced",
+            "central_bank.refinancing_principal_repaid",
+        }:
+            payload = envelope["payload"]
+            expected = central_bank_refinancing_movement_specs(
+                {"event_id": envelope["idempotency_key"], **payload,
+                 "event_type": envelope["event_type"]}
+            )
+            if envelope.get("stock_flow_movements") != expected:
+                raise OperatingFinancialRegisterError("central-bank refinancing movements differ from canonical mapper")
         elif envelope["event_type"] == "deposit.account_opened":
             if envelope.get("stock_flow_movements") is not None:
                 raise OperatingFinancialRegisterError("deposit opening must initialize a stock, not invent a transaction movement")
