@@ -2,6 +2,7 @@
 import tempfile
 import unittest
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 from banking_sfc_projection_pipeline import (
@@ -568,10 +569,10 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 opening_period_1[("employer-1", "worker-1")], "0",
             )
             self.assertEqual(
-                opening_period_2[("worker-1", "employer-1")], str(accrual.amount),
+                Decimal(opening_period_2[("worker-1", "employer-1")]), accrual.amount,
             )
             self.assertEqual(
-                opening_period_2[("employer-1", "worker-1")], str(accrual.amount),
+                Decimal(opening_period_2[("employer-1", "worker-1")]), accrual.amount,
             )
             self.assertTrue(all(
                 row.source_ref.startswith(
