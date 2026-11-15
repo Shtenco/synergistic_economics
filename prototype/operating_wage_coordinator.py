@@ -158,6 +158,8 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             accrual.get("contract_ref"), accrual.get("contract_evidence_ref"),
             accrual.get("delivery_evidence_ref"), accrual.get("verification_ref"),
         }
+        for payment in payment_events:
+            required_evidence.add(_text(payment.get("evidence_ref"), "payment evidence_ref"))
         if fully_paid:
             last_payment = payment_events[-1]
             settlement_event_id = _text(rights_payload.get("settlement_event_id"), "settlement_event_id")
@@ -172,7 +174,12 @@ class OperatingWageCoordinator(CrossRegisterCoordinator):
             "settlement_event_id", "settlement_evidence_ref", "settled_amount"
         )):
             raise CoordinatorError("an unpaid or partially paid wage claim cannot be extinguished")
-        if not required_evidence.issubset(set(rights_payload.get("evidence_refs", []))):
+        evidence_refs = rights_payload.get("evidence_refs")
+        if (not isinstance(evidence_refs, list)
+                or any(not isinstance(item, str) or not item or item != item.strip()
+                       for item in evidence_refs)):
+            raise CoordinatorError("legal wage claim evidence_refs must be a list of trimmed references")
+        if not required_evidence.issubset(set(evidence_refs)):
             raise CoordinatorError("legal wage claim omits one or more source evidence references")
 
         for register in ("physical", "capital", "labour", "product", "legal_rights"):
