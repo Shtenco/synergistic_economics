@@ -115,6 +115,55 @@ class BankCreditLifecycleTests(unittest.TestCase):
             D("110.00"),
         )
 
+
+    def test_borrower_can_hold_deposits_at_two_banks_without_aliasing(self):
+        self.register.sectors["bank-2"] = "CBank"
+        self.register.open_deposit_account(
+            event_id="OPEN-BORROWER-BANK-2", entity_id="borrower", bank_id="bank-2",
+            currency="LCU", account_ref="BORROWER-ACCOUNT-BANK-2",
+            opening_balance="20.00", evidence_ref="BANK-2-OPENING",
+            actor_id="root", authority_ref="BANK-OPENING",
+            effective_at=T, recorded_at=T, expected_revision=1,
+            minor_unit="0.01",
+        )
+        self.register.commit_bank_credit(
+            event_id="BANK-2-LOAN", event_type="bank.loan_originated",
+            loan_id="LOAN-BANK-2", borrower_id="borrower", bank_id="bank-2",
+            currency="LCU", amount="30.00", period_index=2,
+            evidence_ref="BANK-2-LOAN-EVIDENCE", actor_id="root",
+            authority_ref="BANK-CREDIT-POLICY", effective_at=T, recorded_at=T,
+            expected_revision=2, minor_unit="0.01",
+        )
+        self.assertEqual(
+            self.register.deposit_balance("borrower", "LCU", principal_id="root",
+                                          bank_id="bank")[0],
+            D("10.00"),
+        )
+        self.assertEqual(
+            self.register.deposit_balance("borrower", "LCU", principal_id="root",
+                                          bank_id="bank-2")[0],
+            D("50.00"),
+        )
+        with self.assertRaisesRegex(
+            OperatingFinancialRegisterError, "ambiguous across banks"
+        ):
+            self.register.deposit_balance("borrower", "LCU", principal_id="root")
+        bank_1 = self.register.bank_principal_snapshot("bank", "LCU", principal_id="root")
+        bank_2 = self.register.bank_principal_snapshot("bank-2", "LCU", principal_id="root")
+        self.assertEqual(bank_1["deposit_liabilities"], D("10.00"))
+        self.assertEqual(bank_1["loan_assets"], D("0"))
+        self.assertEqual(bank_2["deposit_liabilities"], D("50.00"))
+        self.assertEqual(bank_2["loan_assets"], D("30.00"))
+        opening_positions = self.register.deposit_opening_positions(
+            period_index=1, principal_id="root",
+        )
+        self.assertEqual(len(opening_positions), 4)
+        self.assertEqual(
+            len({position.identity.instrument_id for position in opening_positions}),
+            2,
+        )
+        self.assertTrue(self.register.verify())
+
     def test_loan_origination_and_repayment_close_all_sfc_positions(self):
         origination = {
             "event_id": "LOAN-ORIGINATE", "event_type": "bank.loan_originated",
@@ -154,7 +203,7 @@ class BankCreditLifecycleTests(unittest.TestCase):
         movements = movements_from_event_groups(tuple(groups))
         self.assertEqual(len(movements), 8)
 
-        instrument = "DEPOSIT:borrower:LCU"
+        instrument = "DEPOSIT:borrower:bank:LCU"
         loan_instrument = "LOAN:LOAN-1"
         identities = (
             PositionIdentity("financial", f"{instrument}:ASSET", "monetary",
