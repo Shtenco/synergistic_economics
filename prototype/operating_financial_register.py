@@ -1254,6 +1254,15 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError("financial native envelope digest mismatch")
             if not isinstance(envelope, Mapping) or envelope.get("event_type") != row.get("event_type"):
                 raise OperatingFinancialRegisterError("financial native envelope event type mismatch")
+            if envelope.get("payload") != row.get("payload"):
+                raise OperatingFinancialRegisterError("financial native envelope payload differs from committed history payload")
+            if envelope.get("idempotency_key") != row.get("idempotency_key"):
+                raise OperatingFinancialRegisterError("financial native envelope idempotency key differs from committed history")
+            for field in ("effective_at", "recorded_at", "actor_id", "authority_ref"):
+                if envelope.get(field) != row.get(field):
+                    raise OperatingFinancialRegisterError(
+                        f"financial native envelope {field} differs from event-chain metadata"
+                    )
             movements = envelope.get("stock_flow_movements")
             if movements is None:
                 continue
