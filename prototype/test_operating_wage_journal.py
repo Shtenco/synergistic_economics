@@ -78,6 +78,9 @@ class OperatingWageJournalTests(unittest.TestCase):
         )
         self.assertEqual(event.amount, D("40.00"))
         self.assertEqual(event.event_type, "wage_accrual")
+        self.assertEqual(event.delivery_event_id, "L5")
+        self.assertEqual(event.delivered_hours, D("2"))
+        self.assertEqual(event.hourly_rate, D("20"))
         self.assertEqual(event.delivery_evidence_ref, "TIMESHEET-1")
         self.assertEqual(event.verification_ref, "SUPERVISOR-VERIFY-1")
         self.assertEqual(event.contract_ref, "SIGNED-WAGE-CONTRACT-1")
@@ -120,7 +123,8 @@ class OperatingWageJournalTests(unittest.TestCase):
         forged = type(self.delivery)(
             engagement_id=self.delivery.engagement_id, delivery_event_id="FORGED-DELIVERY",
             verification_ref=self.delivery.verification_ref, worker_id=self.delivery.worker_id,
-            employer_id=self.delivery.employer_id, delivery_evidence_ref=self.delivery.delivery_evidence_ref,
+            employer_id=self.delivery.employer_id, delivery_event_id=self.delivery.delivery_event_id,
+            delivery_evidence_ref=self.delivery.delivery_evidence_ref,
             period_label=self.delivery.period_label, delivered_hours=self.delivery.delivered_hours,
             aggregate_version=self.delivery.aggregate_version,
         )
