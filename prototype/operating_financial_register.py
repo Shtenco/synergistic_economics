@@ -1069,12 +1069,13 @@ class OperatingFinancialRegister(DurableEventRegister):
         return self.commit(event_id, token)
 
     def _credit_facility_opening_positions(self, *, period_index, principal_id, facility_kind):
-        """Reconstruct loan/refinancing debt openings from committed source events.
+        """Reconstruct debt openings from immutable originations and historical stock records.
 
-        Only originations before the requested period contribute to its opening
-        balance. Originations in the requested period produce explicit zero
-        opening rows; repayments in the requested period affect closing, not
-        opening. Evidence refs bind the contributing immutable event-chain rows.
+        Ordinary originations in the requested period are zero opening stocks;
+        a separately evidenced pre-existing opening record is included at its
+        declared opening boundary without creating a cashflow. Prior repayments
+        reduce later-period openings, while repayments in the requested period
+        affect closing only.
         """
         if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index < 1:
             raise OperatingFinancialRegisterError("opening period_index must be a positive integer")
@@ -1088,14 +1089,14 @@ class OperatingFinancialRegister(DurableEventRegister):
 
         if facility_kind == "loan":
             origin_type = "bank.loan_originated"
+            opening_type = "bank.loan_opening_recorded"
             repayment_type = "bank.loan_principal_repaid"
             id_field = "loan_id"
-            amount_field = "amount"
         else:
             origin_type = "central_bank.refinancing_advanced"
+            opening_type = "central_bank.refinancing_opening_recorded"
             repayment_type = "central_bank.refinancing_principal_repaid"
             id_field = "facility_id"
-            amount_field = "amount"
 
         facilities = {}
         seen_event_ids = set()
@@ -1105,7 +1106,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 raise OperatingFinancialRegisterError("duplicate event ID in financial source history")
             seen_event_ids.add(event_id)
             event_type = row.get("event_type")
-            if event_type not in {origin_type, repayment_type}:
+            if event_type not in {origin_type, opening_type, repayment_type}:
                 continue
             payload = row.get("payload")
             if not isinstance(payload, Mapping):
@@ -1116,43 +1117,74 @@ class OperatingFinancialRegister(DurableEventRegister):
             if event_period > period_index:
                 continue
             facility_id = _text(payload.get(id_field), id_field)
-            amount = _decimal(payload.get(amount_field), amount_field, positive=True)
             evidence_ref = _text(payload.get("evidence_ref"), "evidence_ref")
+            if facility_kind == "loan":
+                identity_fields = {
+                    "borrower_id": _text(payload.get("borrower_id"), "borrower_id"),
+                    "bank_id": _text(payload.get("bank_id"), "bank_id"),
+                    "currency": _text(payload.get("currency"), "currency"),
+                }
+            else:
+                identity_fields = {
+                    "bank_id": _text(payload.get("bank_id"), "bank_id"),
+                    "central_bank_id": _text(payload.get("central_bank_id"), "central_bank_id"),
+                    "currency": _text(payload.get("currency"), "currency"),
+                }
+
+            if event_type == opening_type:
+                if facility_id in facilities:
+                    raise OperatingFinancialRegisterError("duplicate facility opening/origination in source history")
+                original = _decimal(payload.get("original_principal"), "original_principal", positive=True)
+                outstanding = _decimal(payload.get("outstanding_principal"), "outstanding_principal")
+                origination_period = payload.get("origination_period_index")
+                contract_ref = _text(payload.get("contract_ref"), "contract_ref")
+                contract_evidence_ref = _text(payload.get("contract_evidence_ref"), "contract_evidence_ref")
+                if (not isinstance(origination_period, int) or isinstance(origination_period, bool)
+                        or origination_period < 0 or origination_period >= event_period):
+                    raise OperatingFinancialRegisterError("historical facility origination period must precede opening period")
+                if outstanding < 0 or outstanding > original:
+                    raise OperatingFinancialRegisterError("historical opening principal is outside original principal bounds")
+                minor_unit = _decimal(payload.get("minor_unit"), "minor_unit", positive=True)
+                if original / minor_unit != (original / minor_unit).to_integral_value():
+                    raise OperatingFinancialRegisterError("historical original principal is not a minor-unit multiple")
+                if outstanding / minor_unit != (outstanding / minor_unit).to_integral_value():
+                    raise OperatingFinancialRegisterError("historical outstanding principal is not a minor-unit multiple")
+                facilities[facility_id] = {
+                    **identity_fields,
+                    "opening_balance": outstanding,
+                    "origin_period": origination_period,
+                    "opening_period": event_period,
+                    "proof_rows": [row],
+                    "contract_ref": contract_ref,
+                    "contract_evidence_ref": contract_evidence_ref,
+                }
+                continue
+
+            amount = _decimal(payload.get("amount"), "amount", positive=True)
             if event_type == origin_type:
                 if facility_id in facilities:
                     raise OperatingFinancialRegisterError("duplicate facility origination in source history")
-                if facility_kind == "loan":
-                    identity_fields = {
-                        "borrower_id": _text(payload.get("borrower_id"), "borrower_id"),
-                        "bank_id": _text(payload.get("bank_id"), "bank_id"),
-                        "currency": _text(payload.get("currency"), "currency"),
-                    }
-                else:
-                    identity_fields = {
-                        "bank_id": _text(payload.get("bank_id"), "bank_id"),
-                        "central_bank_id": _text(payload.get("central_bank_id"), "central_bank_id"),
-                        "currency": _text(payload.get("currency"), "currency"),
-                    }
                 facilities[facility_id] = {
                     **identity_fields,
                     "opening_balance": amount if event_period < period_index else D("0"),
                     "origin_period": event_period,
+                    "opening_period": event_period,
                     "proof_rows": [row],
                 }
                 continue
 
             facility = facilities.get(facility_id)
             if facility is None:
-                raise OperatingFinancialRegisterError("facility repayment precedes its origination in source history")
-            if event_period < facility["origin_period"]:
-                raise OperatingFinancialRegisterError("facility repayment period precedes origination")
+                raise OperatingFinancialRegisterError("facility repayment precedes its recorded opening/origination")
+            if event_period < facility["opening_period"] or event_period < facility["origin_period"]:
+                raise OperatingFinancialRegisterError("facility repayment period precedes its recorded opening/origination")
             expected_fields = (
                 ("borrower_id", "bank_id", "currency") if facility_kind == "loan"
                 else ("bank_id", "central_bank_id", "currency")
             )
             for field in expected_fields:
                 if payload.get(field) != facility[field]:
-                    raise OperatingFinancialRegisterError("facility repayment identity differs from its origination")
+                    raise OperatingFinancialRegisterError("facility repayment identity differs from its opening/origination")
             if event_period < period_index:
                 with localcontext() as context:
                     context.prec = 4096
@@ -1194,7 +1226,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                     "NOMINAL", holder, issuer, instrument,
                 )
                 positions.append(OpeningPosition(
-                    identity, period_index, item["opening_balance"], evidence,
+                    period_index, identity, item["opening_balance"], evidence,
                 ))
         return tuple(positions)
 
