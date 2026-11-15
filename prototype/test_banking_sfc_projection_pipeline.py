@@ -25,6 +25,13 @@ class FakeFinancialRegister:
             "tail_hash": "b" * 64,
         }
 
+    def chain_hash_at(self, sequence):
+        if sequence == 7:
+            return "b" * 64
+        if sequence == 0:
+            return "0" * 64
+        raise AssertionError("unexpected source-chain ancestor cursor")
+
     def history(self, aggregate_id, *, principal_id):
         if aggregate_id != "operating-financial" or principal_id != "auditor":
             raise AssertionError("unexpected source scope")
@@ -125,6 +132,59 @@ class BankingSFCPipelineTests(unittest.TestCase):
                     sector_registry=sectors, opening_snapshots=[snapshot], store=store,
                     source_register_id="caller-controlled-register-id",
                 )
+
+    def test_concurrent_source_append_during_history_read_fails_closed(self):
+        terms, sectors, _identities, snapshot = fixture()
+        source = FakeFinancialRegister([
+            history_row("LOAN-ORIG-1", "bank.loan_originated", {
+                "loan_id": "LOAN-1", "borrower_id": "household-1",
+                "bank_id": "bank-1", "currency": "LCU", "amount": "100",
+                "period_index": 3, "evidence_ref": "SIGNED-LOAN-1",
+            }, sequence=7)
+        ])
+        checkpoints = iter((
+            {"register_instance_id": "a" * 32, "event_count": 7, "tail_hash": "b" * 64},
+            {"register_instance_id": "a" * 32, "event_count": 8, "tail_hash": "c" * 64},
+        ))
+        source.source_checkpoint = lambda: next(checkpoints)
+        with tempfile.TemporaryDirectory() as directory:
+            store = BankingSFCProjectionStore(Path(directory) / "projection.sqlite")
+            with self.assertRaisesRegex(ValueError, "changed while its history snapshot"):
+                project_and_persist(
+                    source, principal_id="auditor", instrument_registry=terms,
+                    sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                )
+            self.assertIsNone(store.latest_checkpoint("financial:" + "a" * 32 + ":auditor"))
+
+    def test_forked_source_cannot_advance_a_sealed_projection_checkpoint(self):
+        terms, sectors, _identities, snapshot = fixture()
+        source = FakeFinancialRegister([
+            history_row("LOAN-ORIG-1", "bank.loan_originated", {
+                "loan_id": "LOAN-1", "borrower_id": "household-1",
+                "bank_id": "bank-1", "currency": "LCU", "amount": "100",
+                "period_index": 3, "evidence_ref": "SIGNED-LOAN-1",
+            }, sequence=7)
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            store = BankingSFCProjectionStore(Path(directory) / "projection.sqlite")
+            project_and_persist(
+                source, principal_id="auditor", instrument_registry=terms,
+                sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+            )
+            source.source_checkpoint = lambda: {
+                "register_instance_id": "a" * 32,
+                "event_count": 8,
+                "tail_hash": "c" * 64,
+            }
+            source.chain_hash_at = lambda sequence: "d" * 64
+            with self.assertRaisesRegex(ValueError, "diverges from the previously sealed checkpoint"):
+                project_and_persist(
+                    source, principal_id="auditor", instrument_registry=terms,
+                    sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                )
+            latest = store.latest_checkpoint("financial:" + "a" * 32 + ":auditor")
+            self.assertEqual(latest["applied_through_sequence"], 7)
+            self.assertEqual(latest["source_chain_hash"], "b" * 64)
 
     def test_unverified_source_chain_is_rejected_before_persistence(self):
         terms, sectors, _identities, snapshot = fixture()
