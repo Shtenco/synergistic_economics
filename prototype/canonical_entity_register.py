@@ -282,8 +282,15 @@ class CanonicalEconomicEntityRegister(DurableEventRegister):
             required_text(event.get(field), field)
         utc_timestamp(event.get("effective_at"), "effective_at")
         utc_timestamp(event.get("recorded_at"), "recorded_at")
-        if event.get("event_type") not in DOMAIN_EVENTS:
+        event_type = event.get("event_type")
+        if event_type not in DOMAIN_EVENTS:
             raise EconomicEntityRegisterError("unsupported canonical entity event")
+        effective_at = _parse_utc(event["effective_at"], "effective_at")
+        recorded_at = _parse_utc(event["recorded_at"], "recorded_at")
+        if event_type != "entity.sector_changed" and effective_at > recorded_at:
+            raise EconomicEntityRegisterError(
+                "only effective-dated sector membership may be scheduled in the future"
+            )
         if self.authority_verifier.verify(event) is not True:
             raise EconomicEntityRegisterError(
                 "entity event lacks a valid tenant-scoped Ed25519 authority attestation"
