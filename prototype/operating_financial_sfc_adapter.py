@@ -238,7 +238,25 @@ class OperatingFinancialSFCAdapter:
                     raise OperatingFinancialSFCAdapterError("duplicate opening position-period key")
                 openings[key] = value
 
-        ordered_rows = sorted(history_rows, key=lambda row: row.get("commit_sequence", 0))
+        # Validate source cursors before sorting so malformed rows fail closed
+        # with a domain error, and duplicate cursors cannot make replay ambiguous.
+        normalized_rows = []
+        seen_sequences = set()
+        for row in history_rows:
+            if not isinstance(row, Mapping):
+                raise OperatingFinancialSFCAdapterError("history row must be a mapping")
+            sequence = row.get("commit_sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+                raise OperatingFinancialSFCAdapterError(
+                    "history commit_sequence must be a positive integer"
+                )
+            if sequence in seen_sequences:
+                raise OperatingFinancialSFCAdapterError(
+                    "duplicate financial history commit_sequence"
+                )
+            seen_sequences.add(sequence)
+            normalized_rows.append(row)
+        ordered_rows = sorted(normalized_rows, key=lambda row: row["commit_sequence"])
         native_ids = set()
         movement_ids = set()
         source_events = []
