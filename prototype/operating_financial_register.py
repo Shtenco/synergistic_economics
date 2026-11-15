@@ -1087,25 +1087,179 @@ class OperatingFinancialRegister(DurableEventRegister):
             period_index=period_index, principal_id=principal_id, facility_kind="refinancing",
         )
 
-    def reserve_opening_positions(self, *, period_index, principal_id):
-        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index != 1:
-            raise OperatingFinancialRegisterError("reserve opening positions currently support only the initial period")
-        state, _ = self.state("operating-financial", principal_id=principal_id)
-        if state is None:
+    def _account_opening_positions(self, *, period_index, principal_id, account_kind):
+        """Reconstruct deposit/reserve openings from opening records and all prior T flows.
+
+        Account balances are shared stocks: loan creation/repayment, wage settlement,
+        interbank settlement and refinancing all affect them. Therefore this reducer
+        replays the immutable native movement envelopes instead of replaying only
+        account-specific events.
+        """
+        if not isinstance(period_index, int) or isinstance(period_index, bool) or period_index < 1:
+            raise OperatingFinancialRegisterError("opening period_index must be a positive integer")
+        if account_kind not in {"deposit", "reserve"}:
+            raise OperatingFinancialRegisterError("unsupported financial account opening kind")
+        if not self.verify():
+            raise OperatingFinancialRegisterError("financial source register hash-chain verification failed")
+        history = self.history("operating-financial", principal_id=principal_id)
+        if not history:
             raise OperatingFinancialRegisterError("operating financial stream has not been initialized")
+        state, _ = self.state("operating-financial", principal_id=principal_id)
+        accounts = state.get("deposits" if account_kind == "deposit" else "reserves", {})
+        if not accounts:
+            return ()
+
         from economic_stock_flow_reconciliation import OpeningPosition, PositionIdentity
-        positions = []
-        for account in state.get("reserves", {}).values():
-            bank, central_bank, currency = account["bank_id"], account["central_bank_id"], account["currency"]
-            instrument = f"RESERVE:{bank}:{central_bank}:{currency}"
-            amount, evidence = D(account["opening_balance"]), account["opening_evidence_ref"]
-            asset = PositionIdentity("financial", f"{instrument}:ASSET", "monetary",
-                                      currency, currency, "NOMINAL", bank, central_bank, instrument)
-            liability = PositionIdentity("financial", f"{instrument}:LIABILITY", "monetary",
-                                          currency, currency, "NOMINAL", central_bank, bank, instrument)
-            positions.extend((OpeningPosition(asset, period_index, amount, evidence),
-                              OpeningPosition(liability, period_index, amount, evidence)))
-        return tuple(positions)
+
+        positions_by_account = {}
+        proof_by_account = {}
+        opening_event_type = "deposit.account_opened" if account_kind == "deposit" else "bank.reserve_account_opened"
+        for key, account in accounts.items():
+            if account_kind == "deposit":
+                entity, bank, currency = account["entity_id"], account["bank_id"], account["currency"]
+                instrument = f"DEPOSIT:{entity}:{bank}:{currency}"
+                pairs = (
+                    (f"{instrument}:ASSET", entity, bank),
+                    (f"{instrument}:LIABILITY", bank, entity),
+                )
+            else:
+                bank, central_bank, currency = account["bank_id"], account["central_bank_id"], account["currency"]
+                instrument = f"RESERVE:{bank}:{central_bank}:{currency}"
+                pairs = (
+                    (f"{instrument}:ASSET", bank, central_bank),
+                    (f"{instrument}:LIABILITY", central_bank, bank),
+                )
+            identities = tuple(PositionIdentity(
+                "financial", position_id, "monetary", currency, currency,
+                "NOMINAL", holder, issuer, instrument,
+            ) for position_id, holder, issuer in pairs)
+            positions_by_account[key] = {
+                "account": account, "identities": identities,
+                "balance": D(account["opening_balance"]),
+            }
+            proof_by_account[key] = []
+
+        # Bind each opening stock to its actual immutable account-opening event.
+        opening_rows = {}
+        for row in history:
+            if row.get("event_type") != opening_event_type:
+                continue
+            payload = row.get("payload")
+            if not isinstance(payload, Mapping):
+                raise OperatingFinancialRegisterError("financial account opening payload must be a mapping")
+            if account_kind == "deposit":
+                account_key = self._deposit_key(
+                    payload.get("entity_id"), payload.get("bank_id"), payload.get("currency"),
+                )
+            else:
+                account_key = self._reserve_key(
+                    payload.get("bank_id"), payload.get("central_bank_id"), payload.get("currency"),
+                )
+            if account_key not in positions_by_account or account_key in opening_rows:
+                raise OperatingFinancialRegisterError("duplicate or unknown financial account opening event")
+            opening_rows[account_key] = row
+        if set(opening_rows) != set(positions_by_account):
+            raise OperatingFinancialRegisterError("durable financial account is missing its opening source event")
+        for key, row in opening_rows.items():
+            proof_by_account[key].append(row)
+
+        # Every transaction type is replayed through its canonical movement rows.
+        # Filtering is by exact position identity, not by event family, so flows
+        # from any supported subsystem update the same shared deposit/reserve stock.
+        position_to_account = {}
+        for key, item in positions_by_account.items():
+            for identity in item["identities"]:
+                if identity.position_id in position_to_account:
+                    raise OperatingFinancialRegisterError("duplicate financial account position identity")
+                position_to_account[identity.position_id] = key
+
+        seen_sequences = set()
+        for row in history:
+            sequence = row.get("commit_sequence")
+            if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
+                raise OperatingFinancialRegisterError("financial history commit_sequence must be positive")
+            if sequence in seen_sequences:
+                raise OperatingFinancialRegisterError("duplicate financial history commit_sequence")
+            seen_sequences.add(sequence)
+            envelope_json = row.get("native_envelope_json")
+            if not isinstance(envelope_json, str):
+                raise OperatingFinancialRegisterError("financial history is missing its immutable native envelope")
+            try:
+                envelope = json.loads(envelope_json)
+            except (TypeError, json.JSONDecodeError) as exc:
+                raise OperatingFinancialRegisterError("financial native envelope JSON is invalid") from exc
+            envelope_digest = hashlib.sha256(envelope_json.encode("utf-8")).hexdigest()
+            if envelope_digest != row.get("native_envelope_sha256"):
+                raise OperatingFinancialRegisterError("financial native envelope digest mismatch")
+            if not isinstance(envelope, Mapping) or envelope.get("event_type") != row.get("event_type"):
+                raise OperatingFinancialRegisterError("financial native envelope event type mismatch")
+            movements = envelope.get("stock_flow_movements")
+            if movements is None:
+                continue
+            if not isinstance(movements, list):
+                raise OperatingFinancialRegisterError("financial stock-flow movements must be a list")
+            touched = set()
+            for movement in movements:
+                if not isinstance(movement, Mapping):
+                    raise OperatingFinancialRegisterError("financial stock-flow movement must be a mapping")
+                identity = movement.get("identity")
+                if not isinstance(identity, Mapping):
+                    raise OperatingFinancialRegisterError("financial stock-flow movement identity is invalid")
+                account_key = position_to_account.get(identity.get("position_id"))
+                if account_key is None:
+                    continue
+                expected_identity = next(
+                    item for item in positions_by_account[account_key]["identities"]
+                    if item.position_id == identity.get("position_id")
+                )
+                if (
+                    identity.get("register_id") != "financial"
+                    or identity.get("measure") != "monetary"
+                    or identity.get("unit") != expected_identity.unit
+                    or identity.get("currency") != expected_identity.currency
+                    or identity.get("valuation_basis") != "NOMINAL"
+                    or identity.get("holder_id") != expected_identity.holder_id
+                    or identity.get("issuer_id") != expected_identity.issuer_id
+                    or identity.get("instrument_id") != expected_identity.instrument_id
+                ):
+                    raise OperatingFinancialRegisterError("financial account movement identity differs from its opening account")
+                movement_period = movement.get("period_index")
+                if not isinstance(movement_period, int) or isinstance(movement_period, bool) or movement_period < 1:
+                    raise OperatingFinancialRegisterError("financial account movement period must be positive")
+                amount = _decimal(movement.get("amount"), "financial account movement amount")
+                if movement_period < period_index:
+                    positions_by_account[account_key]["balance"] += amount
+                    touched.add(account_key)
+            for key in touched:
+                proof_by_account[key].append(row)
+
+        result = []
+        for key, item in sorted(positions_by_account.items()):
+            account = item["account"]
+            proof = []
+            for row in proof_by_account[key]:
+                proof.append({
+                    "event_id": row["event_id"],
+                    "commit_sequence": row["commit_sequence"],
+                    "payload_sha256": row["payload_sha256"],
+                    "chain_hash": row["chain_hash"],
+                    "native_envelope_sha256": row["native_envelope_sha256"],
+                })
+            digest = hashlib.sha256(
+                json.dumps(proof, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            evidence = f"financial-opening-v1:{account_kind}:{period_index}:{digest}"
+            for identity in item["identities"]:
+                result.append(OpeningPosition(
+                    identity, period_index, item["balance"], evidence,
+                ))
+        return tuple(result)
+
+    def reserve_opening_positions(self, *, period_index, principal_id):
+        """Export reserve openings after replaying every prior reserve-affecting flow."""
+        return self._account_opening_positions(
+            period_index=period_index, principal_id=principal_id, account_kind="reserve",
+        )
 
     def commit_central_bank_refinancing(self, *, event_id, event_type, facility_id,
                                         bank_id, central_bank_id, currency, amount,
