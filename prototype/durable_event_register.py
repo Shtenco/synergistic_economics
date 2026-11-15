@@ -346,7 +346,26 @@ class DurableEventRegister:
             _, _, acl, rows = self._load(con)
             if not self._authorized(acl, principal_id, self.read_permission):
                 raise RegisterError("actor is not authorized to read this register")
-            return tuple(dict(row) for row in rows if row["aggregate_id"] == aggregate_id)
+            result = []
+            for source in rows:
+                if source["aggregate_id"] != aggregate_id:
+                    continue
+                item = dict(source)
+                # Native prepare/commit stores the complete immutable envelope,
+                # including SFC movement specs, in the durable participant inbox.
+                # The event log itself stores only the domain payload. Reattach
+                # the committed envelope for deterministic downstream projection.
+                prepared = con.execute(
+                    "SELECT payload_json,payload_digest,state FROM native_participant_inbox WHERE native_event_id=?",
+                    (source["event_id"],),
+                ).fetchone()
+                if prepared is not None:
+                    if prepared["state"] != "COMMITTED":
+                        raise RegisterError("history event has a non-committed native envelope")
+                    item["native_envelope_json"] = prepared["payload_json"]
+                    item["native_envelope_sha256"] = prepared["payload_digest"]
+                result.append(item)
+            return tuple(result)
 
     def _participant_token(self, txid, operation):
         digest = hashlib.sha256(canonical_json(operation["payload"]).encode("utf-8")).hexdigest()
