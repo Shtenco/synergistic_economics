@@ -555,6 +555,14 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         self.assertEqual(
             sum(result.sector_financial_net_lending.values(), 0), 0
         )
+        # Check conservation independently by period and currency; summing
+        # all periods together could conceal offsetting accounting defects.
+        period_currency_totals = {}
+        for (period, sector, currency), amount in result.sector_financial_net_lending.items():
+            key = (period, currency)
+            period_currency_totals[key] = period_currency_totals.get(key, 0) + amount
+        self.assertTrue(period_currency_totals)
+        self.assertTrue(all(total == 0 for total in period_currency_totals.values()))
         reserve_1 = next(
             identity for identity in identities
             if identity.instrument_id == "RESERVE:bank-1:central-bank:LCU"
