@@ -45,13 +45,14 @@ class RegisterEventContractTests(unittest.TestCase):
         normalized = normalize_event_envelope("financial", event)
         self.assertIsNone(normalized["stock_flow_movements"])
         self.assertEqual(normalized["no_stock_flow_effect"], "NO_STOCK_FLOW_EFFECT")
+        missing_attestation = legacy()
+        missing_attestation.pop("no_stock_flow_effect")
+        missing_attestation["stock_flow_movements"] = None
         with self.assertRaisesRegex(
             RegisterEventContractError,
             "null stock_flow_movements requires an explicit no-stock-flow effect",
         ):
-            normalize_event_envelope(
-                "financial", legacy() | {"stock_flow_movements": None},
-            )
+            normalize_event_envelope("financial", missing_attestation)
 
     def test_migration_does_not_mutate_callers_event(self):
         source=legacy(); before=dict(source)
