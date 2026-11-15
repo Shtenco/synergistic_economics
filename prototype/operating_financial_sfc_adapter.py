@@ -179,6 +179,35 @@ class OperatingFinancialSFCAdapter:
     """Build and validate deterministic SFC projections from committed history."""
 
     @staticmethod
+    def _verified_history(register, principal_id):
+        if getattr(register, "REGISTER_NAME", None) != "financial":
+            raise OperatingFinancialSFCAdapterError("source must be the native financial register")
+        if not register.verify():
+            raise OperatingFinancialSFCAdapterError("financial source register hash-chain verification failed")
+        history = register.history("operating-financial", principal_id=principal_id)
+        if not isinstance(history, (tuple, list)) or not history:
+            raise OperatingFinancialSFCAdapterError("verified financial register history is empty")
+        return history
+
+    @staticmethod
+    def _projection_store_inputs(history, opening_snapshots):
+        sequences = [row.get("commit_sequence") for row in history]
+        if any(not isinstance(value, int) or isinstance(value, bool) or value < 1
+               for value in sequences):
+            raise OperatingFinancialSFCAdapterError("financial history has an invalid commit sequence")
+        if len(set(sequences)) != len(sequences):
+            raise OperatingFinancialSFCAdapterError("financial history has duplicate commit sequences")
+        ordered = sorted(sequences)
+        if ordered != list(range(ordered[0], ordered[-1] + 1)):
+            raise OperatingFinancialSFCAdapterError("financial history commit sequence contains a gap")
+        snapshots = sorted(opening_snapshots, key=lambda item: item.period_index)
+        opening_digest = hashlib.sha256(json.dumps(
+            [item.digest for item in snapshots],
+            separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")).hexdigest()
+        return ordered[-1], opening_digest
+
+    @staticmethod
     def from_register(
         register,
         *,
@@ -187,17 +216,81 @@ class OperatingFinancialSFCAdapter:
         sector_registry: EffectiveDatedSectorRegistry,
         opening_snapshots: Sequence[OpeningStockSnapshot],
     ) -> BankingSFCProjection:
-        if getattr(register, "REGISTER_NAME", None) != "financial":
-            raise OperatingFinancialSFCAdapterError("source must be the native financial register")
-        if not register.verify():
-            raise OperatingFinancialSFCAdapterError("financial source register hash-chain verification failed")
-        history = register.history("operating-financial", principal_id=principal_id)
+        history = OperatingFinancialSFCAdapter._verified_history(register, principal_id)
         return OperatingFinancialSFCAdapter.build(
             history,
             instrument_registry=instrument_registry,
             sector_registry=sector_registry,
             opening_snapshots=opening_snapshots,
         )
+
+    @staticmethod
+    def persist_from_register(
+        register,
+        *,
+        principal_id: str,
+        source_register_id: str,
+        projection_store,
+        instrument_registry: InstrumentTermsRegistry,
+        sector_registry: EffectiveDatedSectorRegistry,
+        opening_snapshots: Sequence[OpeningStockSnapshot],
+    ) -> dict:
+        """Verify, project and atomically checkpoint one consistent history snapshot."""
+        history = OperatingFinancialSFCAdapter._verified_history(register, principal_id)
+        projection = OperatingFinancialSFCAdapter.build(
+            history,
+            instrument_registry=instrument_registry,
+            sector_registry=sector_registry,
+            opening_snapshots=opening_snapshots,
+        )
+        source_sequence, opening_digest = OperatingFinancialSFCAdapter._projection_store_inputs(
+            history, opening_snapshots
+        )
+        if not callable(getattr(projection_store, "append", None)):
+            raise OperatingFinancialSFCAdapterError("a durable banking SFC projection store is required")
+        checkpoint = projection_store.append(
+            projection,
+            source_register_id=_text(source_register_id, "source_register_id"),
+            source_sequence=source_sequence,
+            instrument_registry_digest=instrument_registry.digest,
+            sector_registry_digest=sector_registry.digest,
+            opening_snapshot_digest=opening_digest,
+        )
+        return {"projection": projection, "checkpoint": checkpoint}
+
+    @staticmethod
+    def recover_from_register(
+        register,
+        *,
+        principal_id: str,
+        source_register_id: str,
+        projection_store,
+        instrument_registry: InstrumentTermsRegistry,
+        sector_registry: EffectiveDatedSectorRegistry,
+        opening_snapshots: Sequence[OpeningStockSnapshot],
+    ) -> dict:
+        """Re-verify native history and registries, rebuild, then compare the sealed checkpoint."""
+        history = OperatingFinancialSFCAdapter._verified_history(register, principal_id)
+        projection = OperatingFinancialSFCAdapter.build(
+            history,
+            instrument_registry=instrument_registry,
+            sector_registry=sector_registry,
+            opening_snapshots=opening_snapshots,
+        )
+        source_sequence, opening_digest = OperatingFinancialSFCAdapter._projection_store_inputs(
+            history, opening_snapshots
+        )
+        if not callable(getattr(projection_store, "recover", None)):
+            raise OperatingFinancialSFCAdapterError("a recoverable banking SFC projection store is required")
+        checkpoint = projection_store.recover(
+            projection,
+            source_register_id=_text(source_register_id, "source_register_id"),
+            source_sequence=source_sequence,
+            instrument_registry_digest=instrument_registry.digest,
+            sector_registry_digest=sector_registry.digest,
+            opening_snapshot_digest=opening_digest,
+        )
+        return {"projection": projection, "checkpoint": checkpoint}
 
     @staticmethod
     def build(
