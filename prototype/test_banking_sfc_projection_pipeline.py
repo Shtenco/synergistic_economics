@@ -17,6 +17,13 @@ class FakeFinancialRegister:
     def verify(self):
         return True
 
+    def source_checkpoint(self):
+        return {
+            "register_instance_id": "a" * 32,
+            "event_count": 7,
+            "tail_hash": "b" * 64,
+        }
+
     def history(self, aggregate_id, *, principal_id):
         if aggregate_id != "operating-financial" or principal_id != "auditor":
             raise AssertionError("unexpected source scope")
@@ -43,7 +50,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
             projection, receipt = project_and_persist(
                 source, principal_id="auditor", instrument_registry=terms,
                 sector_registry=sectors, opening_snapshots=[snapshot], store=store,
-                source_register_id="financial-register:auditor",
+                source_register_id="financial:" + "a" * 32 + ":auditor",
             )
             recovered, checkpoint = rebuild_and_verify(
                 source, principal_id="auditor", instrument_registry=terms,
@@ -53,6 +60,24 @@ class BankingSFCPipelineTests(unittest.TestCase):
             self.assertEqual(projection.source_digest, recovered.source_digest)
             self.assertEqual(receipt["checkpoint_digest"], checkpoint["checkpoint_digest"])
             self.assertEqual(checkpoint["applied_through_sequence"], 7)
+
+    def test_caller_cannot_substitute_another_source_register_identity(self):
+        terms, sectors, _identities, snapshot = fixture()
+        source = FakeFinancialRegister([
+            history_row("LOAN-ORIG-1", "bank.loan_originated", {
+                "loan_id": "LOAN-1", "borrower_id": "household-1",
+                "bank_id": "bank-1", "currency": "LCU", "amount": "100",
+                "period_index": 3, "evidence_ref": "SIGNED-LOAN-1",
+            }, sequence=7)
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            store = BankingSFCProjectionStore(Path(directory) / "projection.sqlite")
+            with self.assertRaisesRegex(ValueError, "differs from durable register identity"):
+                project_and_persist(
+                    source, principal_id="auditor", instrument_registry=terms,
+                    sector_registry=sectors, opening_snapshots=[snapshot], store=store,
+                    source_register_id="caller-controlled-register-id",
+                )
 
     def test_unverified_source_chain_is_rejected_before_persistence(self):
         terms, sectors, _identities, snapshot = fixture()
@@ -72,7 +97,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
                     sector_registry=sectors, opening_snapshots=[snapshot], store=store,
                     source_register_id="financial-register:auditor",
                 )
-            self.assertIsNone(store.latest_checkpoint("financial-register:auditor"))
+            self.assertIsNone(store.latest_checkpoint("financial:" + "a" * 32 + ":auditor"))
 
 
 if __name__ == "__main__":
