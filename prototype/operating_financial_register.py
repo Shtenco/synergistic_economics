@@ -1137,6 +1137,18 @@ class OperatingFinancialRegister(DurableEventRegister):
             if not isinstance(event_period, int) or isinstance(event_period, bool) or event_period < 1:
                 raise OperatingFinancialRegisterError("financial facility history period must be a positive integer")
             if event_period > period_index:
+                if event_type == opening_type:
+                    historical_origination = payload.get("origination_period_index")
+                    if (not isinstance(historical_origination, int)
+                            or isinstance(historical_origination, bool)
+                            or historical_origination < 0):
+                        raise OperatingFinancialRegisterError(
+                            "pre-existing facility origination period is invalid"
+                        )
+                    if historical_origination <= period_index:
+                        raise OperatingFinancialRegisterError(
+                            "pre-existing facility has no evidenced opening balance for the requested earlier period"
+                        )
                 continue
             facility_id = _text(payload.get(id_field), id_field)
             evidence_ref = _text(payload.get("evidence_ref"), "evidence_ref")
