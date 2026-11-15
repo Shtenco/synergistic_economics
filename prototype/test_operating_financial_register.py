@@ -411,7 +411,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             account_ref="RESERVE-ACCOUNT-1", opening_balance="0",
             evidence_ref="RESERVE-OPENING-EVIDENCE", actor_id="financial-root",
             authority_ref="CENTRAL-BANK-OPENING", effective_at=T, recorded_at=T,
-            expected_revision=1,
+            expected_revision=0,
         )
         register.commit_central_bank_refinancing(
             event_id="REFI-ADVANCE-1", event_type="central_bank.refinancing_advanced",
@@ -419,7 +419,7 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             central_bank_id="central-bank-1", currency="LCU", amount="100",
             period_index=2, evidence_ref="REFI-ADVANCE-EVIDENCE",
             actor_id="financial-root", authority_ref="REFI-POLICY",
-            effective_at=T, recorded_at=T, expected_revision=2,
+            effective_at=T, recorded_at=T, expected_revision=1,
         )
         register.commit_central_bank_refinancing(
             event_id="REFI-REPAY-1", event_type="central_bank.refinancing_principal_repaid",
@@ -427,13 +427,13 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             central_bank_id="central-bank-1", currency="LCU", amount="40",
             period_index=3, evidence_ref="REFI-REPAY-EVIDENCE",
             actor_id="financial-root", authority_ref="REFI-POLICY",
-            effective_at=T, recorded_at=T, expected_revision=3,
+            effective_at=T, recorded_at=T, expected_revision=2,
             causation_id="REFI-ADVANCE-1",
         )
         facility, version = register.refinancing_state(
             "FACILITY-1", principal_id="financial-root",
         )
-        self.assertEqual(version, 4)
+        self.assertEqual(version, 3)
         self.assertEqual(facility["origination_period_index"], 2)
         self.assertEqual(facility["outstanding_principal"], "60")
         self.assertTrue(register.verify())
