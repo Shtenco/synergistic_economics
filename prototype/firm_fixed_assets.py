@@ -166,6 +166,8 @@ class FixedAssetLedger:
             raise FixedAssetError("order must be an InvestmentOrder")
         if order.order_id in self.orders:
             raise FixedAssetError("duplicate investment order")
+        payment_currency = _text(payment_currency, "payment_currency")
+        order_currency = _text(order_currency, "order_currency")
         if payment_currency != order_currency:
             raise FixedAssetError("payment and order currencies differ")
         paid = _number(payment_amount, "payment_amount")
