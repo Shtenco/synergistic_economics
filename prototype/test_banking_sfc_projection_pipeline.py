@@ -326,7 +326,7 @@ class BankingSFCPipelineTests(unittest.TestCase):
                 Decimal("1000"),
             )
             self.assertEqual(
-                register.reserve_balance("bank-1", "central-bank-1", "LCU", principal_id="financial-root")[0],
+                register.bank_reserve_snapshot("bank-1", "central-bank-1", "LCU", principal_id="financial-root")["reserve_balance"],
                 Decimal("200"),
             )
             register.commit_bank_credit(
