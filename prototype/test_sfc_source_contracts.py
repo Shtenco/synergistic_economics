@@ -1,5 +1,6 @@
 """Tests for versioned financial metadata and explicit opening stocks."""
 import unittest
+from dataclasses import replace
 
 from sfc_projection_kernel import SFCIdentity
 from sfc_source_contracts import (
@@ -136,6 +137,35 @@ class SFCSourceContractTests(unittest.TestCase):
         )
         snapshot.validate_against(registry, sector_registry)
         self.assertEqual(snapshot.as_projection_openings()[(ident, 2)], "0")
+
+    def test_opening_snapshot_binds_exact_financial_source_checkpoint(self):
+        ident = identity()
+        registry = InstrumentTermsRegistry("terms-v1", (terms(),))
+        sector_registry = sectors()
+        snapshot = OpeningStockSnapshot(
+            "open-v1", 2, registry.version, registry.digest,
+            sector_registry.version, sector_registry.digest,
+            (ident, mirror_of(ident)),
+            (OpeningPosition(ident, "10", "CERT-A", "SOURCE-A"),
+             OpeningPosition(mirror_of(ident), "10", "CERT-B", "SOURCE-B")),
+        )
+        pinned = replace(
+            snapshot,
+            source_register_id=f"financial:{'a' * 32}:auditor",
+            source_sequence=5,
+            source_chain_hash="b" * 64,
+        )
+        self.assertNotEqual(snapshot.digest, pinned.digest)
+        with self.assertRaisesRegex(SFCSourceContractError, "must include register ID, sequence and chain hash"):
+            replace(
+                snapshot,
+                source_register_id=f"financial:{'a' * 32}:auditor",
+                source_sequence=5,
+            )
+        with self.assertRaisesRegex(SFCSourceContractError, "source_sequence must be a positive integer"):
+            replace(pinned, source_sequence=True)
+        with self.assertRaisesRegex(SFCSourceContractError, "source_chain_hash must be a lowercase SHA-256 digest"):
+            replace(pinned, source_chain_hash="NOT-A-HASH")
 
     def test_opening_snapshot_rejects_unbalanced_mirror_positions(self):
         ident = identity()
