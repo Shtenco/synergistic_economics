@@ -297,8 +297,13 @@ class OperatingFinancialRegister(DurableEventRegister):
         account_ref = _text(payload.get("account_ref"), "deposit account_ref")
         evidence_ref = _text(payload.get("evidence_ref"), "deposit evidence_ref")
         balance = _decimal(payload.get("opening_balance"), "opening_balance")
+        minor_unit = _decimal(payload.get("minor_unit", "0.01"), "deposit minor_unit", positive=True)
+        if minor_unit > 1 or minor_unit.as_tuple().exponent > 0:
+            raise OperatingFinancialRegisterError("deposit minor_unit must be a positive fraction no greater than one")
         if balance < 0:
             raise OperatingFinancialRegisterError("opening deposit balance cannot be negative")
+        if balance / minor_unit != (balance / minor_unit).to_integral_value():
+            raise OperatingFinancialRegisterError("opening deposit balance is not an exact multiple of its minor unit")
         if entity == bank:
             raise OperatingFinancialRegisterError("deposit owner and issuing bank must be distinct")
         for participant in (entity, bank):
@@ -312,7 +317,8 @@ class OperatingFinancialRegister(DurableEventRegister):
         state["deposits"][key] = {
             "entity_id": entity, "bank_id": bank, "currency": currency,
             "account_ref": account_ref, "opening_balance": str(balance),
-            "balance": str(balance), "opening_evidence_ref": evidence_ref,
+            "balance": str(balance), "minor_unit": str(minor_unit),
+            "opening_evidence_ref": evidence_ref,
         }
         return state
 
@@ -356,6 +362,9 @@ class OperatingFinancialRegister(DurableEventRegister):
                     raise OperatingFinancialRegisterError("both employer and worker require durable deposit accounts")
                 if (employer_account["bank_id"] != bank or worker_account["bank_id"] != bank):
                     raise OperatingFinancialRegisterError("wage payment bank differs from the authoritative deposit accounts")
+                if (employer_account["minor_unit"] != str(subevent.get("minor_unit"))
+                        or worker_account["minor_unit"] != str(subevent.get("minor_unit"))):
+                    raise OperatingFinancialRegisterError("wage payment minor unit differs from the authoritative deposit accounts")
                 employer_balance = D(employer_account["balance"])
                 worker_balance = D(worker_account["balance"])
                 if employer_balance < amount:
@@ -397,7 +406,7 @@ class OperatingFinancialRegister(DurableEventRegister):
     def open_deposit_account(self, *, event_id, entity_id, bank_id, currency,
                              account_ref, opening_balance, evidence_ref,
                              actor_id, authority_ref, effective_at, recorded_at,
-                             expected_revision):
+                             expected_revision, minor_unit="0.01"):
         event_id = _text(event_id, "event_id")
         operation = {
             "stream_id": "operating-financial",
@@ -411,6 +420,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "payload": {
                     "entity_id": entity_id, "bank_id": bank_id, "currency": currency,
                     "account_ref": account_ref, "opening_balance": str(_decimal(opening_balance, "opening_balance")),
+                    "minor_unit": str(_decimal(minor_unit, "minor_unit", positive=True)),
                     "evidence_ref": evidence_ref,
                 },
                 "no_stock_flow_effect": "account opening establishes a financial opening stock, not a period transaction movement",
