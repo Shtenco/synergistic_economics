@@ -271,8 +271,9 @@ class PeriodGovernance:
                 attestation_manifest.get("service_id") != self.service_id
                 or attestation_manifest.get("period") != period
                 or attestation_manifest.get("projection_generation") != generation
+                or attestation_manifest.get("period_closed") is not False
             ):
-                raise PeriodGovernanceError("register attestation checkpoint has the wrong service/period/generation")
+                raise PeriodGovernanceError("register attestation checkpoint has the wrong service/period/generation or close state")
             signer_key = _required(
                 attestation_manifest.get("signer_key_id"), "register attestation signer_key_id",
             )
@@ -299,6 +300,17 @@ class PeriodGovernance:
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
                 raise PeriodGovernanceError("register source_sequence must be a non-negative integer")
             source_hash = _sha256(attestation.get("source_chain_hash"), "source_chain_hash")
+            if (
+                attestation_manifest.get("commit_sequence") != sequence
+                or attestation_manifest.get("applied_through_cursor") != sequence
+                or attestation_manifest.get("event_count") != attestation.get("period_event_count")
+                or attestation_manifest.get("coverage_count") != attestation.get("period_event_count")
+                or attestation_manifest.get("event_log_root") != attestation.get("period_event_root")
+                or attestation_manifest.get("projection_state_hash") != attestation.get("closing_state_hash")
+            ):
+                raise PeriodGovernanceError(
+                    f"{name} signed register checkpoint does not bind its declared source cursor and state"
+                )
             event_count = attestation.get("period_event_count")
             if not isinstance(event_count, int) or isinstance(event_count, bool) or event_count < 0:
                 raise PeriodGovernanceError("period_event_count must be a non-negative integer")
