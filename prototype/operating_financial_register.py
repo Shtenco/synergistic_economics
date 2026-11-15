@@ -965,6 +965,7 @@ class OperatingFinancialRegister(DurableEventRegister):
 
     def append_event(self, **kwargs):
         if kwargs.get("event_type") in {"wage.event_group_committed", "deposit.account_opened",
-                                        "bank.loan_originated", "bank.loan_principal_repaid"}:
+                                        "bank.loan_originated", "bank.loan_principal_repaid",
+                                        "bank.reserve_account_opened", "bank.interbank_payment_settled"}:
             raise OperatingFinancialRegisterError("operating financial events must commit through the native prepare/commit protocol")
         return super().append_event(**kwargs)
