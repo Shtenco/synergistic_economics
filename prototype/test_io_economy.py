@@ -191,6 +191,69 @@ class InputOutputEconomyTests(unittest.TestCase):
                 D(payload["labour_hours"]),
             )
 
+    def test_household_labour_supply_caps_hiring_and_reports_unemployment(self):
+        from dataclasses import replace
+        households = [
+            replace(item, labour_supply_hours=D("2"))
+            for item in InputOutputEconomy.default_households()
+        ]
+        model = InputOutputEconomy(households=households)
+        result = model.step(1)
+        for household_id, state in model.households.items():
+            worked = D(result.household_labour_hours[household_id])
+            supply = D(result.household_labour_supply_hours[household_id])
+            unemployed = D(result.household_unemployment_hours[household_id])
+            self.assertLessEqual(worked, supply)
+            self.assertEqual(unemployed, supply - worked)
+            self.assertEqual(
+                D(result.household_employment_rate[household_id]),
+                worked / supply,
+            )
+        self.assertGreater(sum((D(x) for x in result.household_unemployment_hours.values()), D("0")), 0)
+        self.assertEqual(
+            sum((D(x) for x in result.household_labour_hours.values()), D("0")),
+            sum((state.production * state.config.labour_per_unit for state in model.firms.values()), D("0")),
+        )
+
+    def test_unconstrained_household_supply_does_not_create_artificial_unemployment(self):
+        from dataclasses import replace
+        households = [
+            replace(item, labour_supply_hours=D("1000"))
+            for item in InputOutputEconomy.default_households()
+        ]
+        model = InputOutputEconomy(households=households)
+        result = model.step(1)
+        self.assertTrue(all(D(x) == 0 for x in result.household_unemployment_hours.values()))
+        self.assertEqual(
+            sum((D(x) for x in result.household_labour_hours.values()), D("0")),
+            sum((state.production * state.config.labour_per_unit for state in model.firms.values()), D("0")),
+        )
+
+    def test_labour_supply_must_be_finite_and_nonnegative(self):
+        from dataclasses import replace
+        for value in (D("-1"), D("NaN")):
+            households = [
+                replace(item, labour_supply_hours=value)
+                for item in InputOutputEconomy.default_households()
+            ]
+            with self.assertRaises(EconomyError):
+                InputOutputEconomy(households=households)
+
+    def test_labour_market_events_reconcile_household_worked_hours(self):
+        model = InputOutputEconomy()
+        result = model.step(1)
+        events = [row for row in model.events if row["kind"] == "labour_market_clearing"]
+        self.assertEqual(len(events), 1)
+        payload = events[0]["payload"]
+        self.assertEqual(
+            sum((D(v) for v in payload["household_worked_hours"].values()), D("0")),
+            sum((D(v) for v in result.household_labour_hours.values()), D("0")),
+        )
+        self.assertEqual(
+            sum((D(v) for v in payload["household_unemployment_hours"].values()), D("0")),
+            sum((D(v) for v in result.household_unemployment_hours.values()), D("0")),
+        )
+
     def test_invalid_explicit_household_labour_shares_are_rejected(self):
         firms = InputOutputEconomy.default_firms()
         base = firms[0]
