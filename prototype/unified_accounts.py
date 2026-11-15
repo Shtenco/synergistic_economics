@@ -39,6 +39,9 @@ class Account:
     owner: str
     kind: str  # asset, liability, equity, income, expense
     currency: str = "UNIT"
+    # Exact bilateral counterparty for instruments whose identity requires it.
+    # None remains valid for generic non-bilateral accounts.
+    counterparty: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -271,6 +274,15 @@ def _bank_credit_accounts(ledger, *, bank_loan_receivable, bank_deposit_liabilit
         raise BalanceError("borrower deposit asset and loan liability must belong to the same borrower")
     if bank_asset.owner == borrower_asset.owner:
         raise BalanceError("bank and borrower must be distinct entities")
+    bank_id, borrower_id = bank_asset.owner, borrower_asset.owner
+    if (bank_asset.counterparty != borrower_id
+            or bank_liability.counterparty != borrower_id
+            or borrower_asset.counterparty != bank_id
+            or borrower_liability.counterparty != bank_id):
+        raise BalanceError(
+            "bank credit account counterparties must bind bank assets/liabilities to the borrower "
+            "and borrower assets/liabilities to the issuing bank"
+        )
     if len({a.currency for a in (bank_asset, bank_liability,
                                   borrower_asset, borrower_liability)}) != 1:
         raise BalanceError("bank credit accounts must use one currency; model FX separately")
