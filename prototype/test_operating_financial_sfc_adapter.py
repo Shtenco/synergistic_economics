@@ -321,6 +321,153 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 100)
             self.assertEqual(result.roll_forward[(identities[1], 3)].closing, 100)
 
+    def test_from_register_replays_interbank_and_refinancing_history(self):
+        with tempfile.TemporaryDirectory() as directory:
+            register = OperatingFinancialRegister(
+                Path(directory) / "financial.sqlite3",
+                sectors={
+                    "household-1": "H", "firm-1": "NFC",
+                    "bank-1": "CB", "bank-2": "CB",
+                    "central-bank": "CBank",
+                },
+            )
+            register.bootstrap_admin(
+                principal_id="financial-root",
+                authority_ref="BOOTSTRAP",
+                occurred_at="2026-11-15T00:00:00Z",
+            )
+            revision = 0
+            common = dict(
+                actor_id="financial-root", authority_ref="BANKING-SFC-TEST",
+                effective_at="2026-11-15T00:00:01Z",
+                recorded_at="2026-11-15T00:00:01Z",
+            )
+            for event_id, entity, bank, account in (
+                ("DEP-HH-OPEN", "household-1", "bank-1", "ACCOUNT-HH"),
+                ("DEP-FIRM-OPEN", "firm-1", "bank-2", "ACCOUNT-FIRM"),
+            ):
+                register.open_deposit_account(
+                    event_id=event_id, entity_id=entity, bank_id=bank,
+                    currency="LCU", account_ref=account, opening_balance="100",
+                    evidence_ref=f"EVIDENCE:{event_id}", expected_revision=revision,
+                    **common,
+                )
+                revision += 1
+            for event_id, bank, account in (
+                ("RES-B1-OPEN", "bank-1", "RESERVE-B1"),
+                ("RES-B2-OPEN", "bank-2", "RESERVE-B2"),
+            ):
+                register.open_bank_reserve_account(
+                    event_id=event_id, bank_id=bank, central_bank_id="central-bank",
+                    currency="LCU", account_ref=account, opening_balance="100",
+                    evidence_ref=f"EVIDENCE:{event_id}", expected_revision=revision,
+                    **common,
+                )
+                revision += 1
+
+            register.settle_interbank_payment(
+                event_id="INTERBANK-REAL-1", payment_id="PAYMENT-REAL-1",
+                payer_id="household-1", payee_id="firm-1",
+                payer_bank_id="bank-1", payee_bank_id="bank-2",
+                central_bank_id="central-bank", currency="LCU", amount="20",
+                period_index=3, evidence_ref="RTGS-SETTLEMENT-1",
+                expected_revision=revision, **common,
+            )
+            revision += 1
+            register.commit_central_bank_refinancing(
+                event_id="REFI-REAL-1", event_type="central_bank.refinancing_advanced",
+                facility_id="FACILITY-REAL-1", bank_id="bank-1",
+                central_bank_id="central-bank", currency="LCU", amount="50",
+                period_index=3, evidence_ref="CB-REFI-ADVANCE-1",
+                expected_revision=revision, **common,
+            )
+            revision += 1
+            register.commit_central_bank_refinancing(
+                event_id="REFI-REAL-REPAY-1",
+                event_type="central_bank.refinancing_principal_repaid",
+                facility_id="FACILITY-REAL-1", bank_id="bank-1",
+                central_bank_id="central-bank", currency="LCU", amount="20",
+                period_index=4, evidence_ref="CB-REFI-REPAY-1",
+                causation_id="REFI-REAL-1", expected_revision=revision, **common,
+            )
+
+            deposit_hh = "DEPOSIT:household-1:bank-1:LCU"
+            deposit_firm = "DEPOSIT:firm-1:bank-2:LCU"
+            reserve_b1 = "RESERVE:bank-1:central-bank:LCU"
+            reserve_b2 = "RESERVE:bank-2:central-bank:LCU"
+            refi = "CBREFI:FACILITY-REAL-1"
+            terms = InstrumentTermsRegistry("durable-bank-terms-v1", (
+                instrument(deposit_hh, "DEPOSIT"),
+                instrument(deposit_firm, "DEPOSIT"),
+                instrument(reserve_b1, "RESERVE"),
+                instrument(reserve_b2, "RESERVE"),
+                instrument(refi, "LOAN"),
+            ))
+            sectors = EffectiveDatedSectorRegistry(
+                "durable-bank-sectors-v1",
+                frozenset({"H", "NFC", "CB", "CBank", "GOV", "ROW"}),
+                (
+                    SectorMembership("household-1", "H", 1, None),
+                    SectorMembership("firm-1", "NFC", 1, None),
+                    SectorMembership("bank-1", "CB", 1, None),
+                    SectorMembership("bank-2", "CB", 1, None),
+                    SectorMembership("central-bank", "CBank", 1, None),
+                ),
+            )
+
+            def pair(instrument_id, instrument_class, holder, holder_sector,
+                     issuer, issuer_sector, maturity):
+                return (
+                    SFCIdentity(instrument_id, instrument_class, holder, holder_sector,
+                                issuer, issuer_sector, "LCU", maturity, "LCU:0.01", "NOMINAL"),
+                    SFCIdentity(instrument_id, instrument_class, issuer, issuer_sector,
+                                holder, holder_sector, "LCU", maturity, "LCU:0.01", "NOMINAL"),
+                )
+
+            identities = (
+                *pair(deposit_hh, "DEPOSIT", "household-1", "H",
+                      "bank-1", "CB", "ON_DEMAND"),
+                *pair(deposit_firm, "DEPOSIT", "firm-1", "NFC",
+                      "bank-2", "CB", "ON_DEMAND"),
+                *pair(reserve_b1, "RESERVE", "bank-1", "CB",
+                      "central-bank", "CBank", "ON_DEMAND"),
+                *pair(reserve_b2, "RESERVE", "bank-2", "CB",
+                      "central-bank", "CBank", "ON_DEMAND"),
+                *pair(refi, "LOAN", "central-bank", "CBank",
+                      "bank-1", "CB", "2028-12-31"),
+            )
+
+            def snapshot(version, period, balances):
+                return OpeningStockSnapshot(
+                    version, period, terms.version, terms.digest,
+                    sectors.version, sectors.digest, identities,
+                    tuple(
+                        OpeningPosition(identity, balance, f"CERT:{version}:{index}",
+                                        f"SOURCE:{version}:{index}")
+                        for index, (identity, balance) in enumerate(zip(identities, balances))
+                    ),
+                )
+
+            period3 = snapshot("durable-opening-p3", 3,
+                               ["100", "100", "100", "100", "100", "100", "100", "100", "0", "0"])
+            period4 = snapshot("durable-opening-p4", 4,
+                               ["80", "80", "120", "120", "80", "80", "120", "120", "50", "50"])
+            result = OperatingFinancialSFCAdapter.from_register(
+                register, principal_id="financial-root",
+                instrument_registry=terms, sector_registry=sectors,
+                opening_snapshots=[period3, period4],
+            )
+            self.assertEqual(result.source_event_count, 7)
+            self.assertEqual(result.excluded_opening_event_count, 4)
+            self.assertEqual(result.mapped_source_event_count, 3)
+            self.assertEqual(result.roll_forward[(identities[0], 3)].closing, 80)
+            self.assertEqual(result.roll_forward[(identities[2], 3)].closing, 120)
+            self.assertEqual(result.roll_forward[(identities[4], 3)].closing, 80)
+            self.assertEqual(result.roll_forward[(identities[6], 3)].closing, 120)
+            self.assertEqual(result.roll_forward[(identities[8], 3)].closing, 50)
+            self.assertEqual(result.roll_forward[(identities[8], 4)].closing, 30)
+            self.assertEqual(result.roll_forward[(identities[9], 4)].closing, 30)
+
     def test_nonzero_position_cannot_disappear_from_next_period_snapshot(self):
         terms, sectors, identities, first = fixture(3)
         deposit_only = OpeningStockSnapshot(
