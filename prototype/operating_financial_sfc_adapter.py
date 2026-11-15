@@ -293,7 +293,7 @@ class OperatingFinancialSFCAdapter:
                         identity.holder_sector if side == "asset_holder" else identity.issuer_sector
                     ))
                     bucket = transaction_assets if side == "asset_holder" else transaction_liabilities
-                    bucket.setdefault(bucket_key, []).append(Decimal(amount))
+                    bucket.setdefault(bucket_key, []).append(amount)
 
                 _validate_mirror_groups(source_id, prepared)
                 event_periods = {item["period_index"] for item in prepared}
