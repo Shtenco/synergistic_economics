@@ -251,6 +251,7 @@ class PeriodGovernance:
             )
         normalized = []
         seen = set()
+        signer_keys = {_required(manifest.get("signer_key_id"), "period checkpoint signer_key_id")}
         empty_event_root = hashlib.sha256(_canonical([]).encode("utf-8")).hexdigest()
         for entry in entries:
             if not isinstance(entry, dict) or set(entry) != {
@@ -263,11 +264,26 @@ class PeriodGovernance:
             seen.add(name)
             ref = _required(entry.get("attestation_ref"), "attestation_ref")
             digest = _sha256(entry.get("attestation_digest"), "attestation_digest")
-            attestation = self.checkpoint_verifier(ref, digest)
+            attestation_manifest = self.checkpoint_verifier(ref, digest)
+            if not isinstance(attestation_manifest, dict):
+                raise PeriodGovernanceError("register attestation verifier must return a verified signed manifest")
+            if (
+                attestation_manifest.get("service_id") != self.service_id
+                or attestation_manifest.get("period") != period
+                or attestation_manifest.get("projection_generation") != generation
+            ):
+                raise PeriodGovernanceError("register attestation checkpoint has the wrong service/period/generation")
+            signer_key = _required(
+                attestation_manifest.get("signer_key_id"), "register attestation signer_key_id",
+            )
+            if signer_key in signer_keys:
+                raise PeriodGovernanceError(
+                    "each register completeness declaration must have an independent signing key"
+                )
+            signer_keys.add(signer_key)
+            attestation = attestation_manifest.get("register_declaration")
             if not isinstance(attestation, dict):
-                raise PeriodGovernanceError("register attestation verifier must return a verified manifest")
-            if attestation.get("service_id") != self.service_id:
-                raise PeriodGovernanceError("register attestation belongs to a different service identity")
+                raise PeriodGovernanceError("signed register checkpoint is missing register_declaration")
             if (
                 attestation.get("declaration_type") != "register_period_completeness"
                 or attestation.get("register_name") != name
