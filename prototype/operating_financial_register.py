@@ -500,6 +500,7 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "loan_id": loan_id, "borrower_id": borrower, "bank_id": bank,
                 "currency": currency, "minor_unit": str(minor_unit),
                 "original_principal": str(amount), "outstanding_principal": str(amount),
+                "origination_period_index": period,
                 "last_event_id": event["event_id"], "last_period_index": period,
                 "origination_evidence_ref": evidence, "status": "OUTSTANDING",
                 "event_ids": [event["event_id"]],
@@ -678,7 +679,8 @@ class OperatingFinancialRegister(DurableEventRegister):
                 "facility_id": facility_id, "bank_id": bank,
                 "central_bank_id": central_bank, "currency": currency,
                 "minor_unit": str(minor_unit), "original_principal": str(amount),
-                "outstanding_principal": str(amount), "last_event_id": event_id,
+                "outstanding_principal": str(amount), "origination_period_index": period,
+                "last_event_id": event_id,
                 "last_period_index": period, "origination_evidence_ref": evidence,
                 "status": "OUTSTANDING", "event_ids": [event_id],
             }
