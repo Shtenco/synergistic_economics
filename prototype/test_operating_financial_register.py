@@ -108,6 +108,25 @@ class OperatingFinancialRegisterTests(unittest.TestCase):
             expected_revision=self.register.state("operating-financial", principal_id="financial-root")[1],
         )
 
+    def test_source_instance_identity_survives_restart_and_chain_cursor_advances(self):
+        initial = self.register.source_checkpoint()
+        self.assertEqual(len(initial["register_instance_id"]), 32)
+        reopened = OperatingFinancialRegister(
+            self.register_path,
+            sectors={"worker-1":"H", "employer-1":"NFC", "bank-1":"CB"},
+        )
+        restarted = reopened.source_checkpoint()
+        self.assertEqual(restarted, initial)
+        reopened.grant_access(
+            event_id="FINANCIAL-ACL-READER", idempotency_key="FINANCIAL-ACL-READER",
+            principal_id="audit-reader", permissions=["financial:read"],
+            actor_id="financial-root", authority_ref="AUDIT-POLICY", occurred_at=T,
+        )
+        advanced = reopened.source_checkpoint()
+        self.assertEqual(advanced["register_instance_id"], initial["register_instance_id"])
+        self.assertGreater(advanced["event_count"], initial["event_count"])
+        self.assertNotEqual(advanced["tail_hash"], initial["tail_hash"])
+
     def test_verified_wage_group_commits_to_durable_financial_register(self):
         operation = self.operation()
         token = self.register.prepare("TX-WAGE-1", operation)
