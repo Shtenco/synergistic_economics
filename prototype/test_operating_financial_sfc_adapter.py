@@ -347,7 +347,9 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             instrument("DEPOSIT:household-1:bank-1:LCU", "DEPOSIT"),
             instrument("DEPOSIT:firm-1:bank-2:LCU", "DEPOSIT"),
             instrument("DEPOSIT:government-1:bank-2:LCU", "DEPOSIT"),
-            instrument("LOAN:LOAN-1", "LOAN"),
+            instrument("LOAN:LOAN-GOV", "LOAN"),
+            instrument("LOAN:LOAN-ROW", "LOAN"),
+            instrument("LOAN:LOAN-HH", "LOAN"),
             instrument("RESERVE:bank-1:central-bank:LCU", "RESERVE"),
             instrument("RESERVE:bank-2:central-bank:LCU", "RESERVE"),
             instrument("CBREFI:FACILITY-1", "LOAN"),
@@ -391,6 +393,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             "GOV-LOAN-1", "bank.loan_originated", "30", 3, 1
         )
         gov_payload = json.loads(government_loan["payload_json"])
+        gov_payload["payload"]["loan_id"] = "LOAN-GOV"
         gov_payload["payload"]["borrower_id"] = "government-1"
         gov_payload["payload"]["bank_id"] = "bank-2"
         gov_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
@@ -403,6 +406,7 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
             "ROW-LOAN-1", "bank.loan_originated", "10", 3, 2
         )
         row_payload = json.loads(row_loan["payload_json"])
+        row_payload["payload"]["loan_id"] = "LOAN-ROW"
         row_payload["payload"]["borrower_id"] = "row-entity"
         row_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
             "event_id": "ROW-LOAN-1", "event_type": "bank.loan_originated",
@@ -427,6 +431,13 @@ class OperatingFinancialSFCAdapterTests(unittest.TestCase):
         household_loan = self.loan_event(
             "HOUSEHOLD-LOAN-1", "bank.loan_originated", "15", 3, 2
         )
+        household_payload = json.loads(household_loan["payload_json"])
+        household_payload["payload"]["loan_id"] = "LOAN-HH"
+        household_payload["stock_flow_movements"] = bank_credit_stock_flow_movement_specs({
+            "event_id": "HOUSEHOLD-LOAN-1", "event_type": "bank.loan_originated",
+            **household_payload["payload"],
+        })
+        household_loan["payload_json"] = json.dumps(household_payload)
         rows = [
             government_loan,
             row_loan,
