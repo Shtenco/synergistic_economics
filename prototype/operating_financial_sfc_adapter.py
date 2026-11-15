@@ -148,7 +148,11 @@ def _validate_mirror_groups(source_id, rows):
         ai, li = asset["_resolved_identity"], liability["_resolved_identity"]
         if (
             ai.instrument_id != li.instrument_id
+            or ai.instrument_class != li.instrument_class
             or ai.currency != li.currency
+            or ai.maturity != li.maturity
+            or ai.denomination != li.denomination
+            or ai.valuation_basis != li.valuation_basis
             or ai.holder_entity_id != li.issuer_entity_id
             or ai.issuer_entity_id != li.holder_entity_id
             or asset["period_index"] != liability["period_index"]
@@ -190,9 +194,9 @@ class OperatingFinancialSFCAdapter:
         if not isinstance(opening_snapshots, (tuple, list)) or not opening_snapshots:
             raise OperatingFinancialSFCAdapterError("explicit opening snapshots are required")
 
-        snapshots = sorted(opening_snapshots, key=lambda item: item.period_index)
-        if any(not isinstance(item, OpeningStockSnapshot) for item in snapshots):
+        if any(not isinstance(item, OpeningStockSnapshot) for item in opening_snapshots):
             raise OperatingFinancialSFCAdapterError("opening snapshot list contains an invalid value")
+        snapshots = sorted(opening_snapshots, key=lambda item: item.period_index)
         periods = [item.period_index for item in snapshots]
         if len(set(periods)) != len(periods):
             raise OperatingFinancialSFCAdapterError("duplicate opening snapshot period")
