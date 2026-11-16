@@ -104,7 +104,8 @@ class SCCEEndogenousHouseholdEconomyTests(unittest.TestCase):
             "cellular", seed=67, shock="compound", cellular_hops=2,
             households_per_cell=8, priority_dispersion=0.4,
             household_policy="proportional", backlog_retention=1.0,
-            max_backlog_periods=1.0, max_care_queue_age_periods=1,
+            max_backlog_periods=1.0, backlog_service_order="current_first",
+            max_care_queue_age_periods=1,
         )
         expiring.run(12)
         self.assertGreater(

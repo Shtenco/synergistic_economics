@@ -125,6 +125,21 @@ The Stage-C1 kernel remains separate from Stage B's production and matching deci
 
 C2-A1 is deliberately a controlled bridge: it makes household profiles the explicit source of cell demand but preserves aggregate demand and Stage-B physical outcomes exactly. C2-A2 adds an in-loop household delivery and bounded essential-backlog feedback into the next period's own-cell demand. This is still a synthetic physical model; household labour, income, ownership, money and credit remain unimplemented.
 
+## Prototype 6 — Spatial Economic Twin Boundary
+
+- [spatial_bridge.py](spatial_bridge.py) — standard-library-only adapter for validated geographic identity, source provenance, physical flow references and financial journal references. It does not post ledger entries or mutate production state.
+- [test_spatial_bridge.py](test_spatial_bridge.py) — checks coordinate/CRS bounds, finite physical quantities, positive financial references, evidence timestamps/licenses, event and idempotency uniqueness, and explicit separation of physical units from money.
+- [Spatial economic twin contract](../research/SPATIAL_ECONOMIC_TWIN_BRIDGE_2026-11-16.md) — describes the integration boundary to SYNERGY Maps and the limits of the current Stage-B physical economy.
+
+Run from the repository root:
+
+```bash
+python -m unittest prototype.test_spatial_bridge -v
+python -m unittest discover -s prototype -p 'test_*.py' -v
+```
+
+The registry in this prototype is in-memory and is not a durable event store. FinancialPostingRef is a validated reference to an independently balanced journal entry; the adapter deliberately does not post or settle it. PhysicalFlow quantities remain expressed in their physical units and are never added to monetary amounts. This is an integration boundary, not yet a production API or database.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
