@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: 3ff70bd90a0628b220b110ec8365e293506ed3a3
+          ref: 1c9e5b42a83c4dccdc4a952deb54523882da025e
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
