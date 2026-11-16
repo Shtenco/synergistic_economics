@@ -4,8 +4,10 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from trusted_key_registry import TrustedKeyRegistry, TrustRegistryError
+from canonical_entity_register import entity_authority_key_resolver
 
 
 class TrustedKeyRegistryTests(unittest.TestCase):
@@ -13,7 +15,7 @@ class TrustedKeyRegistryTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "trust.sqlite3"
         self.registry = TrustedKeyRegistry(self.path)
-        self.public = Ed25519PrivateKey.generate().public_key().public_bytes_raw()
+        self.public = Ed25519PrivateKey.generate().public_key().public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -76,6 +78,23 @@ class TrustedKeyRegistryTests(unittest.TestCase):
         )
         self.assertIsNone(self.registry.resolve_key("key-old"))
         self.assertIsNotNone(self.registry.resolve_key("key-new"))
+
+
+    def test_economic_verifier_resolver_observes_live_revocation(self):
+        self.registry.register_key(
+            key_id="entity-key", issuer="KZ-ENTITY-AUTHORITY", tenant_id="tenant-a",
+            public_key=self.public, valid_from="2026-01-01T00:00:00Z",
+            valid_until="2027-01-01T00:00:00Z",
+            scopes=("synergy.economic.entity-event/v1",), audiences=("economic-core",),
+            registered_by="trust-admin", registered_at="2026-11-16T00:00:00Z",
+        )
+        resolver = entity_authority_key_resolver(self.registry)
+        self.assertIsNotNone(resolver("entity-key"))
+        self.registry.revoke_key(
+            key_id="entity-key", revoked_by="security-admin",
+            reason="rotation", revoked_at="2026-11-16T00:01:00Z",
+        )
+        self.assertIsNone(resolver("entity-key"))
 
     def test_duplicate_key_id_and_invalid_key_material_are_rejected(self):
         self.register()
