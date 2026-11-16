@@ -9,3 +9,8 @@ The trust registry code is shared in structure with Metaverse and Maps, but this
 ## Cross-repository CI access
 
 The integration workflow checks out private Metaverse and Maps repositories. It requires a repository Actions secret named `SYNERGY_CROSS_REPO_TOKEN`, containing a fine-grained token with read-only Contents access to Economics, Metaverse, Maps and Agentic AI. The same secret name must be configured in the Economics and Metaverse repositories. The token is used only for checkout; it is not embedded in code or test artifacts.
+
+
+## CI credential required for cross-repository tests
+
+The cross-repository contract job requires an Actions secret named `SYNERGY_CROSS_REPO_READ_TOKEN`. Configure it in repository Settings → Secrets and variables → Actions, using a dedicated fine-grained token or GitHub App token with read-only Contents access to Economics, Metaverse, Maps and Agentic AI Economy. The workflow fails explicitly if the secret is absent; it never treats a skipped cross-repository test as a pass. Never place the token in code, workflow YAML, PR comments or chat.
