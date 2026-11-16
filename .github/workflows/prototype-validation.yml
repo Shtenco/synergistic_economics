@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: fe59ecdf328c2e0b065fe2220aa4fc9468e4b26e
+          ref: ff71f917d786da5fa4d91932dd3580704b5d43b8
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -287,6 +287,7 @@ jobs:
         if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
         working-directory: external/synergy_maps-global
         run: |
+          python -m pip install --disable-pip-version-check shapely==2.1.2
           python -m unittest discover -s tests -p 'test_*.py' -v
           python -m py_compile scripts/*.py tests/*.py
       - name: Build and test global SYNERGY Maps viewer
