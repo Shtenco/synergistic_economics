@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import statistics
+from pathlib import Path
 from typing import Sequence
 
 from scc_dynamic_economy import POLICIES
@@ -384,6 +385,7 @@ def main():
                         default="proportional,priority_weighted,floor_priority")
     parser.add_argument("--backlog-sensitivity", action="store_true")
     parser.add_argument("--service-order-sensitivity", action="store_true")
+    parser.add_argument("--output", help="write the complete paired result JSON to this path")
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     economic_policies = tuple(
@@ -412,8 +414,15 @@ def main():
             args.max_backlog_periods, economic_policies, household_policies,
             "backlog_first", args.max_care_queue_age_periods,
         )
-        if args.summary_only:
-            result.pop("paired_runs", None)
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\\n",
+            encoding="utf-8",
+        )
+    if args.summary_only and "paired_runs" in result:
+        result.pop("paired_runs", None)
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
