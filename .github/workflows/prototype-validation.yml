@@ -98,7 +98,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_metaverse
-          ref: a524b20307455cccff306d88de36ff83cc791697
+          ref: 35ded2fbe5c522c8596c9ac9c18c58265a737ccf
           path: external/synergy_metaverse
       - name: Checkout Maps PR integration snapshot
         uses: actions/checkout@v4
@@ -119,7 +119,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install cross-repository test dependencies
-        run: python -m pip install --upgrade pytest cryptography rfc8785 fastapi httpx h3 jsonschema jsonschema==4.23.0
+        run: python -m pip install --upgrade pytest cryptography rfc8785 fastapi httpx h3 jsonschema==4.23.0
       - name: Run pinned cross-repository end-to-end contract flow
         env:
           ECONOMICS_SOURCE: ${{ github.workspace }}/economics
