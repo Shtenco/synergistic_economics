@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import statistics
+from pathlib import Path
 from typing import Sequence
 
 from scc_dynamic_economy import DynamicCellularEconomy, POLICIES
@@ -160,6 +161,7 @@ def main():
     parser.add_argument("--priority-dispersion", type=float, default=0.4)
     parser.add_argument("--essential-floor-fraction", type=float, default=0.5)
     parser.add_argument("--economic-policies", default="market,central,cooperative,cellular")
+    parser.add_argument("--output", help="write the complete paired result JSON to this path")
     parser.add_argument("--summary-only", action="store_true")
     args = parser.parse_args()
     policies = tuple(x.strip() for x in args.economic_policies.split(",") if x.strip())
@@ -168,6 +170,13 @@ def main():
         args.households_per_cell, args.priority_dispersion,
         args.essential_floor_fraction, policies,
     )
+    if args.output:
+        output_path = Path(args.output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(result, indent=2, sort_keys=True) + "\\n",
+            encoding="utf-8",
+        )
     if args.summary_only:
         result.pop("paired_runs", None)
     print(json.dumps(result, indent=2, sort_keys=True))
