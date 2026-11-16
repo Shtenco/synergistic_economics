@@ -236,6 +236,7 @@ jobs:
         working-directory: external/synergy_maps/web
         run: npm install --ignore-scripts
       - name: Build Maps Cesium frontend
+        if: always()
         working-directory: external/synergy_maps/web
         run: npm run build
       - name: Run HardNAV accounting regressions
