@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: 6092081879e2865729f173020431af98ed7f284a
+          ref: afe08c205f40be023835ef9f711b27d2d405b767
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -296,6 +296,7 @@ jobs:
           npm install --ignore-scripts
           npm test
           npm run build
+          npm run verify:eaeu-boundaries
           node scripts/plan_eaeu_country_tiles.mjs /tmp/synergy-eaeu-plans
           python - <<'PY'
           import json, sys
