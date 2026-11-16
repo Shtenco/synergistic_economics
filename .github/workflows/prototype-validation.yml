@@ -92,7 +92,7 @@ jobs:
       - name: Require cross-repository read token
         env:
           CROSS_REPO_TOKEN: ${{ secrets.SYNERGY_CROSS_REPO_TOKEN }}
-        run: test -n "$CROSS_REPO_TOKEN" || { echo "::error::Add SYNERGY_CROSS_REPO_TOKEN with read access to Economics, Metaverse and Maps"; exit 1; }
+        run: test -n "$CROSS_REPO_TOKEN" || { echo "::error::Add SYNERGY_CROSS_REPO_TOKEN with read access to Economics, Metaverse, Maps and Agentic AI"; exit 1; }
       - name: Checkout Metaverse PR integration merge commit
         uses: actions/checkout@v4
         with:
@@ -107,6 +107,13 @@ jobs:
           repository: Shtenco/synergy_maps
           ref: 03c94d8ca35fb318896fe587da7da7ee5d7c1191
           path: external/synergy_maps
+      - name: Checkout HardNAV accounting implementation
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNERGY_CROSS_REPO_TOKEN }}
+          repository: Shtenco/synergy_agentic_ai_economy
+          ref: 35afb095aff23fe0462a6674aeec37041a45d86b
+          path: external/synergy_agentic_ai_economy
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -117,5 +124,8 @@ jobs:
         env:
           ECONOMICS_SOURCE: ${{ github.workspace }}/economics
           MAPS_SOURCE: ${{ github.workspace }}/external/synergy_maps
-          PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
-        run: python -m pytest -q external/synergy_metaverse/tests/integration/test_cross_repo_economic_spatial_payment_flow.py
+          PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src:${{ github.workspace }}/external/synergy_agentic_ai_economy
+        run: |
+          python -m pytest -q external/synergy_metaverse/tests/integration/test_cross_repo_economic_spatial_payment_flow.py
+          python -m compileall -q external/synergy_agentic_ai_economy/agent_economy external/synergy_agentic_ai_economy/tests
+          python -m pytest -q external/synergy_agentic_ai_economy/tests/test_multimarket_hardnav.py
