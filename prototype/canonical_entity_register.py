@@ -110,9 +110,16 @@ class Ed25519EntityAuthorityVerifier:
     not itself the production trust registry.
     """
 
-    def __init__(self, trusted_keys: Mapping[str, TrustedEntityAuthorityKey]):
+    def __init__(self, trusted_keys):
+        # Accept either a static test snapshot or a live resolver backed by the
+        # durable TrustedKeyRegistry. Production must use the live resolver so
+        # key revocation takes effect without restarting consumers.
+        if callable(trusted_keys):
+            self.trusted_keys = None
+            self.key_resolver = trusted_keys
+            return
         if not isinstance(trusted_keys, Mapping) or not trusted_keys:
-            raise EconomicEntityRegisterError("at least one trusted authority key is required")
+            raise EconomicEntityRegisterError("a trusted key mapping or live key resolver is required")
         self.trusted_keys = dict(trusted_keys)
         for mapping_key, key in self.trusted_keys.items():
             if not isinstance(key, TrustedEntityAuthorityKey) or mapping_key != key.key_id:
@@ -128,6 +135,8 @@ class Ed25519EntityAuthorityVerifier:
                 required_text(authority_ref, "key.authority_ref")
             if _parse_utc(key.valid_from, "key.valid_from") >= _parse_utc(key.valid_until, "key.valid_until"):
                 raise EconomicEntityRegisterError("trusted authority key validity interval is empty")
+        self.key_resolver = lambda key_id: self.trusted_keys.get(key_id)
+
             if key.revoked_at is not None:
                 _parse_utc(key.revoked_at, "key.revoked_at")
 
@@ -143,7 +152,7 @@ class Ed25519EntityAuthorityVerifier:
         if attestation.get("scope") != "synergy.economic.entity-event/v1":
             return False
         key_id = attestation.get("key_id")
-        key = self.trusted_keys.get(key_id) if isinstance(key_id, str) else None
+        key = self.key_resolver(key_id) if isinstance(key_id, str) else None
         if not isinstance(key, TrustedEntityAuthorityKey):
             return False
         try:
@@ -184,6 +193,27 @@ class Ed25519EntityAuthorityVerifier:
             return True
         except Exception:
             return False
+
+
+
+def entity_authority_key_resolver(registry):
+    """Build a live economic-authority resolver from the durable trust registry."""
+    if not callable(getattr(registry, "resolve_key", None)):
+        raise EconomicEntityRegisterError("durable trust registry is required")
+
+    def resolve(key_id):
+        record = registry.resolve_key(
+            key_id, required_scope="synergy.economic.entity-event/v1"
+        )
+        if record is None:
+            return None
+        return TrustedEntityAuthorityKey(
+            key_id=record.key_id, issuer=record.issuer, tenant_id=record.tenant_id,
+            public_key_raw=record.public_key, valid_from=record.valid_from,
+            valid_until=record.valid_until, authority_refs=record.scopes,
+            revoked_at=None,
+        )
+    return resolve
 
 
 class CanonicalEconomicEntityRegister(DurableEventRegister):
