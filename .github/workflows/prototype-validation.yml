@@ -84,6 +84,22 @@ jobs:
 
   cross-repository-contract:
     runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:16-3.5
+        env:
+          POSTGRES_DB: synergy_maps
+          POSTGRES_USER: synergy
+          POSTGRES_PASSWORD: synergy-test-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U synergy -d synergy_maps"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://synergy:synergy-test-password@localhost:5432/synergy_maps
     steps:
       - name: Checkout Economics
         uses: actions/checkout@v4
@@ -119,7 +135,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install cross-repository test dependencies
-        run: python -m pip install --upgrade pytest cryptography rfc8785 fastapi httpx h3 jsonschema==4.23.0
+        run: python -m pip install --upgrade pytest cryptography rfc8785 fastapi httpx h3 jsonschema==4.23.0 'psycopg[binary]==3.2.4' 'uvicorn[standard]==0.34.0'
       - name: Run pinned cross-repository end-to-end contract flow
         env:
           ECONOMICS_SOURCE: ${{ github.workspace }}/economics
@@ -140,13 +156,23 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: |
           python -m compileall -q external/synergy_metaverse/src external/synergy_metaverse/tests
-          python -m pytest -q external/synergy_metaverse/tests/test_trusted_key_registry.py external/synergy_metaverse/tests/test_registry_proof.py external/synergy_metaverse/tests/test_business_twin.py external/synergy_metaverse/tests/test_trust_revocation.py
+          python -m pytest -q external/synergy_metaverse/tests --ignore=external/synergy_metaverse/tests/integration
       - name: Run Maps trust and spatial proof regressions
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_maps/src
         run: |
           python -m compileall -q external/synergy_maps/src external/synergy_maps/tests
-          python -m pytest -q external/synergy_maps/tests/test_trusted_key_registry.py external/synergy_maps/tests/test_registry_proof.py external/synergy_maps/tests/test_trust_revocation.py
+          python -m pytest -q external/synergy_maps/tests
+      - name: Build Maps Cesium frontend
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Maps frontend dependencies
+        working-directory: external/synergy_maps/web
+        run: npm install --ignore-scripts
+      - name: Build Maps Cesium frontend
+        working-directory: external/synergy_maps/web
+        run: npm run build
       - name: Run HardNAV accounting regressions
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_agentic_ai_economy
