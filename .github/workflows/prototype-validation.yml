@@ -133,8 +133,16 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: 284cc15a7a3036e10011b1008b34868cd1a5aa00
+          ref: bb64124c67e5a76ac4669e28bab13090f1238282
           path: external/synergy_maps
+      - name: Checkout Maps global Cesium and EAEU coverage snapshot
+        id: checkout_maps_global
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
+          repository: Shtenco/synergy_maps
+          ref: 19724d71b3abb4389403ba00d3472d6016dbfe4d
+          path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
         uses: actions/checkout@v4
@@ -275,13 +283,37 @@ jobs:
         if: always()
         working-directory: external/synergy_maps/web
         run: npm run build
+      - name: Test global Maps ingestion and EAEU country coverage
+        if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
+        working-directory: external/synergy_maps-global
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -v
+          python -m py_compile scripts/*.py tests/*.py
       - name: Build and test global SYNERGY Maps viewer
-        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
-        working-directory: external/synergy_maps
+        if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
+        working-directory: external/synergy_maps-global
         run: |
           npm install --ignore-scripts
           npm test
           npm run build
+          node scripts/plan_eaeu_country_tiles.mjs /tmp/synergy-eaeu-plans
+          python - <<'PY'
+          import json, sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from run_overture_tile_jobs import load_plan
+          root = Path("/tmp/synergy-eaeu-plans")
+          expected = {"am", "by", "kz", "kg", "ru"}
+          actual = {path.stem for path in root.glob("*.json") if path.name != "summary.json"}
+          assert actual == expected, (actual, expected)
+          for country in sorted(expected):
+              plan = load_plan(root / f"{country}.json", 20000)
+              assert plan["country"]["alpha2"].lower() == country
+              assert plan["tile_count"] == len(plan["jobs"]) > 0
+          summary = json.loads((root / "summary.json").read_text())
+          assert summary["total_jobs"] == sum(x["jobs"] for x in summary["countries"])
+          print(f"EAEU COUNTRY PLANS: PASS ({summary['total_jobs']} bounded tile jobs)")
+          PY
       - name: Run HardNAV accounting regressions
         if: ${{ always() && !cancelled() && steps.checkout_hardnav.outcome == 'success' }}
         env:
