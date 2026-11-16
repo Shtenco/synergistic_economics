@@ -205,7 +205,8 @@ def entity_authority_key_resolver(registry):
 
     def resolve(key_id):
         record = registry.resolve_key(
-            key_id, required_scope="synergy.economic.entity-event/v1"
+            key_id, required_scope="synergy.economic.entity-event/v1",
+            audience="synergy.economic.entity-register.v1"
         )
         if record is None:
             return None
