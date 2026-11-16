@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -6,7 +9,7 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from trusted_key_registry import TrustedKeyRegistry, TrustRegistryError
+from trusted_key_registry import TrustedKeyRegistry, TrustRegistryError, sign_economic_event_envelope, ECONOMIC_EVENT_DOMAIN
 from canonical_entity_register import entity_authority_key_resolver
 
 
@@ -95,6 +98,38 @@ class TrustedKeyRegistryTests(unittest.TestCase):
             reason="rotation", revoked_at="2026-11-16T00:01:00Z",
         )
         self.assertIsNone(resolver("entity-key"))
+
+
+    def test_economic_marketplace_event_signer_uses_domain_separated_ed25519(self):
+        private = Ed25519PrivateKey.generate()
+        envelope = {
+            "schema_version": "synergy.event.v1", "event_id": "evt-1",
+            "event_type": "marketplace.offer.registered",
+            "aggregate_type": "economic_marketplace_tenant", "aggregate_id": "tenant-a",
+            "aggregate_version": 1, "event_ordinal": 0,
+            "occurred_at": "2026-11-16T00:00:00Z", "recorded_at": "2026-11-16T00:00:01Z",
+            "actor_id": "economics-service", "authority_ref": "mandate:1",
+            "idempotency_key": "evt-1", "command_id": "cmd-1",
+            "correlation_id": "corr-1", "causation_id": None,
+            "payload": {"tenant_id": "tenant-a", "entity": {"offer_id": "offer-1"}},
+            "evidence_refs": [], "payload_digest": "0" * 64,
+        }
+        signed = sign_economic_event_envelope(
+            envelope, private_key=private, key_id="economics-event-key",
+            issuer="SYNERGY-ECONOMICS",
+            audience="synergy.metaverse.economic-projection.v1",
+            issued_at="2026-11-16T00:00:00Z", expires_at="2026-11-16T00:05:00Z",
+        )
+        unsigned = {key: value for key, value in signed.items() if key != "attestation"}
+        canonical = json.dumps(
+            unsigned, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        ).encode("utf-8")
+        signature = base64.b64decode(signed["attestation"]["signature"], validate=True)
+        private.public_key().verify(
+            signature, ECONOMIC_EVENT_DOMAIN + hashlib.sha256(canonical).digest()
+        )
+        self.assertEqual(signed["attestation"]["algorithm"], "Ed25519")
 
     def test_duplicate_key_id_and_invalid_key_material_are_rejected(self):
         self.register()
