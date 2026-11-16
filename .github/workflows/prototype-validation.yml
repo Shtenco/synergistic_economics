@@ -110,6 +110,7 @@ jobs:
           CROSS_REPO_TOKEN: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
         run: test -n "$CROSS_REPO_TOKEN" || { echo "::error::Add SYNERGY_CROSS_REPO_READ_TOKEN with read access to Economics, Metaverse, Maps and Agentic AI"; exit 1; }
       - name: Checkout Metaverse PR integration snapshot
+        id: checkout_metaverse
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
@@ -117,6 +118,7 @@ jobs:
           ref: 8d563ec1324a6218a587c51c2c8754826d48b660
           path: external/synergy_metaverse
       - name: Checkout Maps PR integration snapshot
+        id: checkout_maps
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
@@ -124,6 +126,7 @@ jobs:
           ref: f39881cc1ba12c856db0ddf90a15fa31c17169c8
           path: external/synergy_maps
       - name: Checkout HardNAV accounting PR snapshot
+        id: checkout_hardnav
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
@@ -220,19 +223,19 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_trusted_key_registry.py
       - name: Run Maps trust and spatial proof regressions
-        if: always()
+        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_maps/src
         run: |
           python -m compileall -q external/synergy_maps/src external/synergy_maps/tests
           python -m pytest -q external/synergy_maps/tests
       - name: Build Maps Cesium frontend
-        if: always()
+        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install Maps frontend dependencies
-        if: always()
+        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
         working-directory: external/synergy_maps/web
         run: npm install --ignore-scripts
       - name: Build Maps Cesium frontend
@@ -240,7 +243,7 @@ jobs:
         working-directory: external/synergy_maps/web
         run: npm run build
       - name: Run HardNAV accounting regressions
-        if: always()
+        if: ${{ always() && !cancelled() && steps.checkout_hardnav.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_agentic_ai_economy
         run: |
