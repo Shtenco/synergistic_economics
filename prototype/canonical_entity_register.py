@@ -152,7 +152,10 @@ class Ed25519EntityAuthorityVerifier:
         if attestation.get("scope") != "synergy.economic.entity-event/v1":
             return False
         key_id = attestation.get("key_id")
-        key = self.key_resolver(key_id) if isinstance(key_id, str) else None
+        try:
+            key = self.key_resolver(key_id) if isinstance(key_id, str) else None
+        except Exception:
+            return False
         if not isinstance(key, TrustedEntityAuthorityKey):
             return False
         try:
