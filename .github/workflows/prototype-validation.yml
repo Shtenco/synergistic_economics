@@ -220,22 +220,26 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_trusted_key_registry.py
       - name: Run Maps trust and spatial proof regressions
+        if: always()
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_maps/src
         run: |
           python -m compileall -q external/synergy_maps/src external/synergy_maps/tests
           python -m pytest -q external/synergy_maps/tests
       - name: Build Maps Cesium frontend
+        if: always()
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Install Maps frontend dependencies
+        if: always()
         working-directory: external/synergy_maps/web
         run: npm install --ignore-scripts
       - name: Build Maps Cesium frontend
         working-directory: external/synergy_maps/web
         run: npm run build
       - name: Run HardNAV accounting regressions
+        if: always()
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_agentic_ai_economy
         run: |
