@@ -260,7 +260,7 @@ class TrustedKeyRegistry:
                 if self.resolve_key(key_id, tenant_id=tenant_id, now=now) is not None]
 
 
-ECONOMIC_EVENT_DOMAIN = b"SYNERGY-ECONOMIC-MARKETPLACE-EVENT-V1\\x00"
+ECONOMIC_EVENT_DOMAIN = b"SYNERGY-ECONOMIC-MARKETPLACE-EVENT-V1\x00"
 
 
 def sign_economic_event_envelope(envelope, *, private_key, key_id, issuer,
