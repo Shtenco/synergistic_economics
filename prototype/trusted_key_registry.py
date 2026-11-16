@@ -12,7 +12,7 @@ import base64
 import json
 import sqlite3
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable, Mapping
 
 
 class TrustRegistryError(ValueError):
@@ -79,13 +79,19 @@ class TrustedKeyRegistry:
 
     SCHEMA_VERSION = 1
 
-    def __init__(self, database_path: str | Path, *, timeout: float = 10.0):
+    def __init__(
+        self, database_path: str | Path, *, timeout: float = 10.0,
+        authorize_admin: Callable[[str, str, Mapping[str, object]], bool] | None = None,
+    ):
         if str(database_path) == ":memory:":
             raise TrustRegistryError("durable file-backed trust registry is required")
         self.database_path = str(database_path)
         if timeout <= 0:
             raise TrustRegistryError("timeout must be positive")
         self.timeout = float(timeout)
+        if authorize_admin is not None and not callable(authorize_admin):
+            raise TrustRegistryError("authorize_admin must be callable")
+        self.authorize_admin = authorize_admin
         self._initialize()
 
     def _connect(self):
@@ -150,6 +156,17 @@ class TrustedKeyRegistry:
             if version != self.SCHEMA_VERSION:
                 raise TrustRegistryError("unsupported trust registry schema version")
 
+    def _authorize_admin(self, actor_id: str, action: str, payload: Mapping[str, object]) -> None:
+        """Fail closed unless a separately governed trust-admin policy approves."""
+        if self.authorize_admin is None:
+            raise TrustRegistryError("trust admin authorization callback is required")
+        try:
+            allowed = self.authorize_admin(actor_id, action, dict(payload))
+        except Exception as exc:
+            raise TrustRegistryError("trust admin authorization failed") from exc
+        if allowed is not True:
+            raise TrustRegistryError("trust admin action is not authorized")
+
     def register_key(self, *, key_id, issuer, tenant_id, public_key, valid_from,
                      valid_until, scopes, audiences, registered_by, registered_at=None):
         key_id, issuer, tenant_id, registered_by = (
@@ -173,6 +190,7 @@ class TrustedKeyRegistry:
             "valid_until": valid_until, "scopes": json.loads(scope_json),
             "audiences": json.loads(audience_json),
         }, sort_keys=True, separators=(",", ":"))
+        self._authorize_admin(registered_by, "KEY_REGISTER", json.loads(payload))
         event_id = sha256(("REGISTER\0" + payload).encode()).hexdigest()
         with self._connect() as con:
             con.execute("BEGIN IMMEDIATE")
@@ -202,6 +220,7 @@ class TrustedKeyRegistry:
         payload = json.dumps({"key_id": key_id, "revoked_at": instant.isoformat(),
                               "revoked_by": revoked_by, "reason": reason},
                              sort_keys=True, separators=(",", ":"))
+        self._authorize_admin(revoked_by, "KEY_REVOKE", json.loads(payload))
         event_id = sha256(("REVOKE\0" + payload).encode()).hexdigest()
         with self._connect() as con:
             con.execute("BEGIN IMMEDIATE")
