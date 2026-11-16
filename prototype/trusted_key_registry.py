@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
+import base64
 import json
 import sqlite3
 from pathlib import Path
@@ -252,3 +253,35 @@ class TrustedKeyRegistry:
             )]
         return [key_id for key_id in ids
                 if self.resolve_key(key_id, tenant_id=tenant_id, now=now) is not None]
+
+
+ECONOMIC_EVENT_DOMAIN = b"SYNERGY-ECONOMIC-MARKETPLACE-EVENT-V1\\x00"
+
+
+def sign_economic_event_envelope(envelope, *, private_key, key_id, issuer,
+                                 audience, issued_at, expires_at):
+    """Attach an Ed25519 signature for the canonical marketplace event envelope."""
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise TrustRegistryError("private_key must be an Ed25519PrivateKey")
+    if not isinstance(envelope, dict) or "attestation" in envelope:
+        raise TrustRegistryError("unsigned event envelope must be an object without attestation")
+    _text(key_id, "key_id")
+    _text(issuer, "issuer")
+    _text(audience, "audience")
+    start, end = _utc(issued_at, "issued_at"), _utc(expires_at, "expires_at")
+    if end <= start:
+        raise TrustRegistryError("event attestation expiry must follow issue time")
+    canonical = json.dumps(
+        envelope, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    signature = private_key.sign(ECONOMIC_EVENT_DOMAIN + sha256(canonical).digest())
+    return {
+        **envelope,
+        "attestation": {
+            "algorithm": "Ed25519", "key_id": key_id, "issuer": issuer,
+            "audience": audience, "issued_at": issued_at, "expires_at": expires_at,
+            "signature": base64.b64encode(signature).decode("ascii"),
+        },
+    }
