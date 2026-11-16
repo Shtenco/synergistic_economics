@@ -165,7 +165,7 @@ class UnifiedBalanceTests(unittest.TestCase):
 
         self.assertEqual(sum(results), 1)
         self.assertEqual(ledger.balance("cash:lender"), D("25.00"))
-        self.assertEqual(ledger.balance("loan:lender"), D(" -25.00".strip()))
+        self.assertEqual(ledger.balance("loan:lender"), D("-25.00"))
         self.assertEqual(ledger.balance("cash:borrower"), D("75.00"))
         self.assertEqual(ledger.balance("debt:borrower"), D("75.00"))
         self.assertEqual(ledger.trial_balance(), D("0.00"))
