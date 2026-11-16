@@ -88,7 +88,7 @@ class TrustedKeyRegistryTests(unittest.TestCase):
             key_id="entity-key", issuer="KZ-ENTITY-AUTHORITY", tenant_id="tenant-a",
             public_key=self.public, valid_from="2026-01-01T00:00:00Z",
             valid_until="2027-01-01T00:00:00Z",
-            scopes=("synergy.economic.entity-event/v1",), audiences=("economic-core",),
+            scopes=("synergy.economic.entity-event/v1",), audiences=("synergy.economic.entity-register.v1",),
             registered_by="trust-admin", registered_at="2026-11-16T00:00:00Z",
         )
         resolver = entity_authority_key_resolver(self.registry)
