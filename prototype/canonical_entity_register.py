@@ -135,10 +135,9 @@ class Ed25519EntityAuthorityVerifier:
                 required_text(authority_ref, "key.authority_ref")
             if _parse_utc(key.valid_from, "key.valid_from") >= _parse_utc(key.valid_until, "key.valid_until"):
                 raise EconomicEntityRegisterError("trusted authority key validity interval is empty")
-        self.key_resolver = lambda key_id: self.trusted_keys.get(key_id)
-
             if key.revoked_at is not None:
                 _parse_utc(key.revoked_at, "key.revoked_at")
+        self.key_resolver = lambda key_id: self.trusted_keys.get(key_id)
 
     def verify(self, event: Mapping[str, Any]) -> bool:
         payload = event.get("payload")
