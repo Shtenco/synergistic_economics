@@ -314,6 +314,46 @@ jobs:
           assert summary["total_jobs"] == sum(x["jobs"] for x in summary["countries"])
           print(f"EAEU COUNTRY PLANS: PASS ({summary['total_jobs']} bounded tile jobs)")
           PY
+      - name: Live Overture sample ingestion - Kazakhstan test window
+        id: overture_sample
+        if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
+        continue-on-error: true
+        timeout-minutes: 25
+        working-directory: external/synergy_maps-global
+        run: |
+          python -m pip install --disable-pip-version-check overturemaps
+          mkdir -p /tmp/synergy-kz-astana-smoke
+          python scripts/plan_overture_tiles.py --bbox "71.2,51.0,71.7,51.35" --region-id "kz-astana-smoke" --tile-degrees 0.25 --output /tmp/synergy-kz-astana-smoke/plan.json
+          python scripts/run_overture_tile_jobs.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts
+          python scripts/audit_overture_coverage.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts --require-complete --output /tmp/synergy-kz-astana-smoke/coverage-audit.json
+          python scripts/ingest_overture_divisions.py --bbox "71.2,51.0,71.7,51.35" --type division_area --output /tmp/synergy-kz-astana-smoke/division-area.geojson
+          python - <<'PY'
+          import json, hashlib
+          from pathlib import Path
+          root = Path("/tmp/synergy-kz-astana-smoke")
+          audit = json.loads((root / "coverage-audit.json").read_text())
+          ledger = json.loads((root / "tiles" / "run-ledger.json").read_text())
+          divisions = json.loads((root / "division-area.manifest.json").read_text())
+          assert audit["ledger_complete"] and audit["coverage_percent"] == 100.0
+          assert ledger["status"] == "completed"
+          assert divisions["validation_status"] == "passed"
+          assert divisions["feature_count"] > 0
+          assert divisions["release_lookup_output"] == ledger["pinned_release"]
+          print("LIVE OVERTURE SAMPLE: PASS", json.dumps({
+              "release": ledger["pinned_release"],
+              "tile_jobs": audit["planned_tile_count"],
+              "building_artifacts": audit["verified_artifact_count"],
+              "division_area_features": divisions["feature_count"],
+          }))
+          PY
+      - name: Upload live Overture Kazakhstan sample
+        if: ${{ steps.overture_sample.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-kz-astana-overture-smoke
+          path: /tmp/synergy-kz-astana-smoke
+          if-no-files-found: error
+          retention-days: 7
       - name: Run HardNAV accounting regressions
         if: ${{ always() && !cancelled() && steps.checkout_hardnav.outcome == 'success' }}
         env:
