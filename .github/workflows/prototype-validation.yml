@@ -281,4 +281,5 @@ jobs:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_agentic_ai_economy
         run: |
           python -m compileall -q external/synergy_agentic_ai_economy/agent_economy external/synergy_agentic_ai_economy/tests
+          python -m py_compile external/synergy_agentic_ai_economy/experiments/closed_multimarket_hardnav_v4.py
           python -m pytest -q external/synergy_agentic_ai_economy/tests/test_multimarket_hardnav.py
