@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: afe08c205f40be023835ef9f711b27d2d405b767
+          ref: ea30e6cdabd7375fa4c00af1bdf40f7e0a08f7dd
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -328,13 +328,23 @@ jobs:
           python scripts/run_overture_tile_jobs.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts
           python scripts/audit_overture_coverage.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts --require-complete --output /tmp/synergy-kz-astana-smoke/coverage-audit.json
           python scripts/ingest_overture_divisions.py --bbox "71.2,51.0,71.7,51.35" --type division_area --output /tmp/synergy-kz-astana-smoke/division-area.geojson
+          python scripts/clip_overture_divisions.py --input /tmp/synergy-kz-astana-smoke/division-area.geojson --country KZ --source-manifest /tmp/synergy-kz-astana-smoke/division-area.manifest.json --output /tmp/synergy-kz-astana-smoke/kz-astana-divisions-clipped.geojson
           python - <<'PY'
           import json, hashlib
           from pathlib import Path
+          from shapely.geometry import shape
           root = Path("/tmp/synergy-kz-astana-smoke")
           audit = json.loads((root / "coverage-audit.json").read_text())
           ledger = json.loads((root / "tiles" / "run-ledger.json").read_text())
           divisions = json.loads((root / "division-area.manifest.json").read_text())
+          clipped_manifest = json.loads((root / "kz-astana-divisions-clipped.manifest.json").read_text())
+          clipped = json.loads((root / "kz-astana-divisions-clipped.geojson").read_text())
+          mask = shape(clipped["features"][0]["geometry"])
+          assert clipped_manifest["validation_status"] == "passed"
+          assert clipped_manifest["stats"]["country"] == "KZ"
+          assert clipped_manifest["stats"]["clipped_division_feature_count"] > 0
+          assert all(feature["properties"]["country"] == "KZ" for feature in clipped["features"])
+          assert all(mask.covers(shape(feature["geometry"])) for feature in clipped["features"][1:])
           assert audit["ledger_complete"] and audit["coverage_percent"] == 100.0
           assert ledger["status"] == "completed"
           assert divisions["validation_status"] == "passed"
@@ -357,7 +367,10 @@ jobs:
               "tile_jobs": audit["planned_tile_count"],
               "building_features": building_features,
               "building_part_features": building_part_features,
-              "division_area_features": divisions["feature_count"],
+              "division_area_raw_features": divisions["feature_count"],
+              "division_area_clipped_features": clipped_manifest["stats"]["clipped_division_feature_count"],
+              "foreign_features_excluded": clipped_manifest["stats"]["foreign_country_feature_count_excluded"],
+              "clipped_manifest_sha256": clipped_manifest["output_sha256"],
           }))
           PY
       - name: Upload live Overture Kazakhstan sample
