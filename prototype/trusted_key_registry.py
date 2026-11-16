@@ -56,11 +56,16 @@ def _now():
 def _json_strings(values: Iterable[str], field: str) -> str:
     if isinstance(values, (str, bytes)):
         raise TrustRegistryError(f"{field} must be a sequence of strings")
-    items = tuple(values)
-    if not items or len(set(items)) != len(items):
+    try:
+        items = tuple(values)
+    except TypeError as exc:
+        raise TrustRegistryError(f"{field} must be a sequence of strings") from exc
+    if not items:
         raise TrustRegistryError(f"{field} must be non-empty and unique")
     for item in items:
         _text(item, field)
+    if len(set(items)) != len(items):
+        raise TrustRegistryError(f"{field} must be non-empty and unique")
     return json.dumps(sorted(items), separators=(",", ":"), ensure_ascii=False)
 
 
@@ -159,8 +164,8 @@ class TrustedKeyRegistry:
         scope_json = _json_strings(scopes, "scopes")
         audience_json = _json_strings(audiences, "audiences")
         instant = _utc(registered_at or _now().isoformat().replace("+00:00", "Z"), "registered_at")
-        if instant < start:
-            raise TrustRegistryError("key cannot be registered before its validity begins")
+        if instant < start or instant >= end:
+            raise TrustRegistryError("key must be registered inside its validity interval")
         fingerprint = sha256(public_key).hexdigest()
         payload = json.dumps({
             "key_id": key_id, "issuer": issuer, "tenant_id": tenant_id,
