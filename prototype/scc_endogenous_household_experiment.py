@@ -418,7 +418,7 @@ def main():
         output_path = Path(args.output)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\\n",
+            json.dumps(result, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
     if args.summary_only and "paired_runs" in result:
