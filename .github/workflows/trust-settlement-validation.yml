@@ -1,0 +1,27 @@
+name: Economics trust and settlement validation
+
+on:
+  pull_request:
+    branches:
+      - research/bank-deposit-credit-audit-fix-20261115
+  push:
+    branches:
+      - feature/canonical-economic-entity-register-v1-rebased-20261115b
+
+permissions:
+  contents: read
+
+jobs:
+  prototype-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: python -m pip install --upgrade pytest cryptography jsonschema
+      - name: Compile prototype modules
+        run: python -m compileall -q prototype
+      - name: Run Economics trust, entity and settlement tests
+        run: python -m pytest -q prototype schemas/tests
