@@ -112,7 +112,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_agentic_ai_economy
-          ref: ee909dc0b4a511c9390bb6cdf6a4b90c7f843f96
+          ref: 464319b725b68115fa2ade213450dd7719236982
           path: external/synergy_agentic_ai_economy
       - name: Set up Python
         uses: actions/setup-python@v5
