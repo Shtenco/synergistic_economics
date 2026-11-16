@@ -17,7 +17,7 @@ class TrustedKeyRegistryTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.path = Path(self.tmp.name) / "trust.sqlite3"
-        self.registry = TrustedKeyRegistry(self.path)
+        self.registry = TrustedKeyRegistry(self.path, authorize_admin=lambda actor, action, payload: actor in {'trust-admin', 'security-admin'})
         self.public = Ed25519PrivateKey.generate().public_key().public_bytes(encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw)
 
     def tearDown(self):
@@ -34,9 +34,32 @@ class TrustedKeyRegistryTests(unittest.TestCase):
             registered_by="trust-admin", registered_at="2026-11-16T00:00:00Z",
         )
 
+    def test_admin_writes_fail_closed_without_authorizer(self):
+        ungoverned = TrustedKeyRegistry(Path(self.tmp.name) / "ungoverned.sqlite3")
+        with self.assertRaises(TrustRegistryError):
+            ungoverned.register_key(
+                key_id="blocked", issuer="SYNERGY", tenant_id="tenant-a",
+                public_key=self.public, valid_from="2026-01-01T00:00:00Z",
+                valid_until="2027-01-01T00:00:00Z", scopes=("scope",),
+                audiences=("audience",), registered_by="trust-admin",
+                registered_at="2026-11-16T00:00:00Z",
+            )
+        denied = TrustedKeyRegistry(
+            Path(self.tmp.name) / "denied.sqlite3",
+            authorize_admin=lambda actor, action, payload: False,
+        )
+        with self.assertRaises(TrustRegistryError):
+            denied.register_key(
+                key_id="blocked", issuer="SYNERGY", tenant_id="tenant-a",
+                public_key=self.public, valid_from="2026-01-01T00:00:00Z",
+                valid_until="2027-01-01T00:00:00Z", scopes=("scope",),
+                audiences=("audience",), registered_by="trust-admin",
+                registered_at="2026-11-16T00:00:00Z",
+            )
+
     def test_key_is_durable_tenant_scoped_and_scope_limited(self):
         fingerprint = self.register()
-        reopened = TrustedKeyRegistry(self.path)
+        reopened = TrustedKeyRegistry(self.path, authorize_admin=lambda actor, action, payload: actor in {'trust-admin', 'security-admin'})
         key = reopened.resolve_key(
             "key-1", tenant_id="tenant-a",
             required_scope="synergy.economic.entity-event/v1",
