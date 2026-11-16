@@ -114,5 +114,36 @@ class UnifiedBalanceTests(unittest.TestCase):
             money("NaN")
 
 
+    def test_loan_rejects_insufficient_lender_cash_without_posting(self):
+        ledger = ledger_with_accounts()
+        before_balances = dict(ledger.balances)
+        before_entries = len(ledger.entries)
+        with self.assertRaisesRegex(BalanceError, "insufficient available cash"):
+            loan_origination(
+                ledger, lender_cash="cash:lender", lender_receivable="loan:lender",
+                borrower_cash="cash:borrower", borrower_payable="debt:borrower",
+                amount=101, entry_prefix="overdrawn-loan",
+            )
+        self.assertEqual(ledger.balances, before_balances)
+        self.assertEqual(len(ledger.entries), before_entries)
+
+    def test_loan_batch_is_atomic_when_second_entry_id_conflicts(self):
+        ledger = ledger_with_accounts()
+        ledger.post(JournalEntry("conflicting-loan-B", "existing entry", (
+            Posting("cash:borrower", debit=money(1)),
+            Posting("debt:borrower", credit=money(1)),
+        )))
+        before_balances = dict(ledger.balances)
+        before_entries = len(ledger.entries)
+        with self.assertRaisesRegex(BalanceError, "duplicate or empty journal entry id"):
+            loan_origination(
+                ledger, lender_cash="cash:lender", lender_receivable="loan:lender",
+                borrower_cash="cash:borrower", borrower_payable="debt:borrower",
+                amount=50, entry_prefix="conflicting-loan",
+            )
+        self.assertEqual(ledger.balances, before_balances)
+        self.assertEqual(len(ledger.entries), before_entries)
+        self.assertNotIn("conflicting-loan-L", ledger._entry_ids)
+
 if __name__ == "__main__":
     unittest.main()
