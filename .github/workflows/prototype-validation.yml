@@ -328,7 +328,7 @@ jobs:
           python scripts/plan_overture_tiles.py --bbox "71.2,51.0,71.7,51.35" --region-id "kz-astana-smoke" --tile-degrees 0.25 --output /tmp/synergy-kz-astana-smoke/plan.json
           python scripts/run_overture_tile_jobs.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts
           python scripts/audit_overture_coverage.py --plan /tmp/synergy-kz-astana-smoke/plan.json --output-dir /tmp/synergy-kz-astana-smoke/tiles --max-jobs 20 --include-parts --require-complete --output /tmp/synergy-kz-astana-smoke/coverage-audit.json
-          python scripts/ingest_overture_divisions.py --bbox "71.2,51.0,71.7,51.35" --type division_area --countries KZ --output /tmp/synergy-kz-astana-smoke/division-area.geojson
+          python scripts/ingest_overture_divisions.py --bbox "71.2,51.0,71.7,51.35" --type division_area --countries KZ --clip-to-country --output /tmp/synergy-kz-astana-smoke/division-area.geojson
           python scripts/clip_overture_divisions.py --input /tmp/synergy-kz-astana-smoke/division-area.geojson --country KZ --source-manifest /tmp/synergy-kz-astana-smoke/division-area.manifest.json --output /tmp/synergy-kz-astana-smoke/kz-astana-divisions-clipped.geojson
           python - <<'PY'
           import json, hashlib
@@ -352,7 +352,10 @@ jobs:
           assert divisions["feature_count"] > 0
           assert divisions["country_filter"] == ["KZ"]
           assert set(divisions["country_counts"]) == {"KZ"}
-          assert divisions["source_feature_count"] == divisions["feature_count"] + divisions["filtered_out_feature_count"]
+          assert divisions["source_feature_count"] == divisions["feature_count"] + divisions["filtered_out_feature_count"] + divisions["clip_dropped_feature_count"]
+          assert divisions["clip_country"] == "KZ"
+          assert divisions["clip_boundary_feature_count"] > 0
+          assert len(divisions["clip_boundary_sha256"]) == 64
           assert divisions["release_lookup_output"] == ledger["pinned_release"]
           building_features = sum(
               artifact["feature_count"] or 0
