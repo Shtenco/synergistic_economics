@@ -255,6 +255,12 @@ jobs:
         if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
         working-directory: external/synergy_maps/web
         run: npm install --ignore-scripts
+      - name: Report Maps frontend dependency audit
+        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
+        working-directory: external/synergy_maps/web
+        run: |
+          npm audit --json > npm-audit.json || true
+          node -e 'const r=require("./npm-audit.json"); console.log("npm audit counts:", JSON.stringify(r.metadata?.vulnerabilities ?? r.error)); for (const [n,v] of Object.entries(r.vulnerabilities || {})) console.log(JSON.stringify({name:n,severity:v.severity,range:v.range,fixAvailable:v.fixAvailable,via:v.via.map(x=>typeof x==="string"?x:x.title)}));'
       - name: Build Maps Cesium frontend
         if: always()
         working-directory: external/synergy_maps/web
