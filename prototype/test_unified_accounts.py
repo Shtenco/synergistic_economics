@@ -1,4 +1,5 @@
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal as D
 
 from unified_accounts import (
@@ -144,6 +145,30 @@ class UnifiedBalanceTests(unittest.TestCase):
         self.assertEqual(ledger.balances, before_balances)
         self.assertEqual(len(ledger.entries), before_entries)
         self.assertNotIn("conflicting-loan-L", ledger._entry_ids)
+
+    def test_concurrent_loans_cannot_overdraw_lender_cash(self):
+        ledger = ledger_with_accounts()
+
+        def originate(prefix):
+            try:
+                loan_origination(
+                    ledger, lender_cash="cash:lender", lender_receivable="loan:lender",
+                    borrower_cash="cash:borrower", borrower_payable="debt:borrower",
+                    amount=75, entry_prefix=prefix,
+                )
+                return True
+            except BalanceError:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            results = list(executor.map(originate, ("concurrent-a", "concurrent-b")))
+
+        self.assertEqual(sum(results), 1)
+        self.assertEqual(ledger.balance("cash:lender"), D("25.00"))
+        self.assertEqual(ledger.balance("loan:lender"), D(" -25.00".strip()))
+        self.assertEqual(ledger.balance("cash:borrower"), D("75.00"))
+        self.assertEqual(ledger.balance("debt:borrower"), D("75.00"))
+        self.assertEqual(ledger.trial_balance(), D("0.00"))
 
 if __name__ == "__main__":
     unittest.main()
