@@ -98,7 +98,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_metaverse
-          ref: 10a5d8a85030ae7ade1f4fe6282a0b5745f0079c
+          ref: d55c6d32adf0dfd4c51c2549da0481169fa09322
           path: external/synergy_metaverse
       - name: Checkout Maps PR integration snapshot
         uses: actions/checkout@v4
@@ -124,6 +124,7 @@ jobs:
         env:
           ECONOMICS_SOURCE: ${{ github.workspace }}/economics
           MAPS_SOURCE: ${{ github.workspace }}/external/synergy_maps
+          AGENTIC_SOURCE: ${{ github.workspace }}/external/synergy_agentic_ai_economy
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src:${{ github.workspace }}/external/synergy_agentic_ai_economy
           SYNERGY_AUDIT_OUTPUT: ${{ github.workspace }}/synergy-audit-proof.json
         run: python -m pytest -q external/synergy_metaverse/tests/integration/test_cross_repo_economic_spatial_payment_flow.py
