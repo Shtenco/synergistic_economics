@@ -133,7 +133,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: bb64124c67e5a76ac4669e28bab13090f1238282
+          ref: 284cc15a7a3036e10011b1008b34868cd1a5aa00
           path: external/synergy_maps
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -275,6 +275,13 @@ jobs:
         if: always()
         working-directory: external/synergy_maps/web
         run: npm run build
+      - name: Build and test global SYNERGY Maps viewer
+        if: ${{ always() && !cancelled() && steps.checkout_maps.outcome == 'success' }}
+        working-directory: external/synergy_maps
+        run: |
+          npm install --ignore-scripts
+          npm test
+          npm run build
       - name: Run HardNAV accounting regressions
         if: ${{ always() && !cancelled() && steps.checkout_hardnav.outcome == 'success' }}
         env:
