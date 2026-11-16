@@ -125,7 +125,18 @@ jobs:
           ECONOMICS_SOURCE: ${{ github.workspace }}/economics
           MAPS_SOURCE: ${{ github.workspace }}/external/synergy_maps
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src:${{ github.workspace }}/external/synergy_agentic_ai_economy
+          SYNERGY_AUDIT_OUTPUT: ${{ github.workspace }}/synergy-audit-proof.json
+        run: python -m pytest -q external/synergy_metaverse/tests/integration/test_cross_repo_economic_spatial_payment_flow.py
+      - name: Upload signed cross-repository audit proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-cross-repo-audit-proof
+          path: synergy-audit-proof.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Run HardNAV accounting regressions
+        env:
+          PYTHONPATH: ${{ github.workspace }}/external/synergy_agentic_ai_economy
         run: |
-          python -m pytest -q external/synergy_metaverse/tests/integration/test_cross_repo_economic_spatial_payment_flow.py
           python -m compileall -q external/synergy_agentic_ai_economy/agent_economy external/synergy_agentic_ai_economy/tests
           python -m pytest -q external/synergy_agentic_ai_economy/tests/test_multimarket_hardnav.py
