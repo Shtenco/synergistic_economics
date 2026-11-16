@@ -52,6 +52,20 @@ Scenarios: baseline, demand_collapse, energy_import_shock, metals_shortage, comp
 
 Prototype 2 currently uses immediate cash settlement. Trade credit, maturity schedules, defaults, capital accumulation and ecological constraints are explicitly deferred to separately testable modules; they are not simulated by this version.
 
+## Prototype 3 — Unified Economic Balance (UEB)
+
+- [unified_accounts.py](unified_accounts.py) — двойная запись, физические остатки, финансовые требования, консолидация, кредит, токен-обязательства и сверка запасов/потоков.
+- [Спецификация UEB](UNIFIED_ECONOMIC_BALANCE.md) — контуры учета, тождества, правила консолидации, границы реализации и следующие этапы.
+- [test_unified_accounts.py](test_unified_accounts.py) — тесты баланса проводок, кредита, токенов, физических запасов, требований и добавленной стоимости.
+
+Запуск из корня репозитория:
+
+```bash
+python -m unittest prototype.test_unified_accounts -v
+```
+
+Первая версия — учетный каркас, а не полная система национальных счетов, юридического титула или финансовой отчетности. Полный перечень ограничений приведен в спецификации.
+
 ## Validation
 
 GitHub Actions runs the prototype test suite and both baseline and compound-crisis simulations when files under prototype/** or the prototype workflow change.
