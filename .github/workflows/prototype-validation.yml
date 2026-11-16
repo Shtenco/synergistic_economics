@@ -283,3 +283,71 @@ jobs:
           python -m compileall -q external/synergy_agentic_ai_economy/agent_economy external/synergy_agentic_ai_economy/tests
           python -m py_compile external/synergy_agentic_ai_economy/experiments/closed_multimarket_hardnav_v4.py
           python -m pytest -q external/synergy_agentic_ai_economy/tests/test_multimarket_hardnav.py
+
+  hardnav-v4-historical-replay:
+    needs: cross-repository-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout pinned HardNAV V4 source
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
+          repository: Shtenco/synergy_agentic_ai_economy
+          ref: 0effe839d160af295d511eaea6a3d3830e024557
+          path: hardnav
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install historical replay dependencies
+        run: python -m pip install --upgrade pip numpy pyarrow requests
+      - name: Compile V4 replay
+        working-directory: hardnav
+        run: python -m py_compile experiments/closed_multimarket_hardnav_v4.py
+      - name: Run full 13,000-block V4 historical replay
+        working-directory: hardnav
+        timeout-minutes: 105
+        run: python experiments/closed_multimarket_hardnav_v4.py
+      - name: Validate generated V4 evidence
+        working-directory: hardnav
+        run: |
+          python - <<'PY'
+          import csv, json, pathlib
+          report = pathlib.Path("reports/closed_multimarket_hardnav_v4/seed77_10000_train_3000_oos.json")
+          manifest = pathlib.Path("data/real_backtest_v4/manifest.json")
+          csv_path = pathlib.Path("data/real_backtest_v4/ethereum_23544921_23557920_exact_gas_real_prices.csv")
+          assert report.is_file() and manifest.is_file() and csv_path.is_file()
+          r = json.loads(report.read_text())
+          assert r["ethereum_blocks"]["count"] == 13000
+          assert r["ethereum_blocks"]["contiguous"] is True
+          assert r["protocol"]["train_blocks"] == 10000
+          assert r["protocol"]["oos_blocks"] == 3000
+          assert r["protocol"]["hedge_anchor_selection"]["oos_used_for_selection"] is False
+          assert r["protocol"]["weights_frozen_after_train"] is True
+          assert r["market_inputs"]["factor_mapped_assets"] == []
+          assert len(r["market_inputs"]["provenance"]) == 10
+          assert set(r["gas_input"]["xatu_exact_fields"]) == {
+              "block_date_time", "gas_used", "base_fee_per_gas"
+          }
+          assert set(r["gas_input"]["rpc_exact_fields"]) == {"gasLimit"}
+          assert r["gas_input"]["rpc_provenance"]["method"] == "eth_getBlockByNumber"
+          assert set(r["gas_input"]["rpc_provenance"]["cross_checked_fields"]) == {
+              "timestamp", "gasUsed", "baseFeePerGas"
+          }
+          with csv_path.open(newline="", encoding="utf-8") as f:
+              rows = list(csv.DictReader(f))
+          assert len(rows) == 13000
+          assert int(rows[0]["block_number"]) == 23544921
+          assert int(rows[-1]["block_number"]) == 23557920
+          print("V4 EVIDENCE GATES: PASS")
+          PY
+      - name: Upload V4 historical replay evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardnav-v4-historical-replay
+          path: |
+            hardnav/data/real_backtest_v4/
+            hardnav/reports/closed_multimarket_hardnav_v4/
+          if-no-files-found: error
+          retention-days: 90
