@@ -125,7 +125,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_metaverse
-          ref: dd61e9771ff3c8359445ff50a31751769d1b3fbc
+          ref: 6a9ca43d6090eb03ba7dedc87a6ef1879c757213
           path: external/synergy_metaverse
       - name: Checkout Maps PR integration snapshot
         id: checkout_maps
@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_agentic_ai_economy
-          ref: ed066c20dc5ec0ef953e872257b5b2e4e0308c9d
+          ref: 4dd20d198aa94678f3d22d1d18b258d75ad15502
           path: external/synergy_agentic_ai_economy
       - name: Set up Python
         uses: actions/setup-python@v5
