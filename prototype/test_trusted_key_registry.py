@@ -57,6 +57,17 @@ class TrustedKeyRegistryTests(unittest.TestCase):
                 registered_at="2026-11-16T00:00:00Z",
             )
 
+        self.register("revoke-blocked")
+        denied_revoke = TrustedKeyRegistry(
+            self.path, authorize_admin=lambda actor, action, payload: False,
+        )
+        with self.assertRaises(TrustRegistryError):
+            denied_revoke.revoke_key(
+                key_id="revoke-blocked", revoked_by="security-admin",
+                reason="unauthorized attempt", revoked_at="2026-11-16T00:01:00Z",
+            )
+        self.assertIsNotNone(self.registry.resolve_key("revoke-blocked"))
+
     def test_key_is_durable_tenant_scoped_and_scope_limited(self):
         fingerprint = self.register()
         reopened = TrustedKeyRegistry(self.path, authorize_admin=lambda actor, action, payload: actor in {'trust-admin', 'security-admin'})
