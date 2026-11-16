@@ -141,7 +141,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: 61319fa729ac5ad3ebb3b1ac255801986274b2c7
+          ref: 50bd5a055cbe81ea4796367e3d89e7b736b03919
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -339,15 +339,28 @@ jobs:
           assert divisions["validation_status"] == "passed"
           assert divisions["feature_count"] > 0
           assert divisions["release_lookup_output"] == ledger["pinned_release"]
+          building_features = sum(
+              artifact["feature_count"] or 0
+              for tile in audit["verified_tiles"]
+              for artifact in tile["artifacts"]
+              if artifact["feature_type"] == "building"
+          )
+          building_part_features = sum(
+              artifact["feature_count"] or 0
+              for tile in audit["verified_tiles"]
+              for artifact in tile["artifacts"]
+              if artifact["feature_type"] == "building_part"
+          )
           print("LIVE OVERTURE SAMPLE: PASS", json.dumps({
               "release": ledger["pinned_release"],
               "tile_jobs": audit["planned_tile_count"],
-              "building_artifacts": audit["verified_artifact_count"],
+              "building_features": building_features,
+              "building_part_features": building_part_features,
               "division_area_features": divisions["feature_count"],
           }))
           PY
       - name: Upload live Overture Kazakhstan sample
-        if: ${{ steps.overture_sample.outcome == 'success' }}
+        if: ${{ always() && !cancelled() && steps.overture_sample.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
           name: synergy-kz-astana-overture-smoke
