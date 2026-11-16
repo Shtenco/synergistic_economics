@@ -308,6 +308,8 @@ jobs:
       - name: Run full 13,000-block V4 historical replay
         working-directory: hardnav
         timeout-minutes: 105
+        env:
+          PYTHONPATH: ${{ github.workspace }}/hardnav
         run: python experiments/closed_multimarket_hardnav_v4.py
       - name: Validate generated V4 evidence
         working-directory: hardnav
