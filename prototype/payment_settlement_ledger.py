@@ -201,29 +201,53 @@ class PaymentSettlementLedger:
 
     def audit_proof(self) -> dict:
         with closing(self._connect()) as con:
-            payments = con.execute("SELECT receipt_id,amount_minor,currency FROM settled_payments ORDER BY receipt_id").fetchall()
+            payments = con.execute(
+                "SELECT receipt_id,amount_minor,currency,tenant_id,payee_id "
+                "FROM settled_payments ORDER BY receipt_id"
+            ).fetchall()
             entries = con.execute(
-                "SELECT entry_id,receipt_id,side,amount_minor,currency,payload_json,previous_digest,entry_digest "
+                "SELECT entry_id,receipt_id,account_id,side,amount_minor,currency,"
+                "payload_json,previous_digest,entry_digest "
                 "FROM accounting_journal ORDER BY sequence"
             ).fetchall()
         previous = "0" * 64
-        totals = {}
-        for entry_id, receipt_id, side, amount, currency, payload_json, previous_digest, entry_digest in entries:
+        grouped = {}
+        for (entry_id, receipt_id, account_id, side, amount, currency,
+             payload_json, previous_digest, entry_digest) in entries:
             expected = hashlib.sha256((previous + payload_json).encode("utf-8")).hexdigest()
             if previous_digest != previous or entry_digest != expected:
                 raise SettlementLedgerError("accounting journal hash-chain verification failed")
             raw = json.loads(payload_json)
-            if raw.get("entry_id") != entry_id or raw.get("receipt_id") != receipt_id:
+            if (raw.get("entry_id") != entry_id or raw.get("receipt_id") != receipt_id
+                    or raw.get("account_id") != account_id or raw.get("side") != side
+                    or raw.get("amount_minor") != amount or raw.get("currency") != currency):
                 raise SettlementLedgerError("accounting journal row identity mismatch")
-            key = (receipt_id, currency)
-            totals.setdefault(key, {"DEBIT": 0, "CREDIT": 0})
-            totals[key][side] += amount
+            if side not in {"DEBIT", "CREDIT"} or isinstance(amount, bool) or amount <= 0:
+                raise SettlementLedgerError("accounting journal line is invalid")
+            grouped.setdefault(receipt_id, []).append({
+                "entry_id": entry_id, "account_id": account_id,
+                "side": side, "amount_minor": amount, "currency": currency,
+            })
             previous = entry_digest
-        for payment_id, amount, currency in payments:
-            pair = totals.get((payment_id, currency))
-            if pair != {"DEBIT": amount, "CREDIT": amount}:
-                raise SettlementLedgerError("settlement journal is not balanced")
-        if len(entries) != 2 * len(payments):
+        for receipt_id, amount, currency, tenant_id, payee_id in payments:
+            lines = grouped.get(receipt_id, [])
+            expected_accounts = {
+                "DEBIT": "cash_clearing:" + currency,
+                "CREDIT": "merchant_payable:" + tenant_id + ":" + payee_id + ":" + currency,
+            }
+            if len(lines) != 2:
+                raise SettlementLedgerError("settlement must have exactly two journal lines")
+            by_side = {line["side"]: line for line in lines}
+            if set(by_side) != {"DEBIT", "CREDIT"}:
+                raise SettlementLedgerError("settlement must have one debit and one credit")
+            for side, expected_account in expected_accounts.items():
+                line = by_side[side]
+                if (line["account_id"] != expected_account
+                        or line["amount_minor"] != amount
+                        or line["currency"] != currency
+                        or line["entry_id"] != receipt_id + ":" + side.lower()):
+                    raise SettlementLedgerError("settlement journal does not match payment receipt")
+        if len(entries) != 2 * len(payments) or set(grouped) != {p[0] for p in payments}:
             raise SettlementLedgerError("settlement journal has orphan or missing entries")
         return {
             "verified": True, "settled_payments": len(payments),
