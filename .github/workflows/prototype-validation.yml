@@ -284,12 +284,27 @@ jobs:
         working-directory: external/synergy_maps/web
         run: npm run build
       - name: Test global Maps ingestion and EAEU country coverage
+        id: maps_python_tests
         if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
         working-directory: external/synergy_maps-global
         run: |
-          python -m pip install --disable-pip-version-check shapely==2.1.2
-          python -m unittest discover -s tests -p 'test_*.py' -v
-          python -m py_compile scripts/*.py tests/*.py
+          set +e
+          python -m pip install --disable-pip-version-check shapely==2.1.2 2>&1 | tee /tmp/maps-python-tests.log
+          install_status=${PIPESTATUS[0]}
+          python -m unittest discover -s tests -p 'test_*.py' -v 2>&1 | tee -a /tmp/maps-python-tests.log
+          test_status=${PIPESTATUS[0]}
+          python -m py_compile scripts/*.py tests/*.py 2>&1 | tee -a /tmp/maps-python-tests.log
+          compile_status=${PIPESTATUS[0]}
+          printf '\\nMAPS_PYTHON_TEST_STATUS install=%s tests=%s compile=%s\\n' "$install_status" "$test_status" "$compile_status" | tee -a /tmp/maps-python-tests.log
+          if [ "$install_status" -ne 0 ] || [ "$test_status" -ne 0 ] || [ "$compile_status" -ne 0 ]; then exit 1; fi
+      - name: Upload Maps Python test diagnostics
+        if: ${{ always() && steps.maps_python_tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-maps-python-test-diagnostics
+          path: /tmp/maps-python-tests.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Build and test global SYNERGY Maps viewer
         if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
         working-directory: external/synergy_maps-global
