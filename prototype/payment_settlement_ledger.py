@@ -202,7 +202,8 @@ class PaymentSettlementLedger:
     def audit_proof(self) -> dict:
         with closing(self._connect()) as con:
             payments = con.execute(
-                "SELECT receipt_id,amount_minor,currency,tenant_id,payee_id "
+                "SELECT receipt_id,amount_minor,currency,tenant_id,payee_id,"
+                "payment_rail,transaction_id,log_index "
                 "FROM settled_payments ORDER BY receipt_id"
             ).fetchall()
             entries = con.execute(
@@ -229,7 +230,11 @@ class PaymentSettlementLedger:
                 "side": side, "amount_minor": amount, "currency": currency,
             })
             previous = entry_digest
-        for receipt_id, amount, currency, tenant_id, payee_id in payments:
+        for (receipt_id, amount, currency, tenant_id, payee_id,
+             payment_rail, transaction_id, log_index) in payments:
+            expected_receipt_id = f"{payment_rail}:{transaction_id}:{log_index}"
+            if receipt_id != expected_receipt_id:
+                raise SettlementLedgerError("settlement receipt identity does not match payment rail transaction")
             lines = grouped.get(receipt_id, [])
             expected_accounts = {
                 "DEBIT": "cash_clearing:" + currency,
