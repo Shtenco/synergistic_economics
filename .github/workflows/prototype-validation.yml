@@ -89,15 +89,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: economics
+      - name: Require cross-repository read token
+        env:
+          CROSS_REPO_TOKEN: ${{ secrets.SYNERGY_CROSS_REPO_TOKEN }}
+        run: test -n "$CROSS_REPO_TOKEN" || { echo "::error::Add SYNERGY_CROSS_REPO_TOKEN with read access to Economics, Metaverse and Maps"; exit 1; }
       - name: Checkout Metaverse PR integration merge commit
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SYNERGY_CROSS_REPO_TOKEN }}
           repository: Shtenco/synergy_metaverse
           ref: ca0760bbecc56e1fd01c583afef500cb5af04160
           path: external/synergy_metaverse
       - name: Checkout Maps trust verifier and API
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.SYNERGY_CROSS_REPO_TOKEN }}
           repository: Shtenco/synergy_maps
           ref: 03c94d8ca35fb318896fe587da7da7ee5d7c1191
           path: external/synergy_maps
