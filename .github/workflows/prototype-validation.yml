@@ -115,7 +115,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_metaverse
-          ref: 8d563ec1324a6218a587c51c2c8754826d48b660
+          ref: ba178a79db33de733c81b69cb5ea10c8245a2725
           path: external/synergy_metaverse
       - name: Checkout Maps PR integration snapshot
         id: checkout_maps
