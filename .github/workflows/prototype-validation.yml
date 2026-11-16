@@ -155,70 +155,87 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Compile Metaverse modules and tests
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         run: python -m compileall -q external/synergy_metaverse/src external/synergy_metaverse/tests
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
       - name: Test Metaverse Business Twin
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_business_twin.py
       - name: Test Metaverse Contract schemas
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_contract_schemas.py
       - name: Test Metaverse Cryptographic contracts
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_crypto.py
       - name: Test Metaverse Economic binding
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_economic_binding.py
       - name: Test Metaverse Economic projection store
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_economic_projection_store.py
       - name: Test Metaverse Envelope protector
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_envelope_protector.py
       - name: Test Metaverse League projection
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_league_projection.py
       - name: Test Metaverse League projection store
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_league_projection_store.py
       - name: Test Metaverse NMEA ingestion
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_nmea.py
       - name: Test Metaverse Observation store
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_observation_store.py
       - name: Test Metaverse OSM registry import
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_osm_registry_import.py
       - name: Test Metaverse Spatial registry
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_registry.py
       - name: Test Metaverse Spatial registry proofs
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_registry_proof.py
       - name: Test Metaverse RF/GNSS contracts
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_rf_gnss.py
       - name: Test Metaverse Trust revocation
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_trust_revocation.py
       - name: Test Metaverse Trusted key registry
+        if: ${{ always() && !cancelled() && steps.checkout_metaverse.outcome == 'success' }}
         env:
           PYTHONPATH: ${{ github.workspace }}/external/synergy_metaverse/src
         run: python -m pytest -q external/synergy_metaverse/tests/test_trusted_key_registry.py
