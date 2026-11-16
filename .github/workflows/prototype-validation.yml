@@ -98,7 +98,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_metaverse
-          ref: 50658467b1f9436c4b4cfb81311974677c9abf2d
+          ref: 4e6a2d4a9cd7ee6d7e3164cce22bc69f73377883
           path: external/synergy_metaverse
       - name: Checkout Maps trust verifier and API
         uses: actions/checkout@v4
