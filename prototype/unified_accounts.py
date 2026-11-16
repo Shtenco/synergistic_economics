@@ -8,6 +8,7 @@ not proof that a delivery, title or legal event occurred.
 from dataclasses import dataclass, field
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Dict, Iterable, List, Optional, Tuple
+from threading import RLock
 
 D = Decimal
 ZERO = D("0")
@@ -59,62 +60,90 @@ class DoubleEntryLedger:
     """Append-only, balanced journal with idempotent entry identifiers."""
 
     def __init__(self):
+        self._lock = RLock()
         self.accounts: Dict[str, Account] = {}
         self.entries: List[JournalEntry] = []
         self._entry_ids = set()
         self.balances: Dict[str, D] = {}
 
     def add_account(self, account: Account):
-        if not account.account_id or account.account_id in self.accounts:
-            raise BalanceError("account id must be non-empty and unique")
-        if account.kind not in {"asset", "liability", "equity", "income", "expense"}:
-            raise BalanceError("unsupported account kind")
-        self.accounts[account.account_id] = account
-        self.balances[account.account_id] = ZERO
+        with self._lock:
+            if not isinstance(account.account_id, str) or not account.account_id.strip() or account.account_id in self.accounts:
+                raise BalanceError("account id must be non-empty and unique")
+            if account.kind not in {"asset", "liability", "equity", "income", "expense"}:
+                raise BalanceError("unsupported account kind")
+            self.accounts[account.account_id] = account
+            self.balances[account.account_id] = ZERO
+
+    def post_batch(self, entries: Iterable[JournalEntry]):
+        """Validate every entry first, then append the entire batch atomically."""
+        batch = tuple(entries)
+        if not batch:
+            raise BalanceError("journal batch must not be empty")
+
+        with self._lock:
+            reserved_ids = set()
+            prepared = []
+            for entry in batch:
+                if not isinstance(entry, JournalEntry):
+                    raise BalanceError("journal batch entries must be JournalEntry values")
+                if (not isinstance(entry.entry_id, str) or not entry.entry_id.strip()
+                        or entry.entry_id != entry.entry_id.strip()
+                        or entry.entry_id in self._entry_ids
+                        or entry.entry_id in reserved_ids):
+                    raise BalanceError("duplicate or empty journal entry id")
+                if len(entry.postings) < 2:
+                    raise BalanceError("journal entry needs at least two postings")
+
+                total_debit = ZERO
+                total_credit = ZERO
+                currencies = set()
+                normalized = []
+                for line in entry.postings:
+                    if line.account_id not in self.accounts:
+                        raise BalanceError(f"unknown account: {line.account_id}")
+                    currencies.add(self.accounts[line.account_id].currency)
+                    debit, credit = D(str(line.debit)), D(str(line.credit))
+                    if not debit.is_finite() or not credit.is_finite() or debit < 0 or credit < 0:
+                        raise BalanceError("posting amounts must be finite and non-negative")
+                    if debit and credit:
+                        raise BalanceError("one posting cannot contain both debit and credit")
+                    total_debit += debit
+                    total_credit += credit
+                    normalized.append((line.account_id, debit, credit))
+                if len(currencies) != 1:
+                    raise BalanceError("a journal entry cannot mix currencies; use explicit FX clearing legs")
+                if total_debit != total_credit:
+                    raise BalanceError("journal entry is not balanced")
+
+                reserved_ids.add(entry.entry_id)
+                prepared.append((entry, normalized))
+
+            # No ledger state changes until the whole batch has passed validation.
+            for entry, normalized in prepared:
+                for account_id, debit, credit in normalized:
+                    account = self.accounts[account_id]
+                    sign = D("1") if account.kind in {"asset", "expense"} else D("-1")
+                    self.balances[account_id] += sign * (debit - credit)
+                self.entries.append(entry)
+                self._entry_ids.add(entry.entry_id)
 
     def post(self, entry: JournalEntry):
-        if not entry.entry_id or entry.entry_id in self._entry_ids:
-            raise BalanceError("duplicate or empty journal entry id")
-        if len(entry.postings) < 2:
-            raise BalanceError("journal entry needs at least two postings")
-        total_debit = ZERO
-        total_credit = ZERO
-        currencies = set()
-        for line in entry.postings:
-            if line.account_id not in self.accounts:
-                raise BalanceError(f"unknown account: {line.account_id}")
-            currencies.add(self.accounts[line.account_id].currency)
-            debit, credit = D(str(line.debit)), D(str(line.credit))
-            if not debit.is_finite() or not credit.is_finite() or debit < 0 or credit < 0:
-                raise BalanceError("posting amounts must be finite and non-negative")
-            if debit and credit:
-                raise BalanceError("one posting cannot contain both debit and credit")
-            total_debit += debit
-            total_credit += credit
-        if len(currencies) != 1:
-            raise BalanceError("a journal entry cannot mix currencies; use explicit FX clearing legs")
-        if total_debit != total_credit:
-            raise BalanceError("journal entry is not balanced")
-        # Apply only after every validation passes.
-        for line in entry.postings:
-            account = self.accounts[line.account_id]
-            # Debit-positive convention for assets/expenses; credit-positive
-            # convention for liabilities/equity/income.
-            sign = D("1") if account.kind in {"asset", "expense"} else D("-1")
-            self.balances[line.account_id] += sign * (line.debit - line.credit)
-        self.entries.append(entry)
-        self._entry_ids.add(entry.entry_id)
+        """Append one validated entry using the same atomic batch path."""
+        self.post_batch((entry,))
 
     def balance(self, account_id: str) -> D:
-        return self.balances[account_id]
+        with self._lock:
+            return self.balances[account_id]
 
     def trial_balance(self) -> D:
         """Convert normal balances back to debit-positive signed balances."""
-        total = ZERO
-        for account_id, balance in self.balances.items():
-            kind = self.accounts[account_id].kind
-            total += balance if kind in {"asset", "expense"} else -balance
-        return total
+        with self._lock:
+            total = ZERO
+            for account_id, balance in self.balances.items():
+                kind = self.accounts[account_id].kind
+                total += balance if kind in {"asset", "expense"} else -balance
+            return total
 
 
 @dataclass(frozen=True)
@@ -201,10 +230,14 @@ def consolidated_internal_claims(claims: Iterable[Claim], members: Iterable[str]
 def loan_origination(ledger: DoubleEntryLedger, *, lender_cash: str,
                      lender_receivable: str, borrower_cash: str,
                      borrower_payable: str, amount, entry_prefix: str):
-    """Record both counterparties. Principal creates matched claims, not income."""
+    """Atomically record both counterparties after checking lender liquidity."""
     amount = money(amount)
     if amount <= 0:
         raise BalanceError("loan principal must be positive")
+    if (not isinstance(entry_prefix, str) or not entry_prefix.strip()
+            or entry_prefix != entry_prefix.strip()):
+        raise BalanceError("entry_prefix must be non-empty trimmed text")
+
     required = ((lender_cash, "asset"), (lender_receivable, "asset"),
                 (borrower_cash, "asset"), (borrower_payable, "liability"))
     for account_id, expected_kind in required:
@@ -227,12 +260,20 @@ def loan_origination(ledger: DoubleEntryLedger, *, lender_cash: str,
     if len({a.currency for a in (lender_cash_account, lender_receivable_account,
                                   borrower_cash_account, borrower_payable_account)}) != 1:
         raise BalanceError("loan accounts must use one currency; model FX separately")
-    ledger.post(JournalEntry(
+
+    lender_entry = JournalEntry(
         f"{entry_prefix}-L", "Loan disbursement — lender",
-        (Posting(lender_receivable, debit=amount), Posting(lender_cash, credit=amount))))
-    ledger.post(JournalEntry(
+        (Posting(lender_receivable, debit=amount), Posting(lender_cash, credit=amount)))
+    borrower_entry = JournalEntry(
         f"{entry_prefix}-B", "Loan proceeds and liability — borrower",
-        (Posting(borrower_cash, debit=amount), Posting(borrower_payable, credit=amount))))
+        (Posting(borrower_cash, debit=amount), Posting(borrower_payable, credit=amount)))
+
+    # Hold the same ledger lock across liquidity validation and both postings.
+    # post_batch prevalidates both IDs and both balanced entries before mutation.
+    with ledger._lock:
+        if ledger.balances[lender_cash] < amount:
+            raise BalanceError("lender has insufficient available cash for loan principal")
+        ledger.post_batch((lender_entry, borrower_entry))
 
 
 def net_worth(assets, liabilities) -> D:
