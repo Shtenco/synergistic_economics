@@ -60,7 +60,7 @@ Labour, subcontracting, IP, materials, logistics, insurance, risk allocation, ac
 
 A match proposal links one order, one router candidate, one canonical offer and one capability declaration. It includes counterparties, quantity, schedule, cost evidence, schedule evidence, terms reference and expected order/capability revisions.
 
-Validation checks identity consistency, active organizations, capability coverage, unit and quantity compatibility, time-window intersection, evidence resolution and optimistic revision consistency. It does not recompute or override Economic Router ranking.
+Validation checks identity consistency, active organizations, capability coverage, unit and quantity compatibility, time-window intersection, evidence resolution and optimistic revision consistency. It does not recompute or override Economic Router ranking. When the provider carries the artel coordination role, the proposal must additionally bind a resolver-verified Artel Production Mandate and Artel Engine work-package reference; enterprise providers that are not acting as an artel are not forced into that mandate model.
 
 Complex products are represented as a dependency graph of bounded work packages. Each node has inputs, outputs, acceptance criteria, predecessor references, responsible organizations and versioned evidence. Cycles must be rejected unless explicitly modeled as iterative processes with bounded convergence/termination criteria. Cross-artel collaboration is a graph of independent contractual commitments, not a parent-child ownership tree.
 
