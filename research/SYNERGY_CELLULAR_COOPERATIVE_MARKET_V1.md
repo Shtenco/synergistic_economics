@@ -124,9 +124,9 @@ A higher-level body may coordinate, set compatible interfaces or resolve a confl
 
 ### 4.1 Authority envelope
 
-Every consequential automated or collective action must be bound to actor and principal identity; authority grant and delegator; subject and tenant scope; permitted action and decision domain; amount, quantity and risk limits; effective interval and expiry; expected aggregate versions; evidence and policy version; idempotency/correlation identifiers; and audit and appeal route.
+Every consequential automated or collective action must be bound to actor and principal identity; authority grant and delegator; subject and tenant scope; permitted decision domain and an explicit allowlist of action identifiers; amount, quantity and risk limits; effective interval and expiry; expected aggregate versions; evidence and policy version; idempotency/correlation identifiers; and audit and appeal route.
 
-Missing, expired, ambiguous or revoked authority fails closed. A proposal, vote or AI recommendation is not itself an executable command.
+Missing, expired, ambiguous or revoked authority fails closed. A proposal, vote or AI recommendation is not itself an executable command. An action absent from the explicit authority allowlist is denied even when its broader decision domain is permitted. Organization-level representation requires one unique active delegate principal per represented organization and decision; the delegate's personal identity is not substituted for the organization principal in the vote tally.
 
 ### 4.2 Reserved matters
 
