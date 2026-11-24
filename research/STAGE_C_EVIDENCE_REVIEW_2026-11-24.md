@@ -95,6 +95,12 @@ This is not a single-direction victory. The cooperative configuration materially
 
 **How coordination hours are currently charged:** the Stage-B engine defaults to 0.01 labour-hours per batched message plus 0.002 hours per additional bundled record. Cellular traces include request-forward hops (including unsuccessful searches) and offer, reservation and acceptance path messages; records are batched by protocol type, product, round, directed edge and route metadata. The other regimes use constructed message proxies based on active cells and allocations, not equivalent observed network traffic. Therefore the 108-versus-16-hour comparison is a model-assumption-sensitive accounting result, not a direct empirical measurement of comparable organizational labour. Before treating it as an efficiency ranking, the simulator must expose hours by message class, separate failed discovery from successful contracting, value sender/receiver effort explicitly, and run matched sensitivity ranges across all arms.
 
+### 3.3 Paired-seed distribution robustness
+
+As a robustness check, 20,000 percentile-bootstrap resamples of the 100 matched seed-level cooperative-minus-market differences were computed (resampling paired seeds, deterministic analysis seed 20261124). The bootstrap 95% intervals closely track the reported normal intervals for overall fulfilment (+0.03615 to +0.03826), care fulfilment (+0.51819 to +0.52712), food fulfilment (−0.15424 to −0.14909), essential fulfilment (−0.02424 to −0.02088), household Gini (−0.21383 to −0.20888), gross-output index (+22.14 to +26.63), and coordination hours (+12.3472 to +12.4988).
+
+Ending backlog is notably skewed: the mean paired difference is −0.42786, but the median is −0.14673; the seed-level 5th–95th percentile range is −1.47046 to +0.00019, and 95 of 100 paired seeds have lower ending backlog under the cooperative regime. Its bootstrap mean interval (−0.53721 to −0.32515) remains below zero, but the median and seed-level range show why the mean alone overstates a typical-seed reduction. Preserve this distinction in all summaries.
+
 ### 3.3 Interpretation constraints
 
 1. Higher care fulfilment and lower attrition do not erase the food/essential-access trade-off.
