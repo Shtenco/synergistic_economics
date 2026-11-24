@@ -126,7 +126,7 @@ A work package contains:
 - completion evidence, reviewer and dispute path;
 - version, expected state revisions and idempotency key.
 
-A work package is a coordination object, not a payroll record, purchase order, inventory reservation, contract, journal or payment. Each of those transitions remains with its designated authority. Contract formation requires the legally required party acceptance.
+A work package is a coordination object, not a payroll record, purchase order, inventory reservation, contract, journal or payment. Each of those transitions remains with its designated authority. Contract formation requires the legally required party acceptance. The prototype's budget check is a per-package ceiling only; it is not an aggregate remaining-budget calculation, encumbrance, reservation or spend authorization. Before parallel packages can be approved, a canonical budget authority must perform an atomic cumulative-limit check and record the resulting reservation/commitment in its own authoritative system.
 
 ## 6. Asset and infrastructure boundary
 
