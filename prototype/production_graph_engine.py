@@ -90,6 +90,8 @@ def validate_production_graph(
         raise CooperativeMarketError("verified evidence must be a resolver-produced set")
     if any(not isinstance(x, str) or not x.strip() for x in verified_evidence_refs):
         raise CooperativeMarketError("verified evidence references must be non-empty strings")
+    if not graph.evidence_refs.issubset(verified_evidence_refs):
+        raise CooperativeMarketError("one or more graph-level evidence references are unverified")
     node_map: dict[str, ProductionGraphNode] = {}
     producer_by_output: dict[str, str] = {}
     for node in graph.nodes:
