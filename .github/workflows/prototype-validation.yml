@@ -331,6 +331,14 @@ jobs:
           assert summary["total_jobs"] == sum(x["jobs"] for x in summary["countries"])
           print(f"EAEU COUNTRY PLANS: PASS ({summary['total_jobs']} bounded tile jobs)")
           PY
+      - name: Upload global Maps npm diagnostics
+        if: ${{ always() && steps.checkout_maps_global.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-maps-global-npm-diagnostics
+          path: /home/runner/.npm/_logs/*-debug-0.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Live Overture sample ingestion - Kazakhstan test window
         id: overture_sample
         if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
