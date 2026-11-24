@@ -38,6 +38,9 @@ The conceptual overview is expanded into standalone research volumes. The first 
 - **[Prototype 2 — General Input-Output Economy](prototype/GENERAL_IO_ECONOMY.md)** — data-driven multi-product production network with multiple suppliers, input recipes, household baskets, product-level price adjustment, import offers, inventory accounting, physical-balance identities and exact cash conservation. [Python model](prototype/io_economy.py) · [Tests](prototype/test_io_economy.py)
 
 - **[Integrated Architecture — SYNERGY Cellular Consortium Economy](research/SYNERGY_CELLULAR_CONSORTIUM_ECONOMY.md)** — combines the foundational theory with consortium-cells, digital twins, cellular automata, DAO governance, AI, blockchain, inter-cell DeFi, multidimensional value, contribution and distribution, UEP, SCI, UOF, collective dividends and a falsifiable validation programme.
+- **[SYNERGY Cellular Cooperative Market v1.0](research/SYNERGY_CELLULAR_COOPERATIVE_MARKET_V1.md)** — extension to SCCE separating legal form, coordination roles, participation, authority and economic rights while composing DAO cells, artels, consortia and contestable markets.
+- **[Executable domain contract](prototype/cellular_cooperative_market.py)** · [Tests](prototype/test_cellular_cooperative_market.py) · [Comparative experiment protocol](research/CELLULAR_COOPERATIVE_MARKET_V1_EXPERIMENT_PROTOCOL.md).
+- **[Branch lineage and integration decision](research/BRANCH_LINEAGE_AND_INTEGRATION_DECISION_2026-11-24.md)** — branch/PR topology, base selection and integration boundaries.
 
 Volumes VII–XV progressively develop the theory of reproducible economic capacity, its mathematical representation, network dynamics, institutional architecture and monetary-financial system and capital-investment and distribution architecture. Volume XV fixes the current version's complete conceptual architecture; formal integration, calibration and empirical validation remain subsequent stages.
 
