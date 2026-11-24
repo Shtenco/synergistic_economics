@@ -93,6 +93,8 @@ For proportional allocation, matched-seed differences are:
 
 This is not a single-direction victory. The cooperative configuration materially improves care fulfilment, backlog and distributional inequality in this model, while food fulfilment is substantially lower and coordination requires more labour. Essential fulfilment is also slightly lower than market. The cellular configuration has lower inequality than market but lower overall and essential fulfilment, higher backlog, and a very large coordination-hours burden (about 108 versus 16.2 market hours). That coordination burden is a major model finding and a priority for decomposition, not a detail to hide.
 
+**How coordination hours are currently charged:** the Stage-B engine defaults to 0.01 labour-hours per batched message plus 0.002 hours per additional bundled record. Cellular traces include request-forward hops (including unsuccessful searches) and offer, reservation and acceptance path messages; records are batched by protocol type, product, round, directed edge and route metadata. The other regimes use constructed message proxies based on active cells and allocations, not equivalent observed network traffic. Therefore the 108-versus-16-hour comparison is a model-assumption-sensitive accounting result, not a direct empirical measurement of comparable organizational labour. Before treating it as an efficiency ranking, the simulator must expose hours by message class, separate failed discovery from successful contracting, value sender/receiver effort explicitly, and run matched sensitivity ranges across all arms.
+
 ### 3.3 Interpretation constraints
 
 1. Higher care fulfilment and lower attrition do not erase the food/essential-access trade-off.
