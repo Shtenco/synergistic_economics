@@ -275,9 +275,6 @@ class DistributionTests(unittest.TestCase):
         self.assertEqual(amounts, {"alice": 1667, "bob": 1667, "carol": 1666})
 
     def test_unverified_pool_is_rejected(self):
-        pool = VerifiedResidualPool(
-            "residual-1", 1000, "KZT", "unverified", False
-        )
         with self.assertRaises(CooperativeMarketError):
             VerifiedResidualPool(
                 "residual-1", 1000, "KZT", "unverified", False
