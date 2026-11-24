@@ -107,6 +107,7 @@ class GovernanceTests(unittest.TestCase):
             governing_subject_id="cell-1",
             governing_subject_kind="coordination_unit",
             allowed_domains=frozenset({"local_operations", "shared_services"}),
+            allowed_actions=frozenset({"approve_weekly_schedule", "approve_schedule", "transfer_legal_title"}),
             voting_rule="one_member_one_vote",
             quorum_bps=6000,
             approval_bps=5000,
@@ -145,6 +146,7 @@ class GovernanceTests(unittest.TestCase):
             participations=self.members,
             ballots=[Ballot("alice", "approve", "ballot:a")],
             organizations=self.organizations,
+            coordination_units=self.coordination_units,
             at=NOW,
         )
         self.assertFalse(result.approved)
@@ -159,6 +161,7 @@ class GovernanceTests(unittest.TestCase):
                 participations=self.members,
                 ballots=[],
                 organizations=self.organizations,
+            coordination_units=self.coordination_units,
                 at=NOW,
             )
 
@@ -171,6 +174,20 @@ class GovernanceTests(unittest.TestCase):
                 participations=self.members,
                 ballots=[Ballot("alice", "approve", "ballot:a")],
                 organizations=self.organizations,
+            coordination_units=self.coordination_units,
+                at=NOW,
+            )
+
+    def test_action_outside_explicit_allowlist_fails_closed(self):
+        with self.assertRaises(CooperativeMarketError):
+            evaluate_governance(
+                policy=self.policy,
+                decision_domain="local_operations",
+                action="change_wage_policy",
+                participations=self.members,
+                ballots=[],
+                organizations=self.organizations,
+                coordination_units=self.coordination_units,
                 at=NOW,
             )
 
@@ -186,6 +203,7 @@ class GovernanceTests(unittest.TestCase):
                     Ballot("alice", "reject", "ballot:b"),
                 ],
                 organizations=self.organizations,
+            coordination_units=self.coordination_units,
                 at=NOW,
             )
 
@@ -193,6 +211,7 @@ class GovernanceTests(unittest.TestCase):
         policy = GovernancePolicy(
             "policy-org", "cell-1", "coordination_unit",
             frozenset({"federation_budget"}),
+            frozenset({"approve_shared_budget"}),
             "one_organization_one_vote", 5000, 5001, "policy:org",
         )
         self.organizations = {
@@ -227,6 +246,7 @@ class GovernanceTests(unittest.TestCase):
         policy = GovernancePolicy(
             "policy-org", "cell-1", "coordination_unit",
             frozenset({"federation_budget"}),
+            frozenset({"approve_shared_budget"}),
             "one_organization_one_vote", 5000, 5000, "policy:org",
         )
         organizations = {"artel-a": org("artel-a", "artel")}
