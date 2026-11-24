@@ -31,6 +31,16 @@ def _nonnegative_minor(value: int, field: str) -> int:
     return value
 
 
+
+def _evidence_refs(value) -> frozenset[str]:
+    """Accept only a resolver-produced set of non-empty reference strings."""
+    if not isinstance(value, (set, frozenset)):
+        raise CooperativeMarketError("canonical evidence references must be a set returned by the authority resolver")
+    if any(not isinstance(ref, str) or not ref.strip() for ref in value):
+        raise CooperativeMarketError("canonical evidence references must be non-empty strings")
+    return frozenset(ref.strip() for ref in value)
+
+
 @dataclass(frozen=True)
 class ArtelProductionMandate:
     """A bounded, evidence-backed mandate; not a legal or financial authority."""
@@ -154,6 +164,7 @@ def validate_artel_work_package(
     mandate_end = _instant(mandate.effective_to, "mandate.effective_to") if mandate.effective_to else None
     if start < mandate_start or (mandate_end is not None and end > mandate_end):
         raise CooperativeMarketError("work-package interval exceeds mandate validity")
+    verified_evidence_refs = _evidence_refs(verified_evidence_refs)
     required = {
         mandate.constitution_ref,
         mandate.authority_ref,
@@ -199,6 +210,7 @@ def validate_artel_participation(
         raise CooperativeMarketError("participation host does not carry the artel role")
     if not participation.active_at(instant):
         raise CooperativeMarketError("participation is not active at the requested time")
+    verified_evidence_refs = _evidence_refs(verified_evidence_refs)
     required = {participation.consent_ref, participation.rights_ref, artel.charter_ref}
     missing = required.difference(verified_evidence_refs)
     if missing:
