@@ -64,6 +64,10 @@ Validation checks identity consistency, active organizations, capability coverag
 
 Complex products are represented as a dependency graph of bounded work packages. Each node has inputs, outputs, acceptance criteria, predecessor references, responsible organizations and versioned evidence. Cycles must be rejected unless explicitly modeled as iterative processes with bounded convergence/termination criteria. Cross-artel collaboration is a graph of independent contractual commitments, not a parent-child ownership tree.
 
+### 3.4 Production Graph Engine
+
+The reference validator in `prototype/production_graph_engine.py` treats a production plan as a directed acyclic graph (DAG) of independently accountable work nodes. Each node declares one executor organization, input references, uniquely produced output references, explicit predecessor IDs, a bounded work-scope reference and acceptance-criteria reference. Artel executors must additionally bind an Artel Engine production mandate and work-package reference. Inputs must resolve to exactly one in-graph producer or an explicitly declared external source; duplicate output provenance, undeclared inputs, inconsistent predecessor declarations and cycles fail closed. The validator returns a deterministic topological order and a producer map; it does not schedule, allocate, reserve, execute or accept work. Iterative manufacturing loops require a separately bounded process model and are not represented by cyclic dependencies in this DAG.
+
 ## 4. Work-order lifecycle
 
 The reference lifecycle is:
