@@ -119,3 +119,15 @@ The new branch adds the Cellular Cooperative Market v1 research specification, a
 ## Conclusion
 
 The selected branch is the broadest current research base that remains directly descended from main and contains the newer identity, marketplace, financial and register foundations. The new model is an additive institutional layer. Its core rule is to compose existing legal and economic subjects through typed, voluntary and scoped relationships while preserving canonical authority for identity, rights, labour, physical flows, financial claims, accounting and settlement.
+
+
+## 8. Exact-head CI evidence — PR #19
+
+After opening PR #19 against its selected parent branch, GitHub Actions run **45424081523** completed for head commit `669aa52332acd93150432a7f44e7e9306c7aa877`.
+
+- **Prototype validation job: success.** The complete repository prototype suite ran 494 unit tests successfully. The existing Stage-A coordination checks, Stage-B paired dynamic simulations, Stage-C1 household distribution runs and Stage-C2-A2 endogenous household feedback experiment all completed successfully.
+- **Pinned cross-repository economic/spatial/payment contract: success.** The cross-repository token check, pinned Metaverse/Maps/HardNAV checkouts, signed integration-flow test and HardNAV accounting regressions completed successfully.
+- **Additional global Maps viewer build: failure.** The step `Build and test global SYNERGY Maps viewer` failed during npm dependency handling with `Cannot read properties of null (reading 'edgesOut')`. The Maps Python ingestion tests, trust/spatial regressions, Cesium build, live Kazakhstan sample ingestion and HardNAV regressions completed successfully. This failure is recorded as an external Maps frontend build issue, not as a failure of the new cooperative-market prototype.
+- **HardNAV historical replay job:** skipped by this workflow run.
+
+The prototype-validation result is evidence for the exact tested commit only. Subsequent commits require a new exact-head CI run. The global Maps viewer failure remains open and should be investigated in the Maps repository or its pinned integration snapshot.
