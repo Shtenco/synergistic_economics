@@ -175,7 +175,7 @@ class GovernanceTests(unittest.TestCase):
     def test_organization_delegate_rule_uses_delegate_subjects(self):
         policy = GovernancePolicy(
             "policy-org", "cell-1", frozenset({"federation_budget"}),
-            "one_organization_one_vote", 5000, 5000, "policy:org",
+            "one_organization_one_vote", 5000, 5001, "policy:org",
         )
         delegates = [
             member("artel-a", "cell-1", capacity="organization_delegate"),
@@ -279,7 +279,9 @@ class DistributionTests(unittest.TestCase):
             "residual-1", 1000, "KZT", "unverified", False
         )
         with self.assertRaises(CooperativeMarketError):
-            propose_distribution(pool, [])
+            VerifiedResidualPool(
+                "residual-1", 1000, "KZT", "unverified", False
+            )
 
     def test_overallocated_distribution_is_rejected(self):
         shares = [
