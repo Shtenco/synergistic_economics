@@ -165,3 +165,59 @@ def validate_artel_work_package(
     missing = required.difference(verified_evidence_refs)
     if missing:
         raise CooperativeMarketError("canonical evidence is missing or unverified")
+
+
+ARTEL_PARTICIPATION_CAPACITIES = frozenset({
+    "member", "worker", "contractor", "apprentice", "investor",
+    "asset_provider", "service_provider", "advisor", "delegate",
+})
+
+
+def validate_artel_participation(
+    *,
+    participation,
+    existing_participations,
+    organizations: Mapping[str, EconomicOrganization],
+    verified_evidence_refs: frozenset[str],
+    at: datetime,
+) -> None:
+    """Validate a voluntary, time-bounded participation against canonical evidence.
+
+    Participation is a role-specific relationship, not proof of employment,
+    ownership, voting power, debt, profit entitlement or asset title.
+    The evidence set must be returned by the canonical authority resolver.
+    """
+    instant = _instant(at, "at")
+    if participation.capacity not in ARTEL_PARTICIPATION_CAPACITIES:
+        raise CooperativeMarketError("unsupported artel participation capacity")
+    if participation.host_kind != "organization":
+        raise CooperativeMarketError("artel participation must be hosted by an organization")
+    artel = organizations.get(participation.host_id)
+    if artel is None or artel.status != "active":
+        raise CooperativeMarketError("host artel is missing or inactive")
+    if "artel" not in artel.coordination_roles:
+        raise CooperativeMarketError("participation host does not carry the artel role")
+    if not participation.active_at(instant):
+        raise CooperativeMarketError("participation is not active at the requested time")
+    required = {participation.consent_ref, participation.rights_ref, artel.charter_ref}
+    missing = required.difference(verified_evidence_refs)
+    if missing:
+        raise CooperativeMarketError("consent, rights or artel constitution evidence is unverified")
+
+    seen_ids = set()
+    for existing in existing_participations:
+        if existing.participation_id in seen_ids:
+            raise CooperativeMarketError("duplicate participation ID in host roster")
+        seen_ids.add(existing.participation_id)
+        if (
+            existing.host_id == participation.host_id
+            and existing.host_kind == "organization"
+            and existing.active_at(instant)
+            and existing.subject_id == participation.subject_id
+            and existing.capacity == "member"
+            and participation.capacity == "member"
+            and existing.participation_id != participation.participation_id
+        ):
+            raise CooperativeMarketError("subject already has an active member participation in this artel")
+    if participation.participation_id in seen_ids:
+        raise CooperativeMarketError("participation ID already exists in host roster")
