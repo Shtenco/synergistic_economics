@@ -125,6 +125,7 @@ class OrganizationOntologyTests(unittest.TestCase):
         delegate = member(
             "delegate-a", "cell-1", capacity="organization_delegate",
             represented_organization_id="missing-org",
+            delegation_authority_ref="authority:missing-org",
         )
         with self.assertRaises(CooperativeMarketError):
             validate_participations([delegate], {}, {"cell-1": host})
