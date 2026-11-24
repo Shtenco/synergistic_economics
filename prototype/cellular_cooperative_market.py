@@ -204,9 +204,9 @@ def evaluate_governance(
     active = [p for p in participations
               if p.organization_id == policy.organization_id and p.active_at(at)]
     if policy.voting_rule == "one_member_one_vote":
-        eligible = {p.subject_id for p in active}
+        eligible = {p.subject_id for p in active if p.capacity != "organization_delegate"}
     else:
-        eligible = {p.organization_id for p in active}
+        eligible = {p.subject_id for p in active if p.capacity == "organization_delegate"}
     if not eligible:
         raise CooperativeMarketError("no eligible voters")
 
