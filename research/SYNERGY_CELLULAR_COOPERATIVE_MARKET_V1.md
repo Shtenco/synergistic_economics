@@ -178,6 +178,10 @@ Before work begins, a cooperative project or consortium must publish a versioned
 
 No participant should be asked to contribute labour, capital, IP or guarantees before the relevant rights, risks, compensation and exit conditions are disclosed.
 
+## 6A. Artel Engine production contract
+
+The production-collective lifecycle and interface are specified separately in [SYNERGY Artel Engine v1.0](SYNERGY_ARTEL_ENGINE_V1.md). The Artel Engine formalizes constitution, non-exclusive participation, production mandates, work packages, asset-use commitments, labour and contribution evidence, IP disposition, scoped governance, risk allocation, residual-distribution proposals, lifecycle events and adversarial invariants. It is a coordination layer: legal identity, title, labour status, physical inventory, financial claims and settlement remain with their canonical authorities. An artel is a production role and may be implemented through different lawful forms; it is not synonymous with a DAO cell or a consortium.
+
 ## 7. Fairness architecture: separate the questions
 
 The system must not reduce fairness to equal division, a contribution score, token voting or a single weighted index.
