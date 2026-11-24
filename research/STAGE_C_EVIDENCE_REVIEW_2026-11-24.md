@@ -44,12 +44,11 @@ Priority-weighted allocation is materially worse than proportional allocation fo
 The 25% and 75% floor sensitivity runs remain at 20 paired seeds. They are exploratory sensitivity checks, not equally powered replications of the 100-seed primary experiment.
 
 Across these settings, the floor rule does not dominate proportional allocation consistently:
-- At 25%, lower-decile fulfilment under floor-priority is below proportional in the cellular and cooperative regimes.
-- At 75%, it is approximately neutral in cellular and slightly below proportional in cooperative.
-- The central regime remains weakly below proportional at both settings.
-- Market-regime differences are small.
+- At 25%, paired lower-decile differences versus proportional are −0.02537 in cellular [−0.02894, −0.02180], −0.00784 in cooperative [−0.01019, −0.00548], −0.00107 in central [−0.00276, +0.00062], and +0.00005 in market [−0.00045, +0.00055].
+- At 75%, lower-decile differences are near zero and all four intervals cross zero: central +0.00031 [−0.00014, +0.00077], cellular +0.00018 [−0.00038, +0.00074], cooperative −0.00028 [−0.00105, +0.00050], and market +0.00006 [−0.00009, +0.00021].
+- At 75%, the essential Gini nevertheless worsens in central (+0.00042 [ +0.00008, +0.00076]) and cooperative (+0.00090 [+0.00073, +0.00106]); it is near-neutral in cellular (+0.00008 [−0.00001, +0.00018]) and improves slightly in market (−0.00033 [−0.00047, −0.00018]).
 
-The floor parameter should not be promoted as a universal fairness improvement. Its effects depend on institutional regime and allocation design.
+The 25% and 75% sensitivity runs each use only 20 paired seeds and are exploratory. The floor parameter should not be promoted as a universal fairness improvement; its effects depend on institutional regime and allocation design.
 
 ## 3. Stage-C2-A2 — endogenous household needs, backlog and care claims
 
@@ -101,7 +100,20 @@ As a robustness check, 20,000 percentile-bootstrap resamples of the 100 matched 
 
 Ending backlog is notably skewed: the mean paired difference is −0.42786, but the median is −0.14673; the seed-level 5th–95th percentile range is −1.47046 to +0.00019, and 95 of 100 paired seeds have lower ending backlog under the cooperative regime. Its bootstrap mean interval (−0.53721 to −0.32515) remains below zero, but the median and seed-level range show why the mean alone overstates a typical-seed reduction. Preserve this distinction in all summaries.
 
-### 3.3 Interpretation constraints
+### 3.4 Service-order sensitivity (exploratory, 20 paired seeds)
+
+The separate current-first versus backlog-first experiment shows a pronounced intertemporal trade-off in the cellular regime. Backlog-first minus current-first:
+- Current overall fulfilment: −0.03640 [−0.03717, −0.03563].
+- Current essential fulfilment: −0.04282 [−0.04379, −0.04186].
+- Current care fulfilment: −0.22427 [−0.22900, −0.21954].
+- Lower-decile current essential fulfilment: −0.03731 [−0.03948, −0.03513].
+- Ending essential backlog: +0.06702 [+0.03322, +0.10082].
+- Cumulative care-backlog units served: +14.70433 [+14.47430, +14.93437].
+- Total care delivered: +0.57171 [+0.51441, +0.62901].
+
+Backlog-first clears more accumulated care claims but reduces current service/access and increases ending essential backlog in this cellular configuration. The 20-seed result is exploratory; backlog clearance must not be optimized independently of current essential access, current care, distributional tails and end-state backlog.
+
+### 3.5 Interpretation constraints
 
 1. Higher care fulfilment and lower attrition do not erase the food/essential-access trade-off.
 2. The coordination-hours difference must be included in any efficiency or welfare interpretation. It must not be silently treated as free labour.

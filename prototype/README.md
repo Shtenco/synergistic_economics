@@ -74,12 +74,16 @@ This is a local allocation/coordination kernel, not yet a complete dynamic econo
 
 - [cellular_cooperative_market.py](cellular_cooperative_market.py) — non-authoritative domain contract separating legal form, coordination roles, non-exclusive participation, scoped DAO governance, consortium agreements, market-match references and distribution proposals.
 - [test_cellular_cooperative_market.py](test_cellular_cooperative_market.py) — standard-library tests for ontology separation, overlapping participation, mandate boundaries, member/delegate voting, consortium validity, exact minor-unit allocation, retained residuals and market-counterparty references.
+- [cellular_cooperative_evidence.py](cellular_cooperative_evidence.py) — strict read-only evidence gate binding consent and rights to exact participation IDs, delegation to the represented organization and mandate, and ballots to immutable decision IDs; validates expiry, revocation and anti-replay constraints.
+- [test_cellular_cooperative_evidence.py](test_cellular_cooperative_evidence.py) — negative and positive tests for canonical evidence binding, time validity, revocation and cross-decision replay.
+- [Authority-evidence boundary](../research/CELLULAR_COOPERATIVE_MARKET_AUTHORITY_EVIDENCE.md) — trust assumptions, adapter responsibilities and production integration limitations.
 - [Research architecture](../research/SYNERGY_CELLULAR_COOPERATIVE_MARKET_V1.md) — institutional design, fairness architecture, anti-capture controls, authority map, hypotheses and comparative experiment plan.
 
 Run from the repository root:
 
 ```bash
 python -m unittest discover -s prototype -p 'test_cellular_cooperative_market.py' -v
+python -m unittest discover -s prototype -p 'test_cellular_cooperative_evidence.py' -v
 ```
 
 This module is a proposal/validation layer only. It does not create legal entities, execute votes, form contracts, infer ownership, post journals, reserve stock, custody funds or settle payments. It consumes references from the canonical economic, legal, labour, marketplace and financial authorities.
