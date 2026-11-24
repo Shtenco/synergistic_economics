@@ -171,5 +171,91 @@ class ArtelMandateValidationTests(unittest.TestCase):
             make_package(expected_revision=True)
 
 
+class ArtelParticipationValidationTests(unittest.TestCase):
+    def make_participation(self, **overrides):
+        from cellular_cooperative_market import Participation
+        values = dict(
+            participation_id="part-1",
+            subject_id="person-1",
+            host_id="artel-1",
+            host_kind="organization",
+            capacity="member",
+            consent_ref="consent:1",
+            rights_ref="rights:1",
+            effective_from=NOW - timedelta(days=1),
+            effective_to=NOW + timedelta(days=30),
+            status="active",
+        )
+        values.update(overrides)
+        return Participation(**values)
+
+    def validate(self, participation=None, existing=(), orgs=None, evidence=None):
+        from artel_engine import validate_artel_participation
+        validate_artel_participation(
+            participation=participation or self.make_participation(),
+            existing_participations=existing,
+            organizations=orgs or {"artel-1": make_org("artel")},
+            verified_evidence_refs=evidence or frozenset({
+                "consent:1", "rights:1", "constitution:1"
+            }),
+            at=NOW,
+        )
+
+    def test_valid_voluntary_membership_is_accepted(self):
+        self.validate()
+
+    def test_non_artel_host_is_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(orgs={"artel-1": make_org("enterprise")})
+
+    def test_inactive_artel_host_is_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(orgs={"artel-1": make_org("artel", status="suspended")})
+
+    def test_unverified_consent_is_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(evidence=frozenset({"rights:1", "constitution:1"}))
+
+    def test_unverified_rights_terms_are_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(evidence=frozenset({"consent:1", "constitution:1"}))
+
+    def test_inactive_or_expired_participation_is_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(participation=self.make_participation(status="exited"))
+
+    def test_unknown_capacity_is_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(participation=self.make_participation(capacity="owner_by_score"))
+
+    def test_member_and_worker_are_distinct_capacities(self):
+        self.validate(participation=self.make_participation(capacity="worker"))
+
+    def test_duplicate_active_membership_is_rejected(self):
+        existing = self.make_participation(participation_id="part-old")
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(existing=(existing,))
+
+    def test_same_person_can_hold_different_participation_capacities(self):
+        existing = self.make_participation(participation_id="part-worker", capacity="worker")
+        self.validate(existing=(existing,))
+
+    def test_same_person_can_participate_in_another_artel(self):
+        from cellular_cooperative_market import Participation
+        other = Participation(
+            participation_id="part-other", subject_id="person-1",
+            host_id="artel-2", host_kind="organization", capacity="member",
+            consent_ref="consent:other", rights_ref="rights:other",
+            effective_from=NOW - timedelta(days=1),
+        )
+        self.validate(existing=(other,))
+
+    def test_participation_id_collision_is_rejected(self):
+        existing = self.make_participation()
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(existing=(existing,))
+
+
+
 if __name__ == "__main__":
     unittest.main()
