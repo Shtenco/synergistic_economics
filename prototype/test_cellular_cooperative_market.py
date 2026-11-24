@@ -8,6 +8,7 @@ from cellular_cooperative_market import (
     CooperativeMarketError,
     CooperationAgreement,
     ConsortiumParticipant,
+    CoordinationUnit,
     DistributionShare,
     EconomicOrganization,
     GovernancePolicy,
@@ -19,6 +20,7 @@ from cellular_cooperative_market import (
     evaluate_governance,
     propose_distribution,
     validate_agreement,
+    validate_coordination_units,
     validate_market_match,
     validate_network,
 )
@@ -38,14 +40,15 @@ def org(org_id, *roles, legal_form="company", status="active"):
     )
 
 
-def member(pid, org_id, capacity="member", status="active"):
+def member(pid, host_id, capacity="member", status="active", host_kind="coordination_unit"):
     return Participation(
-        participation_id=f"p:{pid}:{org_id}",
+        participation_id=f"p:{pid}:{host_id}",
         subject_id=pid,
-        organization_id=org_id,
+        host_id=host_id,
+        host_kind=host_kind,
         capacity=capacity,
-        consent_ref=f"consent:{pid}:{org_id}",
-        rights_ref=f"rights:{pid}:{org_id}",
+        consent_ref=f"consent:{pid}:{host_id}",
+        rights_ref=f"rights:{pid}:{host_id}",
         effective_from=NOW - timedelta(days=1),
         status=status,
     )
@@ -53,16 +56,26 @@ def member(pid, org_id, capacity="member", status="active"):
 
 class OrganizationOntologyTests(unittest.TestCase):
     def test_legal_form_and_coordination_roles_are_orthogonal(self):
-        cooperative = org("coop-1", "artel", "dao_cell", legal_form="kz_production_cooperative")
+        cooperative = org("coop-1", "artel", legal_form="kz_production_cooperative")
+        cell = CoordinationUnit("cell-1", "dao_cell", "charter:cell-1")
         self.assertEqual(cooperative.legal_form, "kz_production_cooperative")
-        self.assertEqual(cooperative.coordination_roles, frozenset({"artel", "dao_cell"}))
+        self.assertEqual(cooperative.coordination_roles, frozenset({"artel"}))
+        self.assertIsNone(cell.legal_entity_id)
+        self.assertEqual(cell.unit_kind, "dao_cell")
+        validate_coordination_units({"cell-1": cell}, {"coop-1": cooperative})
+
+    def test_coordination_unit_rejects_unknown_legal_entity_reference(self):
+        cell = CoordinationUnit("cell-1", "dao_cell", "charter:cell-1", "missing")
+        with self.assertRaises(CooperativeMarketError):
+            validate_coordination_units({"cell-1": cell}, {})
 
     def test_participation_can_overlap_across_organizations(self):
         p1 = member("person-1", "cell-1")
-        p2 = member("person-1", "artel-1")
+        p2 = member("person-1", "artel-1", host_kind="organization")
         self.assertTrue(p1.active_at(NOW))
         self.assertTrue(p2.active_at(NOW))
-        self.assertNotEqual(p1.organization_id, p2.organization_id)
+        self.assertNotEqual(p1.host_id, p2.host_id)
+        self.assertNotEqual(p1.host_kind, p2.host_kind)
 
     def test_invalid_relation_reference_is_rejected(self):
         organizations = {"a": org("a", "enterprise"), "b": org("b", "artel")}
@@ -85,11 +98,13 @@ class OrganizationOntologyTests(unittest.TestCase):
 
 class GovernanceTests(unittest.TestCase):
     def setUp(self):
-        self.organization = org("cell-1", "dao_cell")
-        self.organizations = {"cell-1": self.organization}
+        self.cell = CoordinationUnit("cell-1", "dao_cell", "charter:cell-1")
+        self.organizations = {}
+        self.coordination_units = {"cell-1": self.cell}
         self.policy = GovernancePolicy(
             policy_id="policy-1",
-            organization_id="cell-1",
+            governing_subject_id="cell-1",
+            governing_subject_kind="coordination_unit",
             allowed_domains=frozenset({"local_operations", "shared_services"}),
             voting_rule="one_member_one_vote",
             quorum_bps=6000,
@@ -113,6 +128,7 @@ class GovernanceTests(unittest.TestCase):
                 Ballot("bob", "approve", "ballot:b"),
             ],
             organizations=self.organizations,
+            coordination_units=self.coordination_units,
             at=NOW,
         )
         self.assertTrue(result.approved)
@@ -174,7 +190,8 @@ class GovernanceTests(unittest.TestCase):
 
     def test_organization_delegate_rule_uses_delegate_subjects(self):
         policy = GovernancePolicy(
-            "policy-org", "cell-1", frozenset({"federation_budget"}),
+            "policy-org", "cell-1", "coordination_unit",
+            frozenset({"federation_budget"}),
             "one_organization_one_vote", 5000, 5001, "policy:org",
         )
         delegates = [
