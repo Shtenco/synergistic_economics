@@ -109,6 +109,7 @@ class Participation:
     effective_to: datetime | None = None
     status: str = "active"
     represented_organization_id: str | None = None
+    delegation_authority_ref: str | None = None
 
     def __post_init__(self):
         for field in ("participation_id", "subject_id", "host_id",
@@ -120,8 +121,9 @@ class Participation:
             if self.host_kind != "coordination_unit":
                 raise CooperativeMarketError("organization delegates may only participate in coordination units")
             _text(self.represented_organization_id, "represented_organization_id")
-        elif self.represented_organization_id is not None:
-            raise CooperativeMarketError("represented_organization_id is only valid for organization delegates")
+            _text(self.delegation_authority_ref, "delegation_authority_ref")
+        elif self.represented_organization_id is not None or self.delegation_authority_ref is not None:
+            raise CooperativeMarketError("organization representation fields are only valid for organization delegates")
         _instant(self.effective_from, "effective_from")
         if self.effective_to is not None:
             if _instant(self.effective_to, "effective_to") <= _instant(self.effective_from, "effective_from"):
@@ -223,6 +225,7 @@ def evaluate_governance(
     organizations: Mapping[str, EconomicOrganization],
     coordination_units: Mapping[str, CoordinationUnit],
     at: datetime,
+    verified_delegation_authority_refs: frozenset[str] = frozenset(),
 ) -> GovernanceResult:
     """Evaluate a vote; never executes the proposal or changes external state."""
     _text(decision_domain, "decision_domain")
@@ -256,10 +259,12 @@ def evaluate_governance(
         represented = [p.represented_organization_id for p in delegates]
         if len(represented) != len(set(represented)):
             raise CooperativeMarketError("an organization may have only one active delegate per decision")
-        for organization_id in represented:
-            organization = organizations.get(organization_id)
+        for delegate in delegates:
+            organization = organizations.get(delegate.represented_organization_id)
             if organization is None or organization.status != "active":
                 raise CooperativeMarketError("delegated organization is missing or inactive")
+            if delegate.delegation_authority_ref not in verified_delegation_authority_refs:
+                raise CooperativeMarketError("delegation authority reference is not verified by the canonical authority source")
         eligible = set(represented)
     if not eligible:
         raise CooperativeMarketError("no eligible voters")
