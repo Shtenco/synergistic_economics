@@ -16,7 +16,7 @@ from typing import Iterable, Mapping, Sequence
 
 
 ROLE_KINDS = frozenset({"artel", "enterprise", "project_vehicle", "shared_infrastructure_operator"})
-COORDINATION_UNIT_KINDS = frozenset({"dao_cell", "federation", "project_cell"})
+COORDINATION_UNIT_KINDS = frozenset({"dao_cell", "federation", "project_cell", "consortium"})
 HOST_KINDS = frozenset({"organization", "coordination_unit"})
 ORG_STATUSES = frozenset({"active", "suspended", "retired"})
 PARTICIPATION_STATUSES = frozenset({"active", "suspended", "exited"})
@@ -492,8 +492,37 @@ def validate_coordination_units(
     for unit_id, unit in units.items():
         if unit_id != unit.unit_id:
             raise CooperativeMarketError("coordination-unit map key does not match ID")
-        if unit.legal_entity_id is not None and unit.legal_entity_id not in organizations:
-            raise CooperativeMarketError("coordination unit references an unknown legal entity")
+        if unit.legal_entity_id is not None:
+            legal_entity = organizations.get(unit.legal_entity_id)
+            if legal_entity is None:
+                raise CooperativeMarketError("coordination unit references an unknown legal entity")
+            if unit.status == "active" and legal_entity.status != "active":
+                raise CooperativeMarketError("active coordination unit cannot bind to an inactive legal entity")
+
+
+def validate_participations(
+    participations: Iterable[Participation],
+    organizations: Mapping[str, EconomicOrganization],
+    coordination_units: Mapping[str, CoordinationUnit],
+) -> None:
+    """Validate participation identities, host references and delegate principals."""
+    seen_ids = set()
+    for participation in participations:
+        if participation.participation_id in seen_ids:
+            raise CooperativeMarketError("duplicate participation ID")
+        seen_ids.add(participation.participation_id)
+        if participation.host_kind == "organization":
+            host = organizations.get(participation.host_id)
+        else:
+            host = coordination_units.get(participation.host_id)
+        if host is None:
+            raise CooperativeMarketError("participation references an unknown host")
+        if participation.status == "active" and host.status != "active":
+            raise CooperativeMarketError("active participation cannot attach to an inactive host")
+        if participation.capacity == "organization_delegate":
+            represented = organizations.get(participation.represented_organization_id)
+            if represented is None or represented.status != "active":
+                raise CooperativeMarketError("delegate principal is missing or inactive")
 
 
 def validate_network(
