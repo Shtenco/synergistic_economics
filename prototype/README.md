@@ -348,3 +348,17 @@ python -m unittest discover -s prototype -p 'test_cooperative_production_network
 ```
 
 The CPN prototype is non-authoritative and in-memory. Durable idempotency, atomic compare-and-swap, authenticated evidence resolution, inventory reservations, contract acceptance, labour authorization, delivery/quality attestation and settlement remain external authority responsibilities.
+
+
+## Prototype 8 — Production Graph Engine
+
+- [production_graph_engine.py](production_graph_engine.py) — validates multi-organization production DAGs, unique output provenance, declared external inputs, predecessor consistency, artel mandate/work-package binding, verified evidence and deterministic topological order.
+- [test_production_graph_engine.py](test_production_graph_engine.py) — adversarial checks for cycles, duplicate IDs/outputs, missing inputs, false dependencies, inactive executors, missing artel authority and unverified evidence.
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_production_graph_engine.py' -v
+```
+
+This validator establishes graph structure only. It is not a scheduler, inventory ledger, capacity reservation engine, contract system or production execution controller.
