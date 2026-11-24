@@ -70,6 +70,20 @@ python -m unittest discover -s prototype -p 'test_*.py' -v
 
 This is a local allocation/coordination kernel, not yet a complete dynamic economy. Its service-value metrics are diagnostic and must not be interpreted as GDP or empirical welfare.
 
+## Prototype 3.5 — Cellular Cooperative Market Domain Contract
+
+- [cellular_cooperative_market.py](cellular_cooperative_market.py) — non-authoritative domain contract separating legal form, coordination roles, non-exclusive participation, scoped DAO governance, consortium agreements, market-match references and distribution proposals.
+- [test_cellular_cooperative_market.py](test_cellular_cooperative_market.py) — standard-library tests for ontology separation, overlapping participation, mandate boundaries, member/delegate voting, consortium validity, exact minor-unit allocation, retained residuals and market-counterparty references.
+- [Research architecture](../research/SYNERGY_CELLULAR_COOPERATIVE_MARKET_V1.md) — institutional design, fairness architecture, anti-capture controls, authority map, hypotheses and comparative experiment plan.
+
+Run from the repository root:
+
+```bash
+python -m unittest prototype.test_cellular_cooperative_market -v
+```
+
+This module is a proposal/validation layer only. It does not create legal entities, execute votes, form contracts, infer ownership, post journals, reserve stock, custody funds or settle payments. It consumes references from the canonical economic, legal, labour, marketplace and financial authorities.
+
 ## Prototype 4 — Stage-B Dynamic SCCE Physical Economy
 
 - [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption, explicit cellular message relay and packet/record-level coordination-cost accounting. Each cell's trade consent, relay consent and counterparty allowlist are carried from its CellSpec into the matching protocol.
