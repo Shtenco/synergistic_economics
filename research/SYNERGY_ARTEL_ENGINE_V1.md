@@ -101,6 +101,14 @@ Capacities may coexist only where contracts and law permit; conflicts must be di
 
 Admission, suspension and expulsion require disclosed criteria, notice, reason, opportunity to respond, impartial review and appeal. Expulsion is a protected action and cannot be executed by a generic DAO vote alone. Exit must not erase accrued wages, valid claims, safety rights, privacy rights or obligations already accepted.
 
+## 4A. Membership validation contract
+
+The prototype exposes a read-only participation validator. It accepts only the declared artel capacities: member, worker, contractor, apprentice, investor, asset provider, service provider, advisor and delegate. The host must be an active organization carrying the artel role; the participation must be active at the evaluation instant; and the consent, rights-terms and constitution references must resolve through the canonical authority source.
+
+Membership is not inferred from employment, investment, asset provision, service provision, contribution or a DAO ballot. One person may hold distinct capacities and participate in multiple artels. Duplicate active membership in the same artel is rejected by the current contract; different capacities remain distinct relationships. A future roster service must add atomic uniqueness enforcement at persistence time to prevent concurrent admission races.
+
+This validator does not decide whether a relationship is employment under applicable law, whether an individual is legally eligible to join, or whether membership creates a particular vote or economic entitlement. Those questions remain governed by the constitution, authoritative rights instruments and applicable jurisdictional law.
+
 ## 5. Production mandate and work packages
 
 The artel's production boundary is defined by versioned mandates, not by a broad claim to coordinate all member resources.
