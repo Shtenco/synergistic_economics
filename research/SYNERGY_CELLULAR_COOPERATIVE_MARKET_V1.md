@@ -142,6 +142,8 @@ The existing Economic Router remains the canonical opportunity-discovery and det
 
 A router match is a candidate, not a contract. Contract formation requires explicit party acceptance. Inventory reservation, title transfer, escrow, delivery verification and settlement remain with their respective authorized authorities.
 
+The existing SYNERGY LEAGUES domain is the capability/work-order layer: evidence-backed skill profiles, opt-in discoverability, work-order application and assignment, delivery review, and settlement hand-off. The cooperative-market layer should consume its verified skill/evidence and accepted-work references rather than create a second skills or work-order registry. League membership is a capability/participation context, not a paid tier, legal cooperative membership, ownership share or governance vote. An accepted work order is not proof of payment; the authoritative financial/settlement service remains responsible for that transition.
+
 ### 5.1 Four exchange modes
 
 - **Open market:** independent buyers and sellers transact under accepted terms.
@@ -269,6 +271,7 @@ The cooperative-market layer must integrate with existing canonical authorities 
 | Cross-register transaction visibility | CrossRegisterCoordinator and native participant contracts |
 | Stock-flow and sector projections | Typed SFC/GOLD projection pipeline |
 | Demand/offer discovery and candidate matching | Economic Marketplace Registry and Economic Router |
+| Skills, capability evidence and work orders | SYNERGY LEAGUES domain and its verified evidence references |
 | Spatial representation | Spatial twin adapter; never title or settlement authority |
 
 The existing implementation has explicit unfinished integration gates. The six-register coordinator still requires native authoritative adapters for all participants before a complete cross-register transaction can be claimed. Financial register history is not yet a live six-sector SFC projection merely because local stock-flow mappers exist. A spatial adapter validates references but does not post journals or settle money.
