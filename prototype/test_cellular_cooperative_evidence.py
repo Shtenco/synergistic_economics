@@ -25,6 +25,7 @@ POLICY = GovernancePolicy(
     frozenset({"approve_schedule"}),
     "one_member_one_vote", 5000, 5000, "policy:cell:ops",
 )
+DECISION_ID = "decision:cell-1:2026-11-24:weekly-schedule"
 
 
 def member(subject="alice", *, capacity="member", represented=None, authority=None):
@@ -59,41 +60,45 @@ def evidence(ref, kind, subject, resource, scope, **overrides):
     return CanonicalEvidence(**values)
 
 
-def evidence_set(participations, ballots, policy=POLICY):
+def evidence_set(participations, ballots, policy=POLICY, decision_id=DECISION_ID):
+    decision_scope = "local_operations:approve_schedule"
+    ballot_scope = f"{policy.governing_subject_id}:{decision_scope}"
     result = {
         policy.policy_ref: evidence(
             policy.policy_ref, "governance_policy",
             policy.governing_subject_id, policy.governing_subject_id,
-            "local_operations:approve_schedule",
+            decision_scope,
         )
     }
     for p in participations:
+        participation_scope = f"{p.host_id}:{p.capacity}"
         result[p.consent_ref] = evidence(
             p.consent_ref, "participation_consent", p.subject_id,
-            p.host_id, p.capacity,
+            p.participation_id, participation_scope,
         )
         result[p.rights_ref] = evidence(
             p.rights_ref, "participation_rights", p.subject_id,
-            p.host_id, p.capacity,
+            p.participation_id, participation_scope,
         )
         if p.capacity == "organization_delegate":
             result[p.delegation_authority_ref] = evidence(
                 p.delegation_authority_ref, "delegation_authority",
-                p.represented_organization_id, p.host_id,
-                "local_operations:approve_schedule",
+                p.represented_organization_id, p.participation_id,
+                ballot_scope,
             )
     for b in ballots:
         result[b.evidence_ref] = evidence(
             b.evidence_ref, "governance_ballot", b.voter_id,
-            policy.governing_subject_id,
-            "local_operations:approve_schedule",
+            decision_id, ballot_scope,
         )
     return result
 
 
 class CanonicalEvidenceGovernanceTests(unittest.TestCase):
-    def evaluate(self, participations, ballots, records, *, policy=POLICY, organizations=None):
+    def evaluate(self, participations, ballots, records, *, policy=POLICY,
+                 organizations=None, decision_id=DECISION_ID):
         return evaluate_governance_with_canonical_evidence(
+            decision_id=decision_id,
             policy=policy,
             decision_domain="local_operations",
             action="approve_schedule",
@@ -128,18 +133,18 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         records = evidence_set(people, ballots)
         records["consent:alice"] = evidence(
             "consent:alice", "participation_consent", "mallory",
-            "cell-1", "member",
+            "participation:alice", "cell-1:member",
         )
         with self.assertRaisesRegex(CooperativeMarketError, "subject mismatch"):
             self.evaluate(people, ballots, records)
 
-    def test_rights_for_another_host_are_rejected(self):
+    def test_rights_for_another_participation_are_rejected(self):
         people = [member()]
         ballots = [Ballot("alice", "approve", "ballot:alice")]
         records = evidence_set(people, ballots)
         records["rights:alice"] = evidence(
             "rights:alice", "participation_rights", "alice",
-            "other-cell", "member",
+            "participation:other", "cell-1:member",
         )
         with self.assertRaisesRegex(CooperativeMarketError, "resource mismatch"):
             self.evaluate(people, ballots, records)
@@ -149,7 +154,8 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         ballots = [Ballot("alice", "approve", "ballot:alice")]
         records = evidence_set(people, ballots)
         records["rights:alice"] = evidence(
-            "rights:alice", "participation_rights", "alice", "cell-1", "member",
+            "rights:alice", "participation_rights", "alice",
+            "participation:alice", "cell-1:member",
             valid_until=NOW - timedelta(seconds=1),
         )
         with self.assertRaisesRegex(CooperativeMarketError, "expired"):
@@ -160,7 +166,8 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         ballots = [Ballot("alice", "approve", "ballot:alice")]
         records = evidence_set(people, ballots)
         records["consent:alice"] = evidence(
-            "consent:alice", "participation_consent", "alice", "cell-1", "member",
+            "consent:alice", "participation_consent", "alice",
+            "participation:alice", "cell-1:member",
             revoked_at=NOW - timedelta(seconds=1),
         )
         with self.assertRaisesRegex(CooperativeMarketError, "revoked"):
@@ -180,10 +187,17 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         records = evidence_set(people, ballots)
         records["ballot:alice"] = evidence(
             "ballot:alice", "governance_ballot", "alice",
-            "cell-1", "shared_services:approve_schedule",
+            DECISION_ID, "cell-1:shared_services:approve_schedule",
         )
         with self.assertRaisesRegex(CooperativeMarketError, "scope mismatch"):
             self.evaluate(people, ballots, records)
+
+    def test_ballot_evidence_must_bind_exact_decision_id(self):
+        people = [member()]
+        ballots = [Ballot("alice", "approve", "ballot:alice")]
+        records = evidence_set(people, ballots, decision_id="decision:old")
+        with self.assertRaisesRegex(CooperativeMarketError, "resource mismatch"):
+            self.evaluate(people, ballots, records, decision_id="decision:new")
 
     def test_ballot_evidence_reference_cannot_be_reused(self):
         people = [member("alice"), member("bob")]
@@ -211,7 +225,8 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         records = evidence_set([delegate], [ballot], policy)
         records["authority:artel-1"] = evidence(
             "authority:artel-1", "delegation_authority",
-            "someone-else", "cell-1", "local_operations:approve_schedule",
+            "someone-else", delegate.participation_id,
+            "cell-1:local_operations:approve_schedule",
         )
         with self.assertRaisesRegex(CooperativeMarketError, "subject mismatch"):
             self.evaluate([delegate], [ballot], records, policy=policy,
@@ -254,8 +269,8 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
         ballots = [Ballot("alice", "approve", "ballot:alice")]
         records = evidence_set(people, ballots)
         records["ballot:alice"] = evidence(
-            "ballot:alice", "governance_ballot", "alice", "cell-1",
-            "local_operations:approve_schedule",
+            "ballot:alice", "governance_ballot", "alice",
+            DECISION_ID, "cell-1:local_operations:approve_schedule",
             verified_at=NOW + timedelta(seconds=1),
         )
         with self.assertRaisesRegex(CooperativeMarketError, "verified after"):
@@ -263,7 +278,7 @@ class CanonicalEvidenceGovernanceTests(unittest.TestCase):
 
     def test_malformed_evidence_digest_is_rejected_at_construction(self):
         with self.assertRaisesRegex(CooperativeMarketError, "64 lowercase hexadecimal"):
-            evidence("bad", "governance_ballot", "alice", "cell-1", "scope",
+            evidence("bad", "governance_ballot", "alice", DECISION_ID, "scope",
                      payload_sha256="not-a-digest")
 
     def test_evidence_mapping_key_must_match_record_reference(self):
