@@ -164,6 +164,15 @@ class ArtelMandateValidationTests(unittest.TestCase):
                 verified_evidence_refs=VERIFIED | {"budget:other"}, at=NOW,
             )
 
+
+    def test_malformed_evidence_collection_fails_closed(self):
+        with self.assertRaises(CooperativeMarketError):
+            validate_artel_work_package(
+                work_package=make_package(), mandate=make_mandate(),
+                organizations={"artel-1": make_org("artel")},
+                verified_evidence_refs="constitution:1", at=NOW,
+            )
+
     def test_bool_is_not_accepted_as_budget_or_revision_integer(self):
         with self.assertRaises(CooperativeMarketError):
             make_package(budget_minor=True)
@@ -249,6 +258,11 @@ class ArtelParticipationValidationTests(unittest.TestCase):
             effective_from=NOW - timedelta(days=1),
         )
         self.validate(existing=(other,))
+
+
+    def test_malformed_membership_evidence_collection_fails_closed(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(evidence=["consent:1", "rights:1", "constitution:1"])
 
     def test_participation_id_collision_is_rejected(self):
         existing = self.make_participation()
