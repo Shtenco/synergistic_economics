@@ -39,6 +39,9 @@
 - **[Прототип 2 — Обобщённая межотраслевая экономика](prototype/GENERAL_IO_ECONOMY.md)** — модель сети производства нескольких продуктов и множества фирм с несколькими поставщиками, производственными рецептами, потребительскими корзинами домохозяйств, изменением цен на товарных рынках, импортными предложениями, учётом запасов, физическими балансами и точным сохранением денежных средств. [Модель Python](prototype/io_economy.py) · [Тесты](prototype/test_io_economy.py)
 
 - **[SYNERGY Cellular Cooperative Market v1.0](research/SYNERGY_CELLULAR_COOPERATIVE_MARKET_V1.md)** — расширение SCCE: разделяет юридическую форму, координационные роли, участие, полномочия и экономические права; соединяет DAO-клетки, артели, консорциумы и конкурентный рынок без дублирования канонических реестров.
+- **[Сравнительный эксперимент Cellular Cooperative Market](research/CELLULAR_COOPERATIVE_MARKET_V1_EXPERIMENT_PROTOCOL.md)** — семь целевых институциональных режимов, парные seed-сравнения, стресс-сценарии и критерии опровержения; отдельно отмечено, какие режимы уже реализованы в Stage A/B, а какие ещё требуют разработки.
+- **[Аудит веток и решение по интеграции](research/BRANCH_LINEAGE_AND_INTEGRATION_DECISION_2026-11-24.md)** — происхождение веток, выбранная база и ограничения безопасного объединения.
+
 - **[Исполняемый контракт Cellular Cooperative Market](prototype/cellular_cooperative_market.py)** · [Тесты](prototype/test_cellular_cooperative_market.py).
 - **[Протокол сравнительного эксперимента CCM v1](research/CELLULAR_COOPERATIVE_MARKET_V1_EXPERIMENT_PROTOCOL.md)** — preregistration template, сравниваемые институциональные режимы, метрики, стресс-сценарии и критерии опровержения.
 - **[Аудит веток и решение по базовой линии от 24.11.2026](research/BRANCH_LINEAGE_AND_INTEGRATION_DECISION_2026-11-24.md)** — карта 19 веток, PR, commit lineage, интеграционные риски и обоснование выбранной базы.
