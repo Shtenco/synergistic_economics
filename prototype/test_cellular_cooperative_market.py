@@ -232,6 +232,7 @@ class GovernanceTests(unittest.TestCase):
                 Ballot("artel-b", "reject", "ballot:b"),
             ],
             organizations=self.organizations,
+            coordination_units=self.coordination_units,
             at=NOW,
         )
         self.assertFalse(result.approved)
