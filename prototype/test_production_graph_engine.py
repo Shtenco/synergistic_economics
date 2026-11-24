@@ -30,12 +30,12 @@ def graph(nodes, external=(), evidence=VERIFIED):
 
 
 class ProductionGraphTests(unittest.TestCase):
-    def validate(self, value, organizations=None):
+    def validate(self, value, organizations=None, verified=None):
         return validate_production_graph(
             value, organizations=organizations or {
                 "factory-a": org("factory-a"), "artel-b": org("artel-b", frozenset({"artel"})),
                 "factory-c": org("factory-c"),
-            }, verified_evidence_refs=value.evidence_refs,
+            }, verified_evidence_refs=value.evidence_refs if verified is None else verified,
         )
 
     def test_valid_linear_multi_organization_graph(self):
@@ -114,6 +114,12 @@ class ProductionGraphTests(unittest.TestCase):
                       evidence=frozenset())
         with self.assertRaises(CooperativeMarketError):
             self.validate(value)
+
+    def test_graph_level_evidence_must_be_verified(self):
+        value = graph([node("a", inputs={"raw"}, outputs={"x"})], external={"raw"},
+                      evidence=frozenset({"graph-manifest:1"}))
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(value, verified=frozenset())
 
     def test_bool_revision_rejected(self):
         with self.assertRaises(CooperativeMarketError):
