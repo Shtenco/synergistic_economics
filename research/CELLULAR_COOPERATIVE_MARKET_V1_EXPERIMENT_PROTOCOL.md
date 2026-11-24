@@ -25,6 +25,8 @@ This protocol does not presume that the hybrid wins. It is designed to identify 
 
 The arms must use identical production technology, endowments, demand, participant heterogeneity and shock sequences wherever the mechanism permits. If a mechanism requires extra coordination labour, legal services, monitoring, capital or information, those resources must be charged to that arm.
 
+**Implementation status at protocol publication:** the existing Stage-A `prototype/cellular_coordination.py` and Stage-B `prototype/scc_dynamic_economy.py` currently implement four regimes: market, central allocation, cooperative allocation and SCCE cellular coordination. These are reusable baselines, not the complete seven-arm experiment. The central allocator is an optimization benchmark, not a conventional firm hierarchy. Cooperative allocation is a first approximation to member cooperative/artel production, not a complete legal cooperative. Dedicated firm-hierarchy, scoped-consortium and cellular-cooperative hybrid mechanisms still require implementation and validation. No seven-arm comparative result may be reported until those three mechanisms are implemented and the full protocol is executed.
+
 ## 3. Experimental unit and assignment
 
 The primary unit is a simulated economic network over a fixed horizon. Each network contains multiple production organizations, households, resource suppliers, project opportunities and coordination relationships.
