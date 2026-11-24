@@ -333,3 +333,18 @@ The coordinator now persists each globally committed six-register event group in
 
 
 The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.
+
+
+## Prototype 7 — Cooperative Production Network
+
+- [cooperative_production_network.py](cooperative_production_network.py) — immutable capability, production-order and match-proposal contracts; resolver-gated work-order lifecycle with state-specific authority domains, optimistic revision checks and idempotency replay detection.
+- [test_cooperative_production_network.py](test_cooperative_production_network.py) — adversarial checks for organization/capability binding, quantity/unit/schedule constraints, evidence verification, authority separation, lifecycle transitions, stale revisions and replay.
+- [CPN specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md) — architecture, canonical authority map, multi-artel production graphs, risk/evidence requirements, AI boundaries and research hypotheses.
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_cooperative_production_network.py' -v
+```
+
+The CPN prototype is non-authoritative and in-memory. Durable idempotency, atomic compare-and-swap, authenticated evidence resolution, inventory reservations, contract acceptance, labour authorization, delivery/quality attestation and settlement remain external authority responsibilities.
