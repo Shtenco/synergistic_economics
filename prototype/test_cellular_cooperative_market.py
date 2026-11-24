@@ -23,6 +23,7 @@ from cellular_cooperative_market import (
     validate_coordination_units,
     validate_market_match,
     validate_network,
+    validate_participations,
 )
 
 
@@ -95,6 +96,37 @@ class OrganizationOntologyTests(unittest.TestCase):
         )
         with self.assertRaises(CooperativeMarketError):
             validate_network(organizations, [relation, relation])
+
+    def test_consortium_is_a_coordination_unit_not_a_required_legal_entity(self):
+        consortium = CoordinationUnit("consortium-1", "consortium", "agreement:consortium-1")
+        validate_coordination_units({"consortium-1": consortium}, {})
+        self.assertIsNone(consortium.legal_entity_id)
+
+    def test_active_participation_requires_existing_active_host(self):
+        p = member("alice", "missing-host")
+        with self.assertRaises(CooperativeMarketError):
+            validate_participations([p], {}, {})
+
+    def test_active_participation_cannot_attach_to_suspended_host(self):
+        host = CoordinationUnit("cell-1", "dao_cell", "charter:cell-1", status="suspended")
+        p = member("alice", "cell-1")
+        with self.assertRaises(CooperativeMarketError):
+            validate_participations([p], {}, {"cell-1": host})
+
+    def test_duplicate_participation_id_is_rejected(self):
+        p = member("alice", "cell-1")
+        host = CoordinationUnit("cell-1", "dao_cell", "charter:cell-1")
+        with self.assertRaises(CooperativeMarketError):
+            validate_participations([p, p], {}, {"cell-1": host})
+
+    def test_delegate_principal_must_resolve_to_active_organization(self):
+        host = CoordinationUnit("cell-1", "federation", "charter:federation")
+        delegate = member(
+            "delegate-a", "cell-1", capacity="organization_delegate",
+            represented_organization_id="missing-org",
+        )
+        with self.assertRaises(CooperativeMarketError):
+            validate_participations([delegate], {}, {"cell-1": host})
 
 
 class GovernanceTests(unittest.TestCase):
