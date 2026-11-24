@@ -2,7 +2,7 @@
 
 The canonical authority adapter must resolve and verify each record before
 passing it here. This module validates the adapter's typed assertions and
-binds them to the exact subject, resource, scope and decision time.
+binds them to the exact subject, participation, decision and time.
 
 A CanonicalEvidence instance is NOT a signature, credential or trust root.
 Constructing one in application code does not prove authority. Production
@@ -128,6 +128,7 @@ def _require_evidence(
 
 def evaluate_governance_with_canonical_evidence(
     *,
+    decision_id: str,
     policy: GovernancePolicy,
     decision_domain: str,
     action: str,
@@ -140,17 +141,22 @@ def evaluate_governance_with_canonical_evidence(
 ) -> GovernanceResult:
     """Fail-closed governance evaluation using resolver-verified evidence.
 
-    Required evidence:
-    - governance_policy for the exact governing subject and domain/action;
-    - participation_consent and participation_rights for each active record;
-    - delegation_authority for each active organization delegate;
-    - governance_ballot for every submitted ballot.
+    Evidence is bound to exact participation IDs and an immutable decision ID:
+    - governance_policy: governing subject + domain/action;
+    - participation_consent/rights: subject + participation ID + host/capacity;
+    - delegation_authority: represented organization + delegate participation
+      + exact governing subject/domain/action;
+    - governance_ballot: voter + decision ID + exact governing subject/domain/action.
 
     The function only evaluates a proposal. It does not execute it, persist a
     vote, change membership, transfer title, post a journal or settle funds.
     """
     instant = _utc(at, "at")
-    decision_scope = f"{_required_text(decision_domain, 'decision_domain')}:{_required_text(action, 'action')}"
+    decision_id = _required_text(decision_id, "decision_id")
+    domain = _required_text(decision_domain, "decision_domain")
+    action_name = _required_text(action, "action")
+    decision_scope = f"{domain}:{action_name}"
+    ballot_scope = f"{policy.governing_subject_id}:{decision_scope}"
 
     # Reject malformed resolver output rather than silently ignoring it.
     for key, record in verified_evidence.items():
@@ -184,13 +190,14 @@ def evaluate_governance_with_canonical_evidence(
         and p.active_at(instant)
     ]
     for participation in active:
-        participation_scope = participation.capacity
+        participation_resource = participation.participation_id
+        participation_scope = f"{participation.host_id}:{participation.capacity}"
         _require_evidence(
             verified_evidence,
             evidence_ref=participation.consent_ref,
             evidence_kind="participation_consent",
             subject_id=participation.subject_id,
-            resource_id=participation.host_id,
+            resource_id=participation_resource,
             scope=participation_scope,
             at=instant,
         )
@@ -199,7 +206,7 @@ def evaluate_governance_with_canonical_evidence(
             evidence_ref=participation.rights_ref,
             evidence_kind="participation_rights",
             subject_id=participation.subject_id,
-            resource_id=participation.host_id,
+            resource_id=participation_resource,
             scope=participation_scope,
             at=instant,
         )
@@ -209,8 +216,8 @@ def evaluate_governance_with_canonical_evidence(
                 evidence_ref=participation.delegation_authority_ref,
                 evidence_kind="delegation_authority",
                 subject_id=participation.represented_organization_id,
-                resource_id=participation.host_id,
-                scope=decision_scope,
+                resource_id=participation_resource,
+                scope=ballot_scope,
                 at=instant,
             )
 
@@ -224,8 +231,8 @@ def evaluate_governance_with_canonical_evidence(
             evidence_ref=ballot.evidence_ref,
             evidence_kind="governance_ballot",
             subject_id=ballot.voter_id,
-            resource_id=policy.governing_subject_id,
-            scope=decision_scope,
+            resource_id=decision_id,
+            scope=ballot_scope,
             at=instant,
         )
 
