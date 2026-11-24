@@ -15,10 +15,9 @@ from datetime import datetime, timezone
 from typing import Iterable, Mapping, Sequence
 
 
-ROLE_KINDS = frozenset({
-    "artel", "dao_cell", "consortium", "federation", "enterprise",
-    "project_vehicle", "shared_infrastructure_operator",
-})
+ROLE_KINDS = frozenset({"artel", "enterprise", "project_vehicle", "shared_infrastructure_operator"})
+COORDINATION_UNIT_KINDS = frozenset({"dao_cell", "federation", "project_cell"})
+HOST_KINDS = frozenset({"organization", "coordination_unit"})
 ORG_STATUSES = frozenset({"active", "suspended", "retired"})
 PARTICIPATION_STATUSES = frozenset({"active", "suspended", "exited"})
 RELATION_KINDS = frozenset({
@@ -79,10 +78,30 @@ class EconomicOrganization:
 
 
 @dataclass(frozen=True)
+class CoordinationUnit:
+    unit_id: str
+    unit_kind: str
+    charter_ref: str
+    legal_entity_id: str | None = None
+    status: str = "active"
+
+    def __post_init__(self):
+        _text(self.unit_id, "unit_id")
+        _text(self.charter_ref, "charter_ref")
+        if self.unit_kind not in COORDINATION_UNIT_KINDS:
+            raise CooperativeMarketError("unsupported coordination unit kind")
+        if self.legal_entity_id is not None:
+            _text(self.legal_entity_id, "legal_entity_id")
+        if self.status not in ORG_STATUSES:
+            raise CooperativeMarketError("unsupported coordination unit status")
+
+
+@dataclass(frozen=True)
 class Participation:
     participation_id: str
     subject_id: str
-    organization_id: str
+    host_id: str
+    host_kind: str
     capacity: str
     consent_ref: str
     rights_ref: str
@@ -91,9 +110,11 @@ class Participation:
     status: str = "active"
 
     def __post_init__(self):
-        for field in ("participation_id", "subject_id", "organization_id",
+        for field in ("participation_id", "subject_id", "host_id",
                       "capacity", "consent_ref", "rights_ref"):
             _text(getattr(self, field), field)
+        if self.host_kind not in HOST_KINDS:
+            raise CooperativeMarketError("host_kind must be organization or coordination_unit")
         _instant(self.effective_from, "effective_from")
         if self.effective_to is not None:
             if _instant(self.effective_to, "effective_to") <= _instant(self.effective_from, "effective_from"):
@@ -136,7 +157,8 @@ class OrganizationRelation:
 @dataclass(frozen=True)
 class GovernancePolicy:
     policy_id: str
-    organization_id: str
+    governing_subject_id: str
+    governing_subject_kind: str
     allowed_domains: frozenset[str]
     voting_rule: str
     quorum_bps: int
@@ -144,8 +166,10 @@ class GovernancePolicy:
     policy_ref: str
 
     def __post_init__(self):
-        for field in ("policy_id", "organization_id", "voting_rule", "policy_ref"):
+        for field in ("policy_id", "governing_subject_id", "voting_rule", "policy_ref"):
             _text(getattr(self, field), field)
+        if self.governing_subject_kind not in HOST_KINDS:
+            raise CooperativeMarketError("governing_subject_kind must be organization or coordination_unit")
         if not self.allowed_domains:
             raise CooperativeMarketError("allowed_domains cannot be empty")
         if self.voting_rule not in {"one_member_one_vote", "one_organization_one_vote"}:
@@ -187,22 +211,28 @@ def evaluate_governance(
     participations: Sequence[Participation],
     ballots: Sequence[Ballot],
     organizations: Mapping[str, EconomicOrganization],
+    coordination_units: Mapping[str, CoordinationUnit],
     at: datetime,
 ) -> GovernanceResult:
     """Evaluate a vote; never executes the proposal or changes external state."""
     _text(decision_domain, "decision_domain")
     _text(action, "action")
     _instant(at, "at")
-    org = organizations.get(policy.organization_id)
-    if org is None or org.status != "active":
-        raise CooperativeMarketError("governing organization is missing or inactive")
+    if policy.governing_subject_kind == "organization":
+        governing = organizations.get(policy.governing_subject_id)
+    else:
+        governing = coordination_units.get(policy.governing_subject_id)
+    if governing is None or governing.status != "active":
+        raise CooperativeMarketError("governing subject is missing or inactive")
     if decision_domain not in policy.allowed_domains:
         raise CooperativeMarketError("decision domain is outside the policy mandate")
     if action in PROTECTED_ACTIONS:
         raise CooperativeMarketError("protected action requires a separate legal/authority workflow")
 
     active = [p for p in participations
-              if p.organization_id == policy.organization_id and p.active_at(at)]
+              if p.host_id == policy.governing_subject_id
+              and p.host_kind == policy.governing_subject_kind
+              and p.active_at(at)]
     if policy.voting_rule == "one_member_one_vote":
         eligible = {p.subject_id for p in active if p.capacity != "organization_delegate"}
     else:
@@ -429,6 +459,17 @@ def validate_market_match(
         if organization is None or organization.status != "active":
             raise CooperativeMarketError("market counterparty is missing or inactive")
     # A reference and consent proof do not create a contract or settle a deal.
+
+
+def validate_coordination_units(
+    units: Mapping[str, CoordinationUnit],
+    organizations: Mapping[str, EconomicOrganization],
+) -> None:
+    for unit_id, unit in units.items():
+        if unit_id != unit.unit_id:
+            raise CooperativeMarketError("coordination-unit map key does not match ID")
+        if unit.legal_entity_id is not None and unit.legal_entity_id not in organizations:
+            raise CooperativeMarketError("coordination unit references an unknown legal entity")
 
 
 def validate_network(
