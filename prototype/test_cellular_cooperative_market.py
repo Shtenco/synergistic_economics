@@ -41,7 +41,7 @@ def org(org_id, *roles, legal_form="company", status="active"):
     )
 
 
-def member(pid, host_id, capacity="member", status="active", host_kind="coordination_unit", represented_organization_id=None):
+def member(pid, host_id, capacity="member", status="active", host_kind="coordination_unit", represented_organization_id=None, delegation_authority_ref=None):
     return Participation(
         participation_id=f"p:{pid}:{host_id}",
         subject_id=pid,
@@ -53,6 +53,7 @@ def member(pid, host_id, capacity="member", status="active", host_kind="coordina
         effective_from=NOW - timedelta(days=1),
         status=status,
         represented_organization_id=represented_organization_id,
+        delegation_authority_ref=delegation_authority_ref,
     )
 
 
@@ -251,8 +252,8 @@ class GovernanceTests(unittest.TestCase):
             "artel-b": org("artel-b", "artel"),
         }
         delegates = [
-            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
-            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-b"),
+            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a", delegation_authority_ref="authority:artel-a"),
+            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-b", delegation_authority_ref="authority:artel-b"),
         ]
         result = evaluate_governance(
             policy=policy,
@@ -266,6 +267,7 @@ class GovernanceTests(unittest.TestCase):
             organizations=self.organizations,
             coordination_units=self.coordination_units,
             at=NOW,
+            verified_delegation_authority_refs=frozenset({"authority:artel-a", "authority:artel-b"}),
         )
         self.assertFalse(result.approved)
         self.assertEqual(result.eligible_count, 2)
@@ -274,6 +276,31 @@ class GovernanceTests(unittest.TestCase):
     def test_organization_vote_requires_explicit_active_delegate_principal(self):
         with self.assertRaises(CooperativeMarketError):
             member("delegate-a", "cell-1", capacity="organization_delegate")
+
+    def test_unverified_delegation_authority_fails_closed(self):
+        policy = GovernancePolicy(
+            "policy-org", "cell-1", "coordination_unit",
+            frozenset({"federation_budget"}),
+            frozenset({"approve_shared_budget"}),
+            "one_organization_one_vote", 5000, 5000, "policy:org",
+        )
+        organizations = {"artel-a": org("artel-a", "artel")}
+        delegates = [
+            member("delegate-a", "cell-1", capacity="organization_delegate",
+                   represented_organization_id="artel-a",
+                   delegation_authority_ref="authority:unverified"),
+        ]
+        with self.assertRaises(CooperativeMarketError):
+            evaluate_governance(
+                policy=policy,
+                decision_domain="federation_budget",
+                action="approve_shared_budget",
+                participations=delegates,
+                ballots=[],
+                organizations=organizations,
+                coordination_units=self.coordination_units,
+                at=NOW,
+            )
 
     def test_duplicate_delegates_for_same_organization_are_rejected(self):
         policy = GovernancePolicy(
@@ -284,8 +311,8 @@ class GovernanceTests(unittest.TestCase):
         )
         organizations = {"artel-a": org("artel-a", "artel")}
         delegates = [
-            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
-            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
+            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a", delegation_authority_ref="authority:artel-a"),
+            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a", delegation_authority_ref="authority:artel-a-duplicate"),
         ]
         with self.assertRaises(CooperativeMarketError):
             evaluate_governance(
