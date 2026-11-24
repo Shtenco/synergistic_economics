@@ -47,6 +47,7 @@ class ProductionCapability:
     available_to: datetime
     asset_authority_ref: str
     evidence_refs: tuple[str, ...]
+    production_mandate_ref: str | None = None
     revision: int = 0
     status: str = "active"
 
@@ -60,6 +61,8 @@ class ProductionCapability:
         start, end = _instant(self.available_from, "available_from"), _instant(self.available_to, "available_to")
         if end <= start:
             raise CooperativeMarketError("capability availability interval must be positive")
+        if self.production_mandate_ref is not None:
+            _text(self.production_mandate_ref, "production_mandate_ref")
         if not self.evidence_refs or any(not isinstance(x, str) or not x.strip() for x in self.evidence_refs):
             raise CooperativeMarketError("capability evidence_refs must be non-empty")
         if len(self.evidence_refs) != len(set(self.evidence_refs)):
@@ -123,12 +126,15 @@ class ProductionMatchProposal:
     expected_order_revision: int
     expected_capability_revision: int
     bilateral_terms_ref: str
+    provider_work_package_ref: str | None = None
 
     def __post_init__(self):
         for field in ("proposal_id", "order_id", "router_match_id", "router_offer_id",
                       "requester_organization_id", "provider_organization_id", "capability_id",
                       "unit", "cost_evidence_ref", "schedule_evidence_ref", "bilateral_terms_ref"):
             _text(getattr(self, field), field)
+        if self.provider_work_package_ref is not None:
+            _text(self.provider_work_package_ref, "provider_work_package_ref")
         if self.requester_organization_id == self.provider_organization_id:
             raise CooperativeMarketError("production proposal requires distinct counterparties")
         _positive_int(self.quantity, "quantity")
@@ -163,6 +169,10 @@ def validate_production_match(
         organization = organizations.get(org_id)
         if organization is None or organization.status != "active":
             raise CooperativeMarketError("production counterparty is missing or inactive")
+    provider = organizations[capability.provider_organization_id]
+    if "artel" in provider.coordination_roles:
+        if not capability.production_mandate_ref or not proposal.provider_work_package_ref:
+            raise CooperativeMarketError("artel production requires an authorized mandate and Artel Engine work-package reference")
     if proposal.order_id != order.order_id or proposal.capability_id != capability.capability_id:
         raise CooperativeMarketError("proposal does not bind the supplied order and capability")
     if proposal.requester_organization_id != order.requester_organization_id:
@@ -192,6 +202,10 @@ def validate_production_match(
                 proposal.cost_evidence_ref, proposal.schedule_evidence_ref,
                 proposal.bilateral_terms_ref, order.quality_criteria_ref,
                 order.contract_terms_ref}
+    if capability.production_mandate_ref is not None:
+        required.add(capability.production_mandate_ref)
+    if proposal.provider_work_package_ref is not None:
+        required.add(proposal.provider_work_package_ref)
     if not required.issubset(verified_evidence_refs):
         raise CooperativeMarketError("one or more production, asset, cost, schedule or terms references are unverified")
     # Router match ID is deliberately opaque here: the canonical router remains its authority.
