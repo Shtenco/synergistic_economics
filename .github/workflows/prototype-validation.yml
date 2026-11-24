@@ -75,14 +75,14 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --coordination-frontier --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
       - name: Prepare Stage-C paired evidence directory
         run: mkdir -p /tmp/scc-stage-c-results
-      - name: Run Stage-C1 household distribution experiment (20 paired seeds)
-        run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.5 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-50.json
+      - name: Run Stage-C1 household distribution experiment (100 paired seeds)
+        run: python prototype/scc_household_experiment.py --runs 100 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.5 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-50.json
       - name: Run Stage-C1 household floor sensitivity (25 percent floor, 20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.25 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-25.json
       - name: Run Stage-C1 household floor sensitivity (75 percent floor, 20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.75 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-75.json
-      - name: Run Stage-C2-A2 endogenous household feedback experiment (20 paired seeds)
-        run: python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only --output /tmp/scc-stage-c-results/stage-c2-a2-endogenous-households.json
+      - name: Run Stage-C2-A2 endogenous household feedback experiment (100 paired seeds)
+        run: python prototype/scc_endogenous_household_experiment.py --runs 100 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only --output /tmp/scc-stage-c-results/stage-c2-a2-endogenous-households.json
       - name: Upload Stage-C paired experiment evidence
         uses: actions/upload-artifact@v4
         with:
