@@ -79,7 +79,7 @@ This is a local allocation/coordination kernel, not yet a complete dynamic econo
 Run from the repository root:
 
 ```bash
-python -m unittest prototype.test_cellular_cooperative_market -v
+python -m unittest discover -s prototype -p 'test_cellular_cooperative_market.py' -v
 ```
 
 This module is a proposal/validation layer only. It does not create legal entities, execute votes, form contracts, infer ownership, post journals, reserve stock, custody funds or settle payments. It consumes references from the canonical economic, legal, labour, marketplace and financial authorities.
