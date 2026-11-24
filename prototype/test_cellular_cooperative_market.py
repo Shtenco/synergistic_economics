@@ -1,3 +1,5 @@
+"""Regression tests for the cooperative-market domain contract."""
+
 import unittest
 from datetime import datetime, timedelta, timezone
 
