@@ -108,6 +108,7 @@ class Participation:
     effective_from: datetime
     effective_to: datetime | None = None
     status: str = "active"
+    represented_organization_id: str | None = None
 
     def __post_init__(self):
         for field in ("participation_id", "subject_id", "host_id",
@@ -115,6 +116,12 @@ class Participation:
             _text(getattr(self, field), field)
         if self.host_kind not in HOST_KINDS:
             raise CooperativeMarketError("host_kind must be organization or coordination_unit")
+        if self.capacity == "organization_delegate":
+            if self.host_kind != "coordination_unit":
+                raise CooperativeMarketError("organization delegates may only participate in coordination units")
+            _text(self.represented_organization_id, "represented_organization_id")
+        elif self.represented_organization_id is not None:
+            raise CooperativeMarketError("represented_organization_id is only valid for organization delegates")
         _instant(self.effective_from, "effective_from")
         if self.effective_to is not None:
             if _instant(self.effective_to, "effective_to") <= _instant(self.effective_from, "effective_from"):
@@ -233,10 +240,22 @@ def evaluate_governance(
               if p.host_id == policy.governing_subject_id
               and p.host_kind == policy.governing_subject_kind
               and p.active_at(at)]
+    participation_ids = [p.participation_id for p in active]
+    if len(participation_ids) != len(set(participation_ids)):
+        raise CooperativeMarketError("duplicate active participation ID")
+
     if policy.voting_rule == "one_member_one_vote":
         eligible = {p.subject_id for p in active if p.capacity != "organization_delegate"}
     else:
-        eligible = {p.subject_id for p in active if p.capacity == "organization_delegate"}
+        delegates = [p for p in active if p.capacity == "organization_delegate"]
+        represented = [p.represented_organization_id for p in delegates]
+        if len(represented) != len(set(represented)):
+            raise CooperativeMarketError("an organization may have only one active delegate per decision")
+        for organization_id in represented:
+            organization = organizations.get(organization_id)
+            if organization is None or organization.status != "active":
+                raise CooperativeMarketError("delegated organization is missing or inactive")
+        eligible = set(represented)
     if not eligible:
         raise CooperativeMarketError("no eligible voters")
 
