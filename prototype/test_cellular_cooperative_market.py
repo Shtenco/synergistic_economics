@@ -40,7 +40,7 @@ def org(org_id, *roles, legal_form="company", status="active"):
     )
 
 
-def member(pid, host_id, capacity="member", status="active", host_kind="coordination_unit"):
+def member(pid, host_id, capacity="member", status="active", host_kind="coordination_unit", represented_organization_id=None):
     return Participation(
         participation_id=f"p:{pid}:{host_id}",
         subject_id=pid,
@@ -51,6 +51,7 @@ def member(pid, host_id, capacity="member", status="active", host_kind="coordina
         rights_ref=f"rights:{pid}:{host_id}",
         effective_from=NOW - timedelta(days=1),
         status=status,
+        represented_organization_id=represented_organization_id,
     )
 
 
@@ -194,9 +195,13 @@ class GovernanceTests(unittest.TestCase):
             frozenset({"federation_budget"}),
             "one_organization_one_vote", 5000, 5001, "policy:org",
         )
+        self.organizations = {
+            "artel-a": org("artel-a", "artel"),
+            "artel-b": org("artel-b", "artel"),
+        }
         delegates = [
-            member("artel-a", "cell-1", capacity="organization_delegate"),
-            member("artel-b", "cell-1", capacity="organization_delegate"),
+            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
+            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-b"),
         ]
         result = evaluate_governance(
             policy=policy,
@@ -213,6 +218,33 @@ class GovernanceTests(unittest.TestCase):
         self.assertFalse(result.approved)
         self.assertEqual(result.eligible_count, 2)
         self.assertEqual(result.approval_bps, 5000)
+
+    def test_organization_vote_requires_explicit_active_delegate_principal(self):
+        with self.assertRaises(CooperativeMarketError):
+            member("delegate-a", "cell-1", capacity="organization_delegate")
+
+    def test_duplicate_delegates_for_same_organization_are_rejected(self):
+        policy = GovernancePolicy(
+            "policy-org", "cell-1", "coordination_unit",
+            frozenset({"federation_budget"}),
+            "one_organization_one_vote", 5000, 5000, "policy:org",
+        )
+        organizations = {"artel-a": org("artel-a", "artel")}
+        delegates = [
+            member("delegate-a", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
+            member("delegate-b", "cell-1", capacity="organization_delegate", represented_organization_id="artel-a"),
+        ]
+        with self.assertRaises(CooperativeMarketError):
+            evaluate_governance(
+                policy=policy,
+                decision_domain="federation_budget",
+                action="approve_shared_budget",
+                participations=delegates,
+                ballots=[],
+                organizations=organizations,
+                coordination_units=self.coordination_units,
+                at=NOW,
+            )
 
 
 class ConsortiumTests(unittest.TestCase):
