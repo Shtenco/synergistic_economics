@@ -10,7 +10,7 @@ from cooperative_production_network import (
 
 NOW = datetime(2026, 11, 25, 12, tzinfo=timezone.utc)
 VERIFIED = frozenset({
-    "asset-authority:1", "asset-evidence:1", "cost:1", "schedule:1",
+    "asset-authority:1", "asset-evidence:1", "mandate:1", "work-package:1", "cost:1", "schedule:1",
     "bilateral-terms:1", "quality:1", "contract-terms:1",
 })
 
@@ -42,7 +42,7 @@ def capability(**changes):
         capability_refs=frozenset({"cnc", "milling"}), capacity=8, unit="units",
         available_from=NOW, available_to=NOW + timedelta(days=8),
         asset_authority_ref="asset-authority:1",
-        evidence_refs=("asset-evidence:1",), revision=3, status="active",
+        evidence_refs=("asset-evidence:1",), production_mandate_ref="mandate:1", revision=3, status="active",
     )
     values.update(changes)
     return ProductionCapability(**values)
@@ -58,7 +58,7 @@ def proposal(**changes):
         scheduled_to=NOW + timedelta(days=3),
         cost_evidence_ref="cost:1", schedule_evidence_ref="schedule:1",
         expected_order_revision=2, expected_capability_revision=3,
-        bilateral_terms_ref="bilateral-terms:1",
+        bilateral_terms_ref="bilateral-terms:1", provider_work_package_ref="work-package:1",
     )
     values.update(changes)
     return ProductionMatchProposal(**values)
@@ -107,6 +107,12 @@ class ProductionMatchTests(unittest.TestCase):
             self.validate(p=proposal(expected_order_revision=1))
         with self.assertRaises(CooperativeMarketError):
             self.validate(p=proposal(expected_capability_revision=2))
+
+    def test_artel_requires_mandate_and_work_package_refs(self):
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(c=capability(production_mandate_ref=None))
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(p=proposal(provider_work_package_ref=None))
 
     def test_suspended_capability_rejected(self):
         with self.assertRaises(CooperativeMarketError):
