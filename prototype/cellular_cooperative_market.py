@@ -167,6 +167,7 @@ class GovernancePolicy:
     governing_subject_id: str
     governing_subject_kind: str
     allowed_domains: frozenset[str]
+    allowed_actions: frozenset[str]
     voting_rule: str
     quorum_bps: int
     approval_bps: int
@@ -177,8 +178,10 @@ class GovernancePolicy:
             _text(getattr(self, field), field)
         if self.governing_subject_kind not in HOST_KINDS:
             raise CooperativeMarketError("governing_subject_kind must be organization or coordination_unit")
-        if not self.allowed_domains:
-            raise CooperativeMarketError("allowed_domains cannot be empty")
+        if not self.allowed_domains or any(not isinstance(x, str) or not x.strip() for x in self.allowed_domains):
+            raise CooperativeMarketError("allowed_domains must contain non-empty values")
+        if not self.allowed_actions or any(not isinstance(x, str) or not x.strip() for x in self.allowed_actions):
+            raise CooperativeMarketError("allowed_actions must contain non-empty values")
         if self.voting_rule not in {"one_member_one_vote", "one_organization_one_vote"}:
             raise CooperativeMarketError("unsupported voting_rule")
         _basis_points(self.quorum_bps, "quorum_bps")
@@ -233,6 +236,8 @@ def evaluate_governance(
         raise CooperativeMarketError("governing subject is missing or inactive")
     if decision_domain not in policy.allowed_domains:
         raise CooperativeMarketError("decision domain is outside the policy mandate")
+    if action not in policy.allowed_actions:
+        raise CooperativeMarketError("action is outside the explicit policy allowlist")
     if action in PROTECTED_ACTIONS:
         raise CooperativeMarketError("protected action requires a separate legal/authority workflow")
 
