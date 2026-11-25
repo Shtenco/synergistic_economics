@@ -70,6 +70,24 @@ python -m unittest discover -s prototype -p 'test_*.py' -v
 
 This is a local allocation/coordination kernel, not yet a complete dynamic economy. Its service-value metrics are diagnostic and must not be interpreted as GDP or empirical welfare.
 
+## Prototype 3.5 — Cellular Cooperative Market Domain Contract
+
+- [cellular_cooperative_market.py](cellular_cooperative_market.py) — non-authoritative domain contract separating legal form, coordination roles, non-exclusive participation, scoped DAO governance, consortium agreements, market-match references and distribution proposals.
+- [test_cellular_cooperative_market.py](test_cellular_cooperative_market.py) — standard-library tests for ontology separation, overlapping participation, mandate boundaries, member/delegate voting, consortium validity, exact minor-unit allocation, retained residuals and market-counterparty references.
+- [cellular_cooperative_evidence.py](cellular_cooperative_evidence.py) — strict read-only evidence gate binding consent and rights to exact participation IDs, delegation to the represented organization and mandate, and ballots to immutable decision IDs; validates expiry, revocation and anti-replay constraints.
+- [test_cellular_cooperative_evidence.py](test_cellular_cooperative_evidence.py) — negative and positive tests for canonical evidence binding, time validity, revocation and cross-decision replay.
+- [Authority-evidence boundary](../research/CELLULAR_COOPERATIVE_MARKET_AUTHORITY_EVIDENCE.md) — trust assumptions, adapter responsibilities and production integration limitations.
+- [Research architecture](../research/SYNERGY_CELLULAR_COOPERATIVE_MARKET_V1.md) — institutional design, fairness architecture, anti-capture controls, authority map, hypotheses and comparative experiment plan.
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_cellular_cooperative_market.py' -v
+python -m unittest discover -s prototype -p 'test_cellular_cooperative_evidence.py' -v
+```
+
+This module is a proposal/validation layer only. It does not create legal entities, execute votes, form contracts, infer ownership, post journals, reserve stock, custody funds or settle payments. It consumes references from the canonical economic, legal, labour, marketplace and financial authorities.
+
 ## Prototype 4 — Stage-B Dynamic SCCE Physical Economy
 
 - [scc_dynamic_economy.py](scc_dynamic_economy.py) — seven-cell, multi-period physical economy with endogenous production plans, input recipes, local inventories, raw-resource regeneration, intermediate procurement, final consumption, explicit cellular message relay and packet/record-level coordination-cost accounting. Each cell's trade consent, relay consent and counterparty allowlist are carried from its CellSpec into the matching protocol.
@@ -315,3 +333,76 @@ The coordinator now persists each globally committed six-register event group in
 
 
 The coordinator also exposes reconcile_event_stream(opening_positions, closing_positions), which reads only the verified committed-prefix and routes its canonical T/V/O movement declarations through the shared period reconciliation kernel. Current supported movement mappings remain physical flow endpoints and financial instrument asset positions; the method fails closed if any participant has neither a valid movement declaration nor an explicit no-effect declaration.
+
+
+## Prototype 7 — Cooperative Production Network
+
+- [cooperative_production_network.py](cooperative_production_network.py) — immutable capability, production-order and match-proposal contracts; resolver-gated work-order lifecycle with state-specific authority domains, optimistic revision checks and idempotency replay detection.
+- [test_cooperative_production_network.py](test_cooperative_production_network.py) — adversarial checks for organization/capability binding, quantity/unit/schedule constraints, evidence verification, authority separation, lifecycle transitions, stale revisions and replay.
+- [CPN specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md) — architecture, canonical authority map, multi-artel production graphs, risk/evidence requirements, AI boundaries and research hypotheses.
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_cooperative_production_network.py' -v
+```
+
+The CPN prototype is non-authoritative and in-memory. Durable idempotency, atomic compare-and-swap, authenticated evidence resolution, inventory reservations, contract acceptance, labour authorization, delivery/quality attestation and settlement remain external authority responsibilities.
+
+
+## Prototype 8 — Production Graph Engine
+
+- [production_graph_engine.py](production_graph_engine.py) — validates multi-organization production DAGs, unique output provenance, declared external inputs, predecessor consistency, artel mandate/work-package binding, verified evidence and deterministic topological order.
+- [test_production_graph_engine.py](test_production_graph_engine.py) — adversarial checks for cycles, duplicate IDs/outputs, missing inputs, false dependencies, inactive executors, missing artel authority and unverified evidence.
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_production_graph_engine.py' -v
+```
+
+This validator establishes graph structure only. It is not a scheduler, inventory ledger, capacity reservation engine, contract system or production execution controller.
+
+
+## Prototype 9 — Capacity & Resource Network
+
+- [capacity_resource_network.py](capacity_resource_network.py) — validates time-bounded resource claims against resolver-supplied canonical capacity snapshots; checks freshness, revision, evidence, capabilities, units, availability windows and peak concurrent demand. Its graph adapter binds exact ProductionGraph node requirement references to claim bundles and aggregates all claims before capacity checks.
+- [test_capacity_resource_network.py](test_capacity_resource_network.py) — adversarial tests for overbooking within a bundle and across graph nodes, adjacent non-overlapping intervals, stale snapshots/revisions, missing evidence, mutable input sets and malformed inputs.
+- [Capacity & Resource Network specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md#35-capacity--resource-network).
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_capacity_resource_network.py' -v
+```
+
+This is a read-only validation layer. It does not own asset identities, inspect unreflected reservations, schedule resources, convert units, book capacity, assign workers, create contracts or guarantee availability. Only a verified receipt from the relevant authoritative service confirms a reservation.
+
+
+## Prototype 10 — Temporary Production Consortium Engine
+
+- [temporary_production_consortium.py](temporary_production_consortium.py) — composes an existing canonical CooperationAgreement, one ProductionOrder and an exact ProductionGraph revision into a time-bounded execution plan; validates participant authority/commitment references, role scopes and one-to-one graph-node responsibility.
+- [test_temporary_production_consortium.py](test_temporary_production_consortium.py) — adversarial tests for agreement/order/graph pinning, inactive participants, expired scope, forged commitments, duplicate node assignments and missing execution coverage.
+- [Temporary Production Consortium specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md#51-temporary-production-consortium-engine).
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_temporary_production_consortium.py' -v
+```
+
+This is a read-only composition validator. It does not create a legal entity or agreement, reserve resources, sign contracts, allocate liability, authorize labour/IP, accept delivery or settle claims.
+
+
+## Prototype 11 — Production Execution Preflight
+
+- [production_execution_preflight.py](production_execution_preflight.py) — composes the existing temporary-consortium validator and graph-wide resource-capacity validator into one immutable, exact-revision preflight receipt.
+- The receipt binds one plan, canonical agreement, production order, graph revision, resolver-verified evidence set and the capacity snapshot revisions returned by CRN.
+- This is a read-only point-in-time preflight. It is not an order-state transition, resource reservation, labour authorization, contract, dispatch, delivery acceptance or settlement.
+
+
+Run the preflight integration regressions from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_production_execution_preflight.py' -v
+```

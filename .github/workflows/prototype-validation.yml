@@ -1,11 +1,13 @@
 name: Prototype validation
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: false
 
 on:
   push:
+    branches:
+      - main
     paths:
       - "prototype/**"
       - "research/audits/sfc_scce_a2_4_2026-11-11/**"
@@ -75,14 +77,14 @@ jobs:
         run: python prototype/scc_dynamic_economy.py --coordination-frontier --monte-carlo 20 --shock compound --periods 24 --hops 2 --summary-only
       - name: Prepare Stage-C paired evidence directory
         run: mkdir -p /tmp/scc-stage-c-results
-      - name: Run Stage-C1 household distribution experiment (20 paired seeds)
-        run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.5 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-50.json
+      - name: Run Stage-C1 household distribution experiment (100 paired seeds)
+        run: python prototype/scc_household_experiment.py --runs 100 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.5 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-50.json
       - name: Run Stage-C1 household floor sensitivity (25 percent floor, 20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.25 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-25.json
       - name: Run Stage-C1 household floor sensitivity (75 percent floor, 20 paired seeds)
         run: python prototype/scc_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --essential-floor-fraction 0.75 --summary-only --output /tmp/scc-stage-c-results/stage-c1-floor-75.json
-      - name: Run Stage-C2-A2 endogenous household feedback experiment (20 paired seeds)
-        run: python prototype/scc_endogenous_household_experiment.py --runs 20 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only --output /tmp/scc-stage-c-results/stage-c2-a2-endogenous-households.json
+      - name: Run Stage-C2-A2 endogenous household feedback experiment (100 paired seeds)
+        run: python prototype/scc_endogenous_household_experiment.py --runs 100 --shock compound --periods 24 --hops 2 --households-per-cell 10 --priority-dispersion 0.4 --backlog-retention 0.5 --max-backlog-periods 1.0 --summary-only --output /tmp/scc-stage-c-results/stage-c2-a2-endogenous-households.json
       - name: Upload Stage-C paired experiment evidence
         uses: actions/upload-artifact@v4
         with:
@@ -141,7 +143,7 @@ jobs:
         with:
           token: ${{ secrets.SYNERGY_CROSS_REPO_READ_TOKEN }}
           repository: Shtenco/synergy_maps
-          ref: e8e9b05301a4e86ef782d3c9e56a75896c10d41f
+          ref: 24581ccfea6911a01370233e0b4bdc1d57185aaa
           path: external/synergy_maps-global
       - name: Checkout HardNAV accounting PR snapshot
         id: checkout_hardnav
@@ -331,6 +333,14 @@ jobs:
           assert summary["total_jobs"] == sum(x["jobs"] for x in summary["countries"])
           print(f"EAEU COUNTRY PLANS: PASS ({summary['total_jobs']} bounded tile jobs)")
           PY
+      - name: Upload global Maps npm diagnostics
+        if: ${{ always() && steps.checkout_maps_global.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: synergy-maps-global-npm-diagnostics
+          path: /home/runner/.npm/_logs/*-debug-0.log
+          if-no-files-found: warn
+          retention-days: 7
       - name: Live Overture sample ingestion - Kazakhstan test window
         id: overture_sample
         if: ${{ always() && !cancelled() && steps.checkout_maps_global.outcome == 'success' }}
