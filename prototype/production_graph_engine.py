@@ -33,19 +33,20 @@ class ProductionGraphNode:
 
     def __post_init__(self):
         for field in ("node_id", "executor_organization_id", "acceptance_criteria_ref", "work_scope_ref"):
-            _ref(getattr(self, field), field)
+            object.__setattr__(self, field, _ref(getattr(self, field), field))
         for field in ("input_refs", "output_refs", "predecessor_ids"):
             values = getattr(self, field)
             if not isinstance(values, (set, frozenset)) or any(not isinstance(x, str) or not x.strip() for x in values):
                 raise CooperativeMarketError(f"{field} must be a set of non-empty references")
+            object.__setattr__(self, field, frozenset(x.strip() for x in values))
         if not self.output_refs:
             raise CooperativeMarketError("each production node must declare at least one output")
         if self.production_mandate_ref is not None:
-            _ref(self.production_mandate_ref, "production_mandate_ref")
+            object.__setattr__(self, "production_mandate_ref", _ref(self.production_mandate_ref, "production_mandate_ref"))
         if self.work_package_ref is not None:
-            _ref(self.work_package_ref, "work_package_ref")
+            object.__setattr__(self, "work_package_ref", _ref(self.work_package_ref, "work_package_ref"))
         if self.resource_requirement_ref is not None:
-            _ref(self.resource_requirement_ref, "resource_requirement_ref")
+            object.__setattr__(self, "resource_requirement_ref", _ref(self.resource_requirement_ref, "resource_requirement_ref"))
 
 
 @dataclass(frozen=True)
@@ -57,15 +58,16 @@ class ProductionGraph:
     evidence_refs: frozenset[str]
 
     def __post_init__(self):
-        _ref(self.graph_id, "graph_id")
+        object.__setattr__(self, "graph_id", _ref(self.graph_id, "graph_id"))
         if isinstance(self.revision, bool) or not isinstance(self.revision, int) or self.revision < 0:
             raise CooperativeMarketError("graph revision must be a non-negative integer")
-        if not isinstance(self.nodes, tuple) or not self.nodes:
-            raise CooperativeMarketError("production graph must contain a non-empty tuple of nodes")
+        if not isinstance(self.nodes, tuple) or not self.nodes or any(not isinstance(x, ProductionGraphNode) for x in self.nodes):
+            raise CooperativeMarketError("production graph must contain a non-empty tuple of valid nodes")
         for field in ("external_input_refs", "evidence_refs"):
             values = getattr(self, field)
             if not isinstance(values, (set, frozenset)) or any(not isinstance(x, str) or not x.strip() for x in values):
                 raise CooperativeMarketError(f"{field} must be a set of non-empty references")
+            object.__setattr__(self, field, frozenset(x.strip() for x in values))
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,10 @@ def validate_production_graph(
     Evidence authenticity, organization authority, scope authorization and physical
     feasibility must be checked by upstream canonical resolvers.
     """
+    if not isinstance(graph, ProductionGraph):
+        raise CooperativeMarketError("graph must be a validated ProductionGraph value")
+    if not isinstance(organizations, Mapping):
+        raise CooperativeMarketError("organizations must come from a canonical resolver")
     if not isinstance(verified_evidence_refs, (set, frozenset)):
         raise CooperativeMarketError("verified evidence must be a resolver-produced set")
     if any(not isinstance(x, str) or not x.strip() for x in verified_evidence_refs):
@@ -113,7 +119,7 @@ def validate_production_graph(
     inferred_predecessors: dict[str, set[str]] = {node_id: set() for node_id in node_map}
     for node in graph.nodes:
         org = organizations.get(node.executor_organization_id)
-        if org is None or org.status != "active":
+        if not isinstance(org, EconomicOrganization) or org.status != "active":
             raise CooperativeMarketError("production node executor is missing or inactive")
         if "artel" in org.coordination_roles and (not node.production_mandate_ref or not node.work_package_ref):
             raise CooperativeMarketError("artel production node requires mandate and Artel Engine work-package references")
