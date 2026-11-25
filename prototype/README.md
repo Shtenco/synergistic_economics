@@ -399,3 +399,10 @@ This is a read-only composition validator. It does not create a legal entity or 
 - [production_execution_preflight.py](production_execution_preflight.py) — composes the existing temporary-consortium validator and graph-wide resource-capacity validator into one immutable, exact-revision preflight receipt.
 - The receipt binds one plan, canonical agreement, production order, graph revision, resolver-verified evidence set and the capacity snapshot revisions returned by CRN.
 - This is a read-only point-in-time preflight. It is not an order-state transition, resource reservation, labour authorization, contract, dispatch, delivery acceptance or settlement.
+
+
+Run the preflight integration regressions from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_production_execution_preflight.py' -v
+```
