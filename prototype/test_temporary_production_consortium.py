@@ -79,6 +79,10 @@ class TemporaryProductionConsortiumTests(unittest.TestCase):
         self.assertEqual(result.producer_organization_ids, ("org-a", "org-b"))
         self.assertEqual(result.node_assignments, (("cut", "org-a"), ("finish", "org-b")))
 
+    def test_invalid_assignment_object_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            ConsortiumAssignment("org-a", [], frozenset({"cut"}), "commit:a", "authority:a", "scope:a")
+
     def test_exact_agreement_reference_required(self):
         o, a, p, g, x = fixtures()
         wrong = TemporaryProductionConsortium(
@@ -177,6 +181,15 @@ class TemporaryProductionConsortiumTests(unittest.TestCase):
         assignment = ConsortiumAssignment("org-a", "producer", node_ids, "commit:a", "authority:a", "scope:a")
         node_ids.add("finish")
         self.assertEqual(assignment.node_ids, frozenset({"cut"}))
+
+    def test_malformed_assignment_record_rejected(self):
+        o, a, p, g, x = fixtures()
+        invalid = TemporaryProductionConsortium(
+            x.plan_id, x.agreement_id, x.agreement_ref, x.production_order_id, x.graph_id, x.graph_revision,
+            x.effective_from, x.effective_to, (object(), x.assignments[1]), x.evidence_refs,
+        )
+        with self.assertRaises(CooperativeMarketError):
+            validate(plan=invalid)
 
     def test_node_executor_must_match_assignment(self):
         o, a, p, g, x = fixtures()
