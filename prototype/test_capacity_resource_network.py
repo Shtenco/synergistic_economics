@@ -180,6 +180,24 @@ class CapacityResourceNetworkTests(unittest.TestCase):
                 }, verified_evidence_refs=VERIFIED, at=NOW,
             )
 
+    def test_graph_resource_binding_valid_single_requirement(self):
+        graph = ProductionGraph(
+            "graph-r", 1,
+            (ProductionGraphNode("a", "factory-1", frozenset({"raw"}), frozenset({"out"}),
+                                 frozenset(), "accept:a", "scope:a", resource_requirement_ref="resource:req-a"),),
+            frozenset({"raw"}), frozenset(),
+        )
+        result = validate_production_graph_resources(
+            graph, claims_by_requirement={"resource:req-a": (claim("node-a", quantity=4),)},
+            snapshots={"asset:cnc-01": snapshot()},
+            organizations={"factory-1": EconomicOrganization("factory-1", "KZ", "cooperative",
+                frozenset({"enterprise"}), "charter:factory-1", "active")},
+            verified_evidence_refs=VERIFIED, at=NOW,
+        )
+        self.assertEqual(result.graph_id, "graph-r")
+        self.assertEqual(result.requirement_count, 1)
+        self.assertEqual(result.resource_validation.claim_count, 1)
+
     def test_graph_resource_binding_requires_exact_requirement_keys(self):
         graph = ProductionGraph(
             "graph-r", 1,
