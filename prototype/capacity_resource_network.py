@@ -50,11 +50,12 @@ class CapacitySnapshot:
 
     def __post_init__(self):
         for field in ("resource_ref", "provider_organization_id", "unit", "authority_ref"):
-            _text(getattr(self, field), field)
+            object.__setattr__(self, field, _text(getattr(self, field), field))
         if not isinstance(self.capability_refs, (set, frozenset)) or not self.capability_refs:
             raise CooperativeMarketError("capacity snapshot requires capability references")
         if any(not isinstance(x, str) or not x.strip() for x in self.capability_refs):
             raise CooperativeMarketError("capability references must be non-empty")
+        object.__setattr__(self, "capability_refs", frozenset(x.strip() for x in self.capability_refs))
         _positive_int(self.capacity, "capacity")
         start = _instant(self.available_from, "available_from")
         end = _instant(self.available_to, "available_to")
@@ -69,7 +70,8 @@ class CapacitySnapshot:
             raise CooperativeMarketError("capacity snapshot requires evidence references")
         if any(not isinstance(x, str) or not x.strip() for x in self.evidence_refs):
             raise CooperativeMarketError("capacity evidence references must be non-empty")
-        if self.status not in {"active", "suspended", "withdrawn", "expired"}:
+        object.__setattr__(self, "evidence_refs", frozenset(x.strip() for x in self.evidence_refs))
+        if not isinstance(self.status, str) or self.status not in {"active", "suspended", "withdrawn", "expired"}:
             raise CooperativeMarketError("unsupported capacity snapshot status")
 
 
@@ -88,11 +90,12 @@ class ResourceClaim:
 
     def __post_init__(self):
         for field in ("claim_id", "resource_ref", "unit"):
-            _text(getattr(self, field), field)
+            object.__setattr__(self, field, _text(getattr(self, field), field))
         if not isinstance(self.required_capability_refs, (set, frozenset)) or not self.required_capability_refs:
             raise CooperativeMarketError("resource claim requires capability references")
         if any(not isinstance(x, str) or not x.strip() for x in self.required_capability_refs):
             raise CooperativeMarketError("required capability references must be non-empty")
+        object.__setattr__(self, "required_capability_refs", frozenset(x.strip() for x in self.required_capability_refs))
         _positive_int(self.quantity, "quantity")
         if _instant(self.end, "end") <= _instant(self.start, "start"):
             raise CooperativeMarketError("resource claim interval must be positive")
@@ -140,6 +143,8 @@ def validate_resource_bundle(
     if not isinstance(max_snapshot_age, timedelta) or max_snapshot_age < timedelta(0):
         raise CooperativeMarketError("max_snapshot_age must be a non-negative timedelta")
 
+    if any(not isinstance(claim, ResourceClaim) for claim in claims):
+        raise CooperativeMarketError("resource bundle contains an invalid claim object")
     ids = [claim.claim_id for claim in claims]
     if len(ids) != len(set(ids)):
         raise CooperativeMarketError("duplicate resource claim ID")
@@ -152,12 +157,12 @@ def validate_resource_bundle(
     revision_rows: list[tuple[str, int]] = []
     for resource_ref, resource_claims in sorted(grouped.items()):
         snapshot = snapshots.get(resource_ref)
-        if snapshot is None or snapshot.resource_ref != resource_ref:
+        if not isinstance(snapshot, CapacitySnapshot) or snapshot.resource_ref != resource_ref:
             raise CooperativeMarketError("resource snapshot is missing or keyed by a mismatched canonical reference")
         if snapshot.status != "active":
             raise CooperativeMarketError("resource capacity snapshot is not active")
         provider = organizations.get(snapshot.provider_organization_id)
-        if provider is None or provider.status != "active":
+        if not isinstance(provider, EconomicOrganization) or provider.status != "active":
             raise CooperativeMarketError("capacity provider organization is missing or inactive")
         if any(claim.expected_capacity_revision != snapshot.revision for claim in resource_claims):
             raise CooperativeMarketError("stale capacity snapshot revision")
