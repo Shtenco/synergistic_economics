@@ -68,6 +68,29 @@ Complex products are represented as a dependency graph of bounded work packages.
 
 The reference validator in `prototype/production_graph_engine.py` treats a production plan as a directed acyclic graph (DAG) of independently accountable work nodes. Each node declares one executor organization, input references, uniquely produced output references, explicit predecessor IDs, a bounded work-scope reference and acceptance-criteria reference. Artel executors must additionally bind an Artel Engine production mandate and work-package reference. Inputs must resolve to exactly one in-graph producer or an explicitly declared external source; duplicate output provenance, undeclared inputs, inconsistent predecessor declarations and cycles fail closed. The validator returns a deterministic topological order and a producer map; it does not schedule, allocate, reserve, execute or accept work. Iterative manufacturing loops require a separately bounded process model and are not represented by cyclic dependencies in this DAG.
 
+### 3.5 Capacity & Resource Network
+
+The Capacity & Resource Network (CRN) is the evidence-backed bridge between production-graph requirements and canonical resource authorities. It deliberately separates three concepts:
+
+1. **Capability discovery** — a durable resource identity and its declared technical capabilities. This belongs to the canonical asset/resource registry; CRN stores only references.
+2. **Capacity snapshot/offer** — a revisioned, time-bounded statement of available quantity, unit, operating window, provider, source timestamp and evidence. It is advisory and can become stale.
+3. **Reservation** — an atomic commitment made only by the authoritative inventory, asset, workforce, energy or logistics service. A local match, snapshot, AI recommendation or successful validation is never a reservation.
+
+The initial validator in `prototype/capacity_resource_network.py` accepts immutable `CapacitySnapshot` and `ResourceClaim` values. It checks canonical resource-reference binding, provider-independent authority/evidence references, snapshot freshness, revision equality, active status, capability inclusion, unit equality, time-window containment and aggregate concurrent demand. Claims use half-open intervals `[start, end)`; concurrent quantities for the same canonical resource are summed, while adjacent non-overlapping claims do not overlap. A bundle is rejected if any resource's peak concurrent quantity exceeds its declared capacity.
+
+The validator is intentionally not a scheduler or reservation gateway. Its capacity view cannot see unreflected reservations, concurrent requests, maintenance changes or external commitments. A production adapter must submit a revision-bound, idempotent request to the authoritative service and treat only its verified reservation reference as confirmation. The authority must atomically check current capacity, prevent double booking, enforce idempotency and return the committed revision/receipt. Local pre-validation cannot guarantee this race-free property.
+
+Resource requirements should be attached to production graph nodes through explicit versioned requirement references, not by embedding duplicate asset records in graph nodes. Resource bundles may include equipment, facilities, materials, qualified service capacity, energy and logistics. Each domain remains authoritative for its own semantics:
+- assets/equipment: canonical asset registry and access/use authority;
+- materials: inventory/lot registry, ownership/custody and provenance authority;
+- labour/skills: consented workforce and qualification authorities; expose only scoped availability evidence, never personal profiles or PII to the graph;
+- energy: grid/supplier capacity and curtailment evidence;
+- logistics: carrier, route, customs and time-window capacity evidence.
+
+Unit conversion is not implicit. Claims and snapshots must use the same canonical unit or a separately verified conversion contract. Capacity is not fungible across different resource identities merely because labels or capability tags match. Maintenance/downtime must reduce the authoritative offered capacity or be represented as explicit unavailable intervals before publication. Bundle-level feasibility must account for all required resource classes and their time-window intersections; a set of individually feasible claims is not proof that a complete production plan is feasible.
+
+The first prototype tests snapshot freshness, stale revisions, evidence resolution, capability and unit matching, interval containment, overlapping-claim aggregation, adjacent interval boundaries and fail-closed input validation. It does not yet implement asset discovery, material lot accounting, skill scheduling, energy dispatch, logistics routing, unit conversion, reservation receipts, durable idempotency or cross-service atomic transactions. Those are separate adapters and contracts, not simulated by this validator.
+
 ## 4. Work-order lifecycle
 
 The reference lifecycle is:
