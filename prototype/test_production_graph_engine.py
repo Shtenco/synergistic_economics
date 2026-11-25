@@ -119,7 +119,7 @@ class ProductionGraphTests(unittest.TestCase):
         value = graph([node("a", inputs={"raw"}, outputs={"x"})], external={"raw"},
                       evidence=frozenset({"graph-manifest:1"}))
         with self.assertRaises(CooperativeMarketError):
-            self.validate(value, verified=frozenset())
+            self.validate(value, verified=frozenset({"scope:a", "accept:a"}))
 
     def test_bool_revision_rejected(self):
         with self.assertRaises(CooperativeMarketError):
@@ -140,7 +140,8 @@ class ProductionGraphTests(unittest.TestCase):
 
     def test_node_freezes_mutable_input_and_output_sets(self):
         inputs, outputs, predecessors = {"raw"}, {"out"}, set()
-        value = node("a", inputs=inputs, outputs=outputs, predecessors=predecessors)
+        value = ProductionGraphNode("a", "factory-a", inputs, outputs, predecessors,
+                                    "accept:a", "scope:a")
         inputs.add("forged")
         outputs.add("forged")
         predecessors.add("ghost")
