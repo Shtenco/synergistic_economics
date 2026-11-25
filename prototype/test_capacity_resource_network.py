@@ -130,6 +130,29 @@ class CapacityResourceNetworkTests(unittest.TestCase):
         with self.assertRaises(CooperativeMarketError):
             claim("c1", revision=True)
 
+    def test_snapshot_freezes_mutable_capability_and_evidence_sets(self):
+        capabilities = {"milling"}
+        evidence = {"capacity-evidence:1"}
+        value = snapshot(capabilities=capabilities, evidence=evidence)
+        capabilities.add("forged")
+        evidence.add("forged:evidence")
+        self.assertEqual(value.capability_refs, frozenset({"milling"}))
+        self.assertEqual(value.evidence_refs, frozenset({"capacity-evidence:1"}))
+
+    def test_claim_freezes_mutable_capability_set(self):
+        capabilities = {"milling"}
+        value = claim("c1", capabilities=capabilities)
+        capabilities.add("forged")
+        self.assertEqual(value.required_capability_refs, frozenset({"milling"}))
+
+    def test_invalid_claim_object_rejected_cleanly(self):
+        with self.assertRaises(CooperativeMarketError):
+            validate([object()])
+
+    def test_invalid_snapshot_status_type_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            snapshot(status=[])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
