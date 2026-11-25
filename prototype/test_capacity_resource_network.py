@@ -31,7 +31,7 @@ def claim(identifier, *, quantity=4, start=NOW + timedelta(hours=1),
 def validate(claims, snap=None, verified=VERIFIED, at=NOW, age=timedelta(minutes=15), organizations=None):
     return validate_resource_bundle(
         tuple(claims), snapshots={"asset:cnc-01": snap or snapshot()},
-        organizations=organizations or {"factory-1": EconomicOrganization("factory-1", "KZ", "cooperative", frozenset({"enterprise"}), "charter:factory-1", "active")},
+        organizations=({"factory-1": EconomicOrganization("factory-1", "KZ", "cooperative", frozenset({"enterprise"}), "charter:factory-1", "active")} if organizations is None else organizations),
         verified_evidence_refs=verified, at=at, max_snapshot_age=age,
     )
 
