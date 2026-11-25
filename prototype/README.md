@@ -364,7 +364,7 @@ python -m unittest discover -s prototype -p 'test_production_graph_engine.py' -v
 This validator establishes graph structure only. It is not a scheduler, inventory ledger, capacity reservation engine, contract system or production execution controller.
 
 
-## Prototype 8 — Capacity & Resource Network
+## Prototype 9 — Capacity & Resource Network
 
 - [capacity_resource_network.py](capacity_resource_network.py) — validates time-bounded resource claims against resolver-supplied canonical capacity snapshots; checks freshness, revision, evidence, capabilities, units, availability windows and peak concurrent demand.
 - [test_capacity_resource_network.py](test_capacity_resource_network.py) — adversarial tests for overbooking within a bundle, adjacent non-overlapping intervals, stale snapshots/revisions, missing evidence and malformed inputs.
@@ -377,3 +377,18 @@ python -m unittest discover -s prototype -p 'test_capacity_resource_network.py' 
 ```
 
 This is a read-only validation layer. It does not own asset identities, inspect unreflected reservations, schedule resources, convert units, book capacity, assign workers, create contracts or guarantee availability. Only a verified receipt from the relevant authoritative service confirms a reservation.
+
+
+## Prototype 10 — Temporary Production Consortium Engine
+
+- [temporary_production_consortium.py](temporary_production_consortium.py) — composes an existing canonical CooperationAgreement, one ProductionOrder and an exact ProductionGraph revision into a time-bounded execution plan; validates participant authority/commitment references, role scopes and one-to-one graph-node responsibility.
+- [test_temporary_production_consortium.py](test_temporary_production_consortium.py) — adversarial tests for agreement/order/graph pinning, inactive participants, expired scope, forged commitments, duplicate node assignments and missing execution coverage.
+- [Temporary Production Consortium specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md#51-temporary-production-consortium-engine).
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_temporary_production_consortium.py' -v
+```
+
+This is a read-only composition validator. It does not create a legal entity or agreement, reserve resources, sign contracts, allocate liability, authorize labour/IP, accept delivery or settle claims.
