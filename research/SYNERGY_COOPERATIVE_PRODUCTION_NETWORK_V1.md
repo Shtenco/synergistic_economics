@@ -126,6 +126,21 @@ Shared equipment requires an explicit access/use agreement and a reservation fro
 
 Capacity aggregation must avoid double booking. CPN may display availability snapshots with source timestamp and revision, but the authoritative inventory/asset service must atomically reject overlapping reservations and stale revisions. Capacity advertised by several brokers or cells must be deduplicated by canonical resource identity.
 
+### 5.1 Temporary Production Consortium Engine
+
+The Temporary Production Consortium Engine composes existing canonical cooperation agreements with one production order and one exact revision of a production graph. It does not create a consortium legal entity or issue a new agreement. The agreement remains the authoritative instrument; this engine validates only the temporary execution plan.
+
+Each agreement participant receives exactly one scoped assignment:
+- **producer** — owns execution responsibility for one or more graph nodes;
+- **resource_provider** — participates in the agreement but is not represented as a graph-node executor;
+- **coordinator** — performs a scoped coordination role without being treated as a producer.
+
+Every graph node must be assigned to exactly one producer, and the assigned organization must equal the node's declared executor. Resource providers and coordinators cannot claim production nodes through this model. Their participation does not prove that a resource was reserved or a service delivered.
+
+The validator pins the plan to the exact agreement ID/reference, production order ID, graph ID/revision, agreement participant list, participant commitment and authority references, scoped assignment evidence and bounded validity window. All agreement participants must be represented exactly once. The plan interval must fit both the cooperation agreement and production order delivery window. Graph structure and executor eligibility are revalidated against canonical organization and evidence resolvers.
+
+The result is a structural validation receipt only. It does not amend or sign the agreement, create employment, authorize IP transfer, reserve resources, create guarantees or debt, allocate liability, accept delivery, post accounting entries or settle claims. Financial allocation, liability, insurance, dispute resolution, withdrawal, replacement of participants and termination must remain explicit in the underlying agreement and their respective authoritative systems.
+
 ## 6. Cost, schedule and risk evidence
 
 Cost proposals must disclose currency, unit, quantity basis, included/excluded inputs, taxes/fees, transport, energy, tooling, labour, insurance, contingency and validity interval. Schedule evidence must identify resource calendars, lead times, dependencies, setup/changeover, maintenance and buffers. Quality evidence must define measurable acceptance tests, sampling, tolerances, traceability and independent review where needed.
