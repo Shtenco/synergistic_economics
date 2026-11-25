@@ -56,6 +56,7 @@ class ConsortiumAssignment:
             raise CooperativeMarketError("assignment node_ids must be a set of graph node references")
         if any(not isinstance(x, str) or not x.strip() for x in self.node_ids):
             raise CooperativeMarketError("assignment node references must be non-empty")
+        object.__setattr__(self, "node_ids", frozenset(x.strip() for x in self.node_ids))
         if self.role == "producer" and not self.node_ids:
             raise CooperativeMarketError("producer assignment must cover at least one production graph node")
         if self.role != "producer" and self.node_ids:
@@ -89,6 +90,7 @@ class TemporaryProductionConsortium:
             not isinstance(x, str) or not x.strip() for x in self.evidence_refs
         ):
             raise CooperativeMarketError("plan evidence references must be a set of non-empty references")
+        object.__setattr__(self, "evidence_refs", frozenset(x.strip() for x in self.evidence_refs))
         ids = [a.organization_id for a in self.assignments]
         if len(ids) != len(set(ids)):
             raise CooperativeMarketError("organization may have only one assignment per temporary consortium plan")
