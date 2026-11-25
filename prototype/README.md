@@ -366,8 +366,8 @@ This validator establishes graph structure only. It is not a scheduler, inventor
 
 ## Prototype 9 — Capacity & Resource Network
 
-- [capacity_resource_network.py](capacity_resource_network.py) — validates time-bounded resource claims against resolver-supplied canonical capacity snapshots; checks freshness, revision, evidence, capabilities, units, availability windows and peak concurrent demand.
-- [test_capacity_resource_network.py](test_capacity_resource_network.py) — adversarial tests for overbooking within a bundle, adjacent non-overlapping intervals, stale snapshots/revisions, missing evidence and malformed inputs.
+- [capacity_resource_network.py](capacity_resource_network.py) — validates time-bounded resource claims against resolver-supplied canonical capacity snapshots; checks freshness, revision, evidence, capabilities, units, availability windows and peak concurrent demand. Its graph adapter binds exact ProductionGraph node requirement references to claim bundles and aggregates all claims before capacity checks.
+- [test_capacity_resource_network.py](test_capacity_resource_network.py) — adversarial tests for overbooking within a bundle and across graph nodes, adjacent non-overlapping intervals, stale snapshots/revisions, missing evidence, mutable input sets and malformed inputs.
 - [Capacity & Resource Network specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md#35-capacity--resource-network).
 
 Run from the repository root:
