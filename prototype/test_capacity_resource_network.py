@@ -92,7 +92,7 @@ class CapacityResourceNetworkTests(unittest.TestCase):
 
     def test_unverified_snapshot_evidence_rejected(self):
         with self.assertRaises(CooperativeMarketError):
-            validate([claim("c1")], snapshot(evidence=frozenset({"capacity-evidence:2"})))
+            validate([claim("c1")], snapshot(evidence=frozenset({"capacity-evidence:untrusted"})))
 
     def test_unit_mismatch_rejected(self):
         with self.assertRaises(CooperativeMarketError):
