@@ -82,6 +82,10 @@ class CapacityResourceNetworkTests(unittest.TestCase):
         with self.assertRaises(CooperativeMarketError):
             validate([claim("c1")], organizations={"factory-1": inactive})
 
+    def test_missing_provider_rejected(self):
+        with self.assertRaises(CooperativeMarketError):
+            validate([claim("c1")], organizations={})
+
     def test_unverified_authority_rejected(self):
         with self.assertRaises(CooperativeMarketError):
             validate([claim("c1")], verified=frozenset({"capacity-evidence:1"}))
