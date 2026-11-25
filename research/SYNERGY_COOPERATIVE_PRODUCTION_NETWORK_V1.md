@@ -199,3 +199,21 @@ Before production use, require: authenticated resolver adapters; tenant-scoped a
 - H5: Governance and coordination costs may outweigh utilization gains at low transaction density; this must be measured, not assumed away.
 
 The benchmark must compare open-market procurement, bilateral contracting, vertically integrated production, consortium production and CPN coordination under identical demand, resource, quality, transport, labour and shock conditions. Report utilization, lead time, defect/rework, total landed cost, coordination hours, cancellation/default, concentration, worker outcomes and ecological burden. No superiority claim is justified before preregistered, reproducible comparisons.
+
+
+## 9.1. Production Execution Preflight
+
+The prototype/production_execution_preflight.py module composes three existing checks over one exact production plan:
+
+1. validate_temporary_production_consortium binds the canonical CooperationAgreement, ProductionOrder, exact ProductionGraph revision, participant commitments/authority/scope and one-to-one node responsibility.
+2. validate_production_graph_resources revalidates graph structure and aggregates claims from every graph resource requirement before checking concurrent demand against resolver-supplied CapacitySnapshots.
+3. ProductionExecutionPreflightReceipt binds both validation results to the same plan/order/graph IDs and revision, check timestamp and resolver-verified evidence set.
+
+The preflight fails closed if either constituent validator fails. It does not cache or extend evidence validity, and its result is point-in-time: a capacity revision, evidence revocation, order change, graph revision or consortium change requires a new preflight. It is not a reservation token and cannot authorize execution. The authoritative resource service must still perform an atomic reservation against current capacity; contract, labour, safety, material custody, dispatch, acceptance and settlement authorities remain separate.
+
+A production deployment must preserve the distinction between:
+- **structural readiness** — the submitted records are mutually consistent;
+- **reservation confirmation** — the authoritative resource service atomically booked capacity and returned a durable receipt;
+- **execution authorization** — the applicable contract, labour, safety and operational authorities permit work to begin.
+
+No one of these states implies either of the others.
