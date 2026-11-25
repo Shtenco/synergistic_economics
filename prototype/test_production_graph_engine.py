@@ -136,7 +136,7 @@ class ProductionGraphTests(unittest.TestCase):
         value = graph([node("a", inputs={"raw"}, outputs={"x"},
                             resource_requirement="resource:req-a")], external={"raw"})
         with self.assertRaises(CooperativeMarketError):
-            self.validate(value, verified=frozenset())
+            self.validate(value, verified=frozenset({"scope:a", "accept:a"}))
 
     def test_node_freezes_mutable_input_and_output_sets(self):
         inputs, outputs, predecessors = {"raw"}, {"out"}, set()
