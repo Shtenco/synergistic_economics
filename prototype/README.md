@@ -392,3 +392,10 @@ python -m unittest discover -s prototype -p 'test_temporary_production_consortiu
 ```
 
 This is a read-only composition validator. It does not create a legal entity or agreement, reserve resources, sign contracts, allocate liability, authorize labour/IP, accept delivery or settle claims.
+
+
+## Prototype 11 — Production Execution Preflight
+
+- [production_execution_preflight.py](production_execution_preflight.py) — composes the existing temporary-consortium validator and graph-wide resource-capacity validator into one immutable, exact-revision preflight receipt.
+- The receipt binds one plan, canonical agreement, production order, graph revision, resolver-verified evidence set and the capacity snapshot revisions returned by CRN.
+- This is a read-only point-in-time preflight. It is not an order-state transition, resource reservation, labour authorization, contract, dispatch, delivery acceptance or settlement.
