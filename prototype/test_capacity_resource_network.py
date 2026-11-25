@@ -6,10 +6,13 @@ from cellular_cooperative_market import CooperativeMarketError
 from cellular_cooperative_market import EconomicOrganization
 from capacity_resource_network import (
     CapacitySnapshot, ResourceClaim, validate_resource_bundle,
+    validate_production_graph_resources,
 )
+from production_graph_engine import ProductionGraph, ProductionGraphNode
 
 NOW = datetime(2026, 11, 25, 5, 0, tzinfo=timezone.utc)
-VERIFIED = frozenset({"asset-authority:1", "capacity-evidence:1", "capacity-evidence:2"})
+VERIFIED = frozenset({"asset-authority:1", "capacity-evidence:1", "capacity-evidence:2",
+                    "resource:req-a", "resource:req-b", "accept:a", "scope:a", "accept:b", "scope:b"})
 
 
 def snapshot(*, capacity=10, revision=3, observed=NOW, status="active", unit="machine-hour",
@@ -152,7 +155,45 @@ class CapacityResourceNetworkTests(unittest.TestCase):
     def test_invalid_snapshot_status_type_rejected(self):
         with self.assertRaises(CooperativeMarketError):
             snapshot(status=[])
+ 
+    def test_graph_resource_binding_aggregates_across_nodes(self):
+        graph = ProductionGraph(
+            "graph-r", 1,
+            (
+                ProductionGraphNode("a", "factory-1", frozenset({"raw:a"}), frozenset({"out:a"}),
+                                    frozenset(), "accept:a", "scope:a", resource_requirement_ref="resource:req-a"),
+                ProductionGraphNode("b", "factory-1", frozenset({"raw:b"}), frozenset({"out:b"}),
+                                    frozenset(), "accept:b", "scope:b", resource_requirement_ref="resource:req-b"),
+            ),
+            frozenset({"raw:a", "raw:b"}), frozenset(),
+        )
+        claims = {
+            "resource:req-a": (claim("node-a", quantity=6),),
+            "resource:req-b": (claim("node-b", quantity=5),),
+        }
+        with self.assertRaises(CooperativeMarketError):
+            validate_production_graph_resources(
+                graph, claims_by_requirement=claims,
+                snapshots={"asset:cnc-01": snapshot()}, organizations={
+                    "factory-1": EconomicOrganization("factory-1", "KZ", "cooperative",
+                        frozenset({"enterprise"}), "charter:factory-1", "active")
+                }, verified_evidence_refs=VERIFIED, at=NOW,
+            )
 
+    def test_graph_resource_binding_requires_exact_requirement_keys(self):
+        graph = ProductionGraph(
+            "graph-r", 1,
+            (ProductionGraphNode("a", "factory-1", frozenset({"raw"}), frozenset({"out"}),
+                                 frozenset(), "accept:a", "scope:a", resource_requirement_ref="resource:req-a"),),
+            frozenset({"raw"}), frozenset(),
+        )
+        with self.assertRaises(CooperativeMarketError):
+            validate_production_graph_resources(
+                graph, claims_by_requirement={}, snapshots={"asset:cnc-01": snapshot()},
+                organizations={"factory-1": EconomicOrganization("factory-1", "KZ", "cooperative",
+                    frozenset({"enterprise"}), "charter:factory-1", "active")},
+                verified_evidence_refs=VERIFIED, at=NOW,
+            )
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
