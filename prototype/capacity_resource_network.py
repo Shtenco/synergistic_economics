@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
-from cellular_cooperative_market import CooperativeMarketError
+from cellular_cooperative_market import CooperativeMarketError, EconomicOrganization
 
 
 def _text(value: str, field: str) -> str:
@@ -114,6 +114,7 @@ def validate_resource_bundle(
     claims: tuple[ResourceClaim, ...],
     *,
     snapshots: Mapping[str, CapacitySnapshot],
+    organizations: Mapping[str, EconomicOrganization],
     verified_evidence_refs: frozenset[str],
     at: datetime,
     max_snapshot_age: timedelta = timedelta(minutes=15),
@@ -130,6 +131,8 @@ def validate_resource_bundle(
         raise CooperativeMarketError("resource bundle must be a non-empty tuple")
     if not isinstance(snapshots, Mapping):
         raise CooperativeMarketError("capacity snapshots must come from a canonical resolver")
+    if not isinstance(organizations, Mapping):
+        raise CooperativeMarketError("provider organizations must come from a canonical resolver")
     if not isinstance(verified_evidence_refs, (set, frozenset)):
         raise CooperativeMarketError("verified evidence must be a resolver-produced set")
     if any(not isinstance(x, str) or not x.strip() for x in verified_evidence_refs):
@@ -153,6 +156,9 @@ def validate_resource_bundle(
             raise CooperativeMarketError("resource snapshot is missing or keyed by a mismatched canonical reference")
         if snapshot.status != "active":
             raise CooperativeMarketError("resource capacity snapshot is not active")
+        provider = organizations.get(snapshot.provider_organization_id)
+        if provider is None or provider.status != "active":
+            raise CooperativeMarketError("capacity provider organization is missing or inactive")
         if any(claim.expected_capacity_revision != snapshot.revision for claim in resource_claims):
             raise CooperativeMarketError("stale capacity snapshot revision")
         observed = _instant(snapshot.observed_at, "observed_at")
