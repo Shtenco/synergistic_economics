@@ -49,8 +49,8 @@ class ConsortiumAssignment:
 
     def __post_init__(self):
         for field in ("organization_id", "commitment_ref", "authority_ref", "scope_ref"):
-            _text(getattr(self, field), field)
-        if self.role not in {"producer", "resource_provider", "coordinator"}:
+            object.__setattr__(self, field, _text(getattr(self, field), field))
+        if not isinstance(self.role, str) or self.role not in {"producer", "resource_provider", "coordinator"}:
             raise CooperativeMarketError("unsupported temporary consortium assignment role")
         if not isinstance(self.node_ids, (set, frozenset)):
             raise CooperativeMarketError("assignment node_ids must be a set of graph node references")
@@ -79,13 +79,15 @@ class TemporaryProductionConsortium:
     def __post_init__(self):
         for field in ("plan_id", "agreement_id", "agreement_ref",
                       "production_order_id", "graph_id"):
-            _text(getattr(self, field), field)
+            object.__setattr__(self, field, _text(getattr(self, field), field))
         if isinstance(self.graph_revision, bool) or not isinstance(self.graph_revision, int) or self.graph_revision < 0:
             raise CooperativeMarketError("graph_revision must be a non-negative integer")
         if _instant(self.effective_to, "effective_to") <= _instant(self.effective_from, "effective_from"):
             raise CooperativeMarketError("temporary consortium interval must be positive")
-        if not isinstance(self.assignments, tuple) or len(self.assignments) < 2:
-            raise CooperativeMarketError("temporary production consortium requires at least two assignments")
+        if not isinstance(self.assignments, tuple) or len(self.assignments) < 2 or any(
+            not isinstance(a, ConsortiumAssignment) for a in self.assignments
+        ):
+            raise CooperativeMarketError("temporary production consortium requires at least two valid assignments")
         if not isinstance(self.evidence_refs, (set, frozenset)) or any(
             not isinstance(x, str) or not x.strip() for x in self.evidence_refs
         ):
@@ -123,6 +125,14 @@ def validate_temporary_production_consortium(
     amend the underlying agreement, reserve resources, authorize employment,
     accept deliverables, allocate liability or settle participant claims.
     """
+    if not isinstance(plan, TemporaryProductionConsortium):
+        raise CooperativeMarketError("plan must be a TemporaryProductionConsortium value")
+    if not isinstance(agreement, CooperationAgreement):
+        raise CooperativeMarketError("agreement must be a canonical CooperationAgreement value")
+    if not isinstance(order, ProductionOrder):
+        raise CooperativeMarketError("order must be a canonical ProductionOrder value")
+    if not isinstance(graph, ProductionGraph):
+        raise CooperativeMarketError("graph must be a ProductionGraph value")
     if not isinstance(organizations, Mapping):
         raise CooperativeMarketError("organizations must come from a canonical resolver")
     if not isinstance(verified_evidence_refs, (set, frozenset)):
@@ -137,6 +147,9 @@ def validate_temporary_production_consortium(
     if plan.graph_id != graph.graph_id or plan.graph_revision != graph.revision:
         raise CooperativeMarketError("temporary plan is not bound to the exact production graph revision")
 
+    if any(not isinstance(organizations.get(p.organization_id), EconomicOrganization)
+           for p in agreement.participants):
+        raise CooperativeMarketError("agreement participant resolver returned an invalid organization")
     validate_agreement(agreement, organizations)
     plan_start, plan_end = _instant(plan.effective_from, "effective_from"), _instant(plan.effective_to, "effective_to")
     agreement_start = _instant(agreement.effective_from, "agreement.effective_from")
