@@ -8,7 +8,7 @@ from production_graph_engine import (
 
 VERIFIED = frozenset({
     "scope:a", "scope:b", "scope:c", "accept:a", "accept:b", "accept:c",
-    "mandate:a", "wp:a",
+    "mandate:a", "wp:a", "resource:req-a",
 })
 
 
@@ -18,10 +18,10 @@ def org(identifier, roles=frozenset({"enterprise"}), status="active"):
 
 
 def node(identifier, *, inputs=(), outputs=(), predecessors=(), executor="factory-a",
-         acceptance="accept:a", scope="scope:a", mandate=None, work_package=None):
+         acceptance="accept:a", scope="scope:a", mandate=None, work_package=None, resource_requirement=None):
     return ProductionGraphNode(
         identifier, executor, frozenset(inputs), frozenset(outputs),
-        frozenset(predecessors), acceptance, scope, mandate, work_package,
+        frozenset(predecessors), acceptance, scope, mandate, work_package, resource_requirement,
     )
 
 
@@ -125,6 +125,18 @@ class ProductionGraphTests(unittest.TestCase):
         with self.assertRaises(CooperativeMarketError):
             ProductionGraph("graph-1", True, (node("a", inputs={"raw"}, outputs={"x"}),),
                             frozenset({"raw"}), VERIFIED)
+
+    def test_resource_requirement_reference_is_exposed(self):
+        value = graph([node("a", inputs={"raw"}, outputs={"x"},
+                            resource_requirement="resource:req-a")], external={"raw"})
+        result = self.validate(value)
+        self.assertEqual(result.resource_requirement_refs, (("a", "resource:req-a"),))
+
+    def test_unverified_resource_requirement_rejected(self):
+        value = graph([node("a", inputs={"raw"}, outputs={"x"},
+                            resource_requirement="resource:req-a")], external={"raw"})
+        with self.assertRaises(CooperativeMarketError):
+            self.validate(value, verified=frozenset())
 
     def test_empty_graph_rejected(self):
         with self.assertRaises(CooperativeMarketError):
