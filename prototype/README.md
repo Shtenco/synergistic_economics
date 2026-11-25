@@ -362,3 +362,18 @@ python -m unittest discover -s prototype -p 'test_production_graph_engine.py' -v
 ```
 
 This validator establishes graph structure only. It is not a scheduler, inventory ledger, capacity reservation engine, contract system or production execution controller.
+
+
+## Prototype 8 — Capacity & Resource Network
+
+- [capacity_resource_network.py](capacity_resource_network.py) — validates time-bounded resource claims against resolver-supplied canonical capacity snapshots; checks freshness, revision, evidence, capabilities, units, availability windows and peak concurrent demand.
+- [test_capacity_resource_network.py](test_capacity_resource_network.py) — adversarial tests for overbooking within a bundle, adjacent non-overlapping intervals, stale snapshots/revisions, missing evidence and malformed inputs.
+- [Capacity & Resource Network specification](../research/SYNERGY_COOPERATIVE_PRODUCTION_NETWORK_V1.md#35-capacity--resource-network).
+
+Run from the repository root:
+
+```bash
+python -m unittest discover -s prototype -p 'test_capacity_resource_network.py' -v
+```
+
+This is a read-only validation layer. It does not own asset identities, inspect unreflected reservations, schedule resources, convert units, book capacity, assign workers, create contracts or guarantee availability. Only a verified receipt from the relevant authoritative service confirms a reservation.
