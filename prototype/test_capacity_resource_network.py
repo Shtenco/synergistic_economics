@@ -3,6 +3,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from cellular_cooperative_market import CooperativeMarketError
+from cellular_cooperative_market import EconomicOrganization
 from capacity_resource_network import (
     CapacitySnapshot, ResourceClaim, validate_resource_bundle,
 )
@@ -27,9 +28,10 @@ def claim(identifier, *, quantity=4, start=NOW + timedelta(hours=1),
                          unit, start, end, revision)
 
 
-def validate(claims, snap=None, verified=VERIFIED, at=NOW, age=timedelta(minutes=15)):
+def validate(claims, snap=None, verified=VERIFIED, at=NOW, age=timedelta(minutes=15), organizations=None):
     return validate_resource_bundle(
         tuple(claims), snapshots={"asset:cnc-01": snap or snapshot()},
+        organizations=organizations or {"factory-1": EconomicOrganization("factory-1", "KZ", "cooperative", frozenset({"enterprise"}), "charter:factory-1", "active")},
         verified_evidence_refs=verified, at=at, max_snapshot_age=age,
     )
 
@@ -74,6 +76,11 @@ class CapacityResourceNetworkTests(unittest.TestCase):
     def test_inactive_snapshot_rejected(self):
         with self.assertRaises(CooperativeMarketError):
             validate([claim("c1")], snapshot(status="suspended"))
+
+    def test_inactive_provider_rejected(self):
+        inactive = EconomicOrganization("factory-1", "KZ", "cooperative", frozenset({"enterprise"}), "charter:factory-1", "suspended")
+        with self.assertRaises(CooperativeMarketError):
+            validate([claim("c1")], organizations={"factory-1": inactive})
 
     def test_unverified_authority_rejected(self):
         with self.assertRaises(CooperativeMarketError):
