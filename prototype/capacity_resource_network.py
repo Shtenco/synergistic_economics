@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 from cellular_cooperative_market import CooperativeMarketError, EconomicOrganization
+from production_graph_engine import ProductionGraph, ProductionGraphValidation, validate_production_graph
 
 
 def _text(value: str, field: str) -> str:
@@ -203,4 +204,55 @@ def validate_resource_bundle(
         resource_count=len(grouped),
         peak_quantities=tuple(peak_rows),
         snapshot_revisions=tuple(revision_rows),
+    )
+
+
+@dataclass(frozen=True)
+class ProductionGraphResourceValidation:
+    graph_id: str
+    graph_revision: int
+    requirement_count: int
+    resource_validation: ResourceBundleValidation
+
+
+def validate_production_graph_resources(
+    graph: ProductionGraph,
+    *,
+    claims_by_requirement: Mapping[str, tuple[ResourceClaim, ...]],
+    snapshots: Mapping[str, CapacitySnapshot],
+    organizations: Mapping[str, EconomicOrganization],
+    verified_evidence_refs: frozenset[str],
+    at: datetime,
+    max_snapshot_age: timedelta = timedelta(minutes=15),
+) -> ProductionGraphResourceValidation:
+    """Validate all resource bundles bound to graph requirement references.
+
+    Claims from every requirement are flattened before capacity checks, so two
+    different graph nodes cannot independently overbook the same resource.
+    Requirement references are exact evidence-bound IDs, not free-form labels.
+    """
+    graph_result: ProductionGraphValidation = validate_production_graph(
+        graph, organizations=organizations,
+        verified_evidence_refs=verified_evidence_refs,
+    )
+    required_refs = {ref for _, ref in graph_result.resource_requirement_refs}
+    if not required_refs:
+        raise CooperativeMarketError("production graph declares no resource requirement references")
+    if not isinstance(claims_by_requirement, Mapping):
+        raise CooperativeMarketError("claims_by_requirement must come from a validated requirement resolver")
+    if set(claims_by_requirement) != required_refs:
+        raise CooperativeMarketError("resource claim bundles do not exactly match graph requirement references")
+    flattened: list[ResourceClaim] = []
+    for requirement_ref in sorted(required_refs):
+        claims = claims_by_requirement[requirement_ref]
+        if not isinstance(claims, tuple) or not claims:
+            raise CooperativeMarketError("each graph resource requirement must have a non-empty claim tuple")
+        flattened.extend(claims)
+    result = validate_resource_bundle(
+        tuple(flattened), snapshots=snapshots, organizations=organizations,
+        verified_evidence_refs=verified_evidence_refs, at=at,
+        max_snapshot_age=max_snapshot_age,
+    )
+    return ProductionGraphResourceValidation(
+        graph_result.graph_id, graph_result.revision, len(required_refs), result,
     )
