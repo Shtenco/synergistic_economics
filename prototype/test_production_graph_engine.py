@@ -138,6 +138,25 @@ class ProductionGraphTests(unittest.TestCase):
         with self.assertRaises(CooperativeMarketError):
             self.validate(value, verified=frozenset())
 
+    def test_node_freezes_mutable_input_and_output_sets(self):
+        inputs, outputs, predecessors = {"raw"}, {"out"}, set()
+        value = node("a", inputs=inputs, outputs=outputs, predecessors=predecessors)
+        inputs.add("forged")
+        outputs.add("forged")
+        predecessors.add("ghost")
+        self.assertEqual(value.input_refs, frozenset({"raw"}))
+        self.assertEqual(value.output_refs, frozenset({"out"}))
+        self.assertEqual(value.predecessor_ids, frozenset())
+
+    def test_graph_freezes_mutable_external_and_evidence_sets(self):
+        external, evidence = {"raw"}, {"scope:a"}
+        value = ProductionGraph("graph-1", 1, (node("a", inputs={"raw"}, outputs={"out"}),),
+                                external, evidence)
+        external.add("forged")
+        evidence.add("forged")
+        self.assertEqual(value.external_input_refs, frozenset({"raw"}))
+        self.assertEqual(value.evidence_refs, frozenset({"scope:a"}))
+
     def test_empty_graph_rejected(self):
         with self.assertRaises(CooperativeMarketError):
             ProductionGraph("graph-1", 0, (), frozenset(), VERIFIED)
