@@ -171,6 +171,13 @@ class TemporaryProductionConsortiumTests(unittest.TestCase):
         with self.assertRaises(CooperativeMarketError):
             validate(plan=invalid)
 
+    def test_assignment_freezes_mutable_node_set(self):
+        o, a, p, g, x = fixtures()
+        node_ids = {"cut"}
+        assignment = ConsortiumAssignment("org-a", "producer", node_ids, "commit:a", "authority:a", "scope:a")
+        node_ids.add("finish")
+        self.assertEqual(assignment.node_ids, frozenset({"cut"}))
+
     def test_node_executor_must_match_assignment(self):
         o, a, p, g, x = fixtures()
         assignments = (
