@@ -29,6 +29,7 @@ class ProductionGraphNode:
     work_scope_ref: str
     production_mandate_ref: str | None = None
     work_package_ref: str | None = None
+    resource_requirement_ref: str | None = None
 
     def __post_init__(self):
         for field in ("node_id", "executor_organization_id", "acceptance_criteria_ref", "work_scope_ref"):
@@ -43,6 +44,8 @@ class ProductionGraphNode:
             _ref(self.production_mandate_ref, "production_mandate_ref")
         if self.work_package_ref is not None:
             _ref(self.work_package_ref, "work_package_ref")
+        if self.resource_requirement_ref is not None:
+            _ref(self.resource_requirement_ref, "resource_requirement_ref")
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,7 @@ class ProductionGraphValidation:
     node_count: int
     organization_ids: frozenset[str]
     output_producers: tuple[tuple[str, str], ...]
+    resource_requirement_refs: tuple[tuple[str, str], ...] = ()
 
 
 def validate_production_graph(
@@ -132,6 +136,8 @@ def validate_production_graph(
             required.add(node.production_mandate_ref)
         if node.work_package_ref:
             required.add(node.work_package_ref)
+        if node.resource_requirement_ref:
+            required.add(node.resource_requirement_ref)
         if not required.issubset(verified_evidence_refs):
             raise CooperativeMarketError("production node has unverified scope, acceptance or mandate evidence")
 
@@ -157,4 +163,6 @@ def validate_production_graph(
         graph.graph_id, graph.revision, tuple(ordered), len(node_map),
         frozenset(node.executor_organization_id for node in graph.nodes),
         tuple(sorted(producer_by_output.items())),
+        tuple(sorted((node.node_id, node.resource_requirement_ref)
+                     for node in graph.nodes if node.resource_requirement_ref)),
     )
